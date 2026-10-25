@@ -11,7 +11,7 @@
  * Fonctionne avec toute entité weather (Météo-France, OpenWeatherMap, Met.no…) ; les prévisions sont lues
  * comme le fait Home Assistant (abonnement weather/subscribe_forecast).
  * Même style que la Carte Enedis Linky New et les Cartes Linky Énergie, mais indépendante.
- * Idées et vue météo d'origine : WarC0zes (forum HACF). Inspirée aussi de la carte « Météo Glossy ».
+ * Idées et vue météo d'origine : WarC0zes (forum HACF).
  * Icônes météo : amCharts (CC BY 4.0), jeu repris par la carte Météo-France de HACF.
  *
  *   type: custom:meteo-card
