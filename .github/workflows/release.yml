@@ -1,0 +1,85 @@
+name: Contrôle et release
+
+# À chaque push sur main : contrôle de la carte, validation HACS, puis
+# création automatique du tag v<CARD_VERSION> et de la release s'ils n'existent
+# pas encore. Une version avec un tiret (0.2.0-beta) sort en pré-release.
+# Lancement manuel avec « refaire_release » : supprime la release et le tag de la
+# version courante puis les recrée sur le commit lancé (ex. après une réécriture).
+# Pas de fichier joint à la release : HACS prend alors meteo-card.js dans
+# le dépôt au tag de la version (le téléchargement des fichiers joints échoue dans HACS).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      refaire_release:
+        description: "Supprimer puis recréer la release et le tag de la version courante"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  controle:
+    name: Contrôle de la carte
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntaxe JavaScript
+        run: node --check meteo-card.js
+      - name: Version de la carte
+        id: v
+        run: |
+          v=$(grep -oP 'CARD_VERSION = "\K[^"]+' meteo-card.js)
+          [ -n "$v" ] || { echo "::error::CARD_VERSION introuvable"; exit 1; }
+          echo "Version de la carte : $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  hacs:
+    name: Validation HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: plugin
+          ignore: brands topics description
+
+  release:
+    name: Publication de la release
+    needs: controle
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.controle.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Supprimer l'ancienne release (lancement manuel)
+        if: github.event_name == 'workflow_dispatch' && inputs.refaire_release
+        run: |
+          gh release delete "v$VERSION" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          git push origin ":refs/tags/v$VERSION" 2>/dev/null || true
+      - name: Release déjà publiée ?
+        id: existe
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La release v$VERSION existe déjà : rien à publier."
+            echo "existe=oui" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Créer le tag et la release
+        if: steps.existe.outputs.existe != 'oui'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Carte Météo ${{ env.VERSION }}
+          generate_release_notes: true
+          prerelease: ${{ contains(env.VERSION, '-') }}

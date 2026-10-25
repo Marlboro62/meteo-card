@@ -1,0 +1,15 @@
+# Carte Météo : toutes les options (aucune n'est obligatoire)
+type: custom:meteo-card
+title: Météo
+entity: weather.ma_ville            # vide : Météo-France, sinon la première entité weather
+alert: sensor.00_weather_alert      # vide : vigilance Météo-France détectée
+forecast_type: daily                # daily, hourly ou twice_daily
+days: 5
+season: sensor.saison               # vide : détectée, sinon calculée d'après la date
+moon: sensor.moon_phase             # vide : détectée, sinon calculée
+zodiac: sensor.zodiac               # vide : détecté
+show_stats: true
+show_alert: true
+show_forecast: true
+show_sky: true
+theme: v2                           # v2, auto ou ha

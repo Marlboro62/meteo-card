@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carte Météo — démo</title>
+<style>
+:root { color-scheme: dark; }
+body { margin: 0; padding: 24px 16px; background: #111823; font-family: Roboto, "Segoe UI", system-ui, sans-serif; color: #e7edf5; }
+body.light { background: #eef2f7; color: #1a2434; color-scheme: light; }
+.wrap { max-width: 520px; margin: 0 auto; display: grid; gap: 16px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+button { padding: 6px 12px; border-radius: 8px; border: 1px solid #2f3d55; background: #212d40; color: inherit; cursor: pointer; }
+body.light button { background: #fff; border-color: #dbe2ec; }
+</style></head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <button data-theme="v2">Bleu nuit</button><button data-theme="auto-light">Clair</button>
+    <button data-act="pluie">Pluie et vigilance</button><button data-act="soleil">Beau temps</button><button data-act="heures">Par heure</button>
+  </div>
+  <div id="host"></div>
+</div>
+<script>
+// Home Assistant fournit <ha-card> et <ha-icon> ; ici, <ha-icon> affiche les icônes Material Design Icons.
+if (!customElements.get("ha-card")) customElements.define("ha-card", class extends HTMLElement {});
+if (!customElements.get("ha-icon")) customElements.define("ha-icon", class extends HTMLElement {
+  static get observedAttributes() { return ["icon"]; }
+  connectedCallback() { this._draw(); }
+  attributeChangedCallback() { this._draw(); }
+  _draw() {
+    const name = (this.getAttribute("icon") || "").replace(/^mdi:/, "");
+    if (!name) return;
+    const url = `https://cdn.jsdelivr.net/npm/@mdi/svg@7.4.47/svg/${name}.svg`;
+    this.style.cssText += `;display:inline-block;width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);flex:none;` +
+      `background:currentColor;-webkit-mask:url(${url}) center/contain no-repeat;mask:url(${url}) center/contain no-repeat;`;
+  }
+});
+</script>
+<script src="../meteo-card.js"></script>
+<script>
+// Données fictives : aucune donnée réelle
+const DAY = 86400e3;
+const mk = (conds, base) => conds.map((c, i) => ({ datetime: new Date(Date.now() + i * DAY).toISOString(), condition: c,
+  temperature: base[i][0], templow: base[i][1], precipitation_probability: base[i][2] }));
+const SCEN = {
+  pluie: { state: "rainy", attrs: { temperature: 13.6, apparent_temperature: 11.2, humidity: 90, pressure: 1000.1, wind_speed: 25.2, wind_gust_speed: 64.8, wind_bearing: 280 },
+    alert: { state: "Jaune", attrs: { "Vent violent": "Jaune", "Pluie-inondation": "Jaune", "Orages": "Vert", "Inondation": "Vert", "Neige-verglas": "Vert" } },
+    fc: mk(["rainy", "pouring", "cloudy", "partlycloudy", "sunny", "partlycloudy", "rainy"], [[15, 9, 90], [14, 8, 100], [16, 8, 30], [17, 7, 10], [18, 6, 0], [17, 8, 20], [14, 9, 70]]) },
+  soleil: { state: "sunny", attrs: { temperature: 24.3, humidity: 48, pressure: 1021.4, wind_speed: 8.5, wind_gust_speed: 18, wind_bearing: 45 },
+    alert: { state: "Vert", attrs: { "Vent violent": "Vert", "Orages": "Vert", "Canicule": "Vert" } },
+    fc: mk(["sunny", "sunny", "partlycloudy", "lightning-rainy", "sunny", "sunny", "cloudy"], [[26, 14, 0], [28, 15, 0], [27, 16, 10], [23, 15, 80], [25, 13, 0], [27, 14, 0], [24, 15, 20]]) },
+};
+let scen = "pluie", hourly = false;
+const listeners = [];
+function hassFor() {
+  const s = SCEN[scen];
+  return {
+    themes: { darkMode: !document.body.classList.contains("light") }, config: { latitude: 48 },
+    states: {
+      "weather.ville_exemple": { entity_id: "weather.ville_exemple", state: s.state, last_updated: scen,
+        attributes: { ...s.attrs, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Exemple" } },
+      "sensor.00_weather_alert": { entity_id: "sensor.00_weather_alert", state: s.alert.state, last_updated: scen, attributes: s.alert.attrs },
+      "sensor.saison": { entity_id: "sensor.saison", state: "autumn", attributes: { options: ["spring", "summer", "autumn", "winter"] } },
+      "sensor.moon_phase": { entity_id: "sensor.moon_phase", state: "waxing_gibbous", attributes: { options: ["new_moon", "waxing_crescent", "first_quarter", "waxing_gibbous", "full_moon", "waning_gibbous", "last_quarter", "waning_crescent"] } },
+      "sensor.zodiac": { entity_id: "sensor.zodiac", state: "scorpio", attributes: { options: ["aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"] } },
+    },
+    entities: { "weather.ville_exemple": { platform: "meteo_france" }, "sensor.00_weather_alert": { platform: "meteo_france" } },
+    connection: { subscribeMessage(cb, msg) {
+      const send = () => {
+        const s = SCEN[scen];
+        const fc = msg.forecast_type === "hourly"
+          ? Array.from({ length: 12 }, (_, i) => ({ datetime: new Date(Date.now() + (i + 1) * 3600e3).toISOString(), condition: s.fc[0].condition, temperature: s.attrs.temperature + Math.sin(i / 3) * 3, precipitation_probability: s.fc[0].precipitation_probability }))
+          : s.fc;
+        cb({ type: msg.forecast_type, forecast: fc });
+      };
+      listeners.push(send); setTimeout(send, 50);
+      return Promise.resolve(() => listeners.splice(listeners.indexOf(send), 1));
+    } },
+  };
+}
+const card = document.createElement("meteo-card");
+let theme = "v2";
+function apply() {
+  card.setConfig({ theme, forecast_type: hourly ? "hourly" : "daily", days: hourly ? 8 : 5 });
+  card.hass = hassFor();
+  listeners.forEach((f) => f());
+}
+document.getElementById("host").appendChild(card);
+apply();
+document.querySelector(".bar").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.theme) { theme = b.dataset.theme === "auto-light" ? "auto" : "v2"; document.body.classList.toggle("light", b.dataset.theme === "auto-light"); }
+  if (b.dataset.act === "heures") hourly = !hourly;
+  else if (b.dataset.act) { scen = b.dataset.act; hourly = false; }
+  apply();
+});
+</script>
+</body></html>
