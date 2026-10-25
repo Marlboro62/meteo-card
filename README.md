@@ -10,6 +10,8 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 
 Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir.
 
+*Basées sur les idées et la vue météo partagées par [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
+
 Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new) et les [Cartes Linky Énergie](https://github.com/Marlboro62/linky-energie-cards), mais elles sont **indépendantes**.
 
 🎮 **[Essayer la démo en ligne](https://marlboro62.github.io/meteo-card/docs/demo.html)** : les vraies cartes avec des données simulées, sans installer Home Assistant.
@@ -149,4 +151,4 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 
 ## Licence
 
-MIT. Inspirée de la carte « Météo Glossy » (glossy-weather-card). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
+MIT. Idées et vue météo d'origine : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Inspirée aussi de la carte « Météo Glossy » (glossy-weather-card). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
