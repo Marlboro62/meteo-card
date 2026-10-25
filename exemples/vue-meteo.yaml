@@ -1,0 +1,45 @@
+# Vue « Météo » complète avec les trois Cartes Météo.
+# Remplace une vue construite avec stack-in-card, tabbed-card, card-mod, meteofrance-weather-card,
+# compass-card, tempometer-gauge-card, rain-gauge-card, uv-index-card, sun-card, button-card,
+# bar-card, auto-entities et popup-card : une seule ressource, rien d'autre à installer.
+# Collez-la dans l'éditeur YAML du tableau de bord (⋮ → Modifier → ⋮ → Éditeur de configuration)
+# et remplacez les entités d'exemple par les vôtres. Les lignes en commentaire sont facultatives.
+title: Météo
+path: meteo
+icon: mdi:weather-partly-cloudy
+# background: center / cover no-repeat url("/local/images/fond-meteo.jpg") fixed
+cards:
+  # Météo du jour, deux villes en onglets, prévisions par heure puis par jour
+  - type: custom:meteo-card
+    entities:
+      - entity: weather.ma_ville
+        name: Ma ville
+        alert: sensor.00_weather_alert
+      - entity: weather.station_de_ski
+        name: Station de ski
+        alert: sensor.99_weather_alert
+    forecasts: [hourly, daily]
+    hours: 7
+    days: 7
+    show_sky: false               # saison et lune sont dans la carte Soleil et lune
+
+  # Baromètre, vent, températures, pluie du jour, UV et carte Windy
+  - type: custom:meteo-ciel-card
+    entity: weather.ma_ville
+    # compass_image: /local/images/maison.png   # photo au centre de la boussole
+    temperatures:
+      - name: Arrière
+        entity: sensor.thermometre_arriere_temperature
+        humidity: sensor.thermometre_arriere_humidity
+        icon: mdi:home-thermometer-outline
+      - name: Avant
+        entity: sensor.thermometre_avant_temperature
+        humidity: sensor.thermometre_avant_humidity
+        icon: mdi:home-thermometer
+    windy: true
+    windy_overlay: wind
+
+  # Soleil, lune (cliquez dessus pour les phases), cycles et pollens
+  - type: custom:meteo-astro-card
+    # pollens: sensor.pollens_00   # vide : détecté (intégration Pollens)
+    # compass_image: /local/images/maison.png

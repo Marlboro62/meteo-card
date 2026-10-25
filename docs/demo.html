@@ -1,23 +1,30 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Carte Météo — démo</title>
+<title>Cartes Météo — démo</title>
 <style>
 :root { color-scheme: dark; }
 body { margin: 0; padding: 24px 16px; background: #111823; font-family: Roboto, "Segoe UI", system-ui, sans-serif; color: #e7edf5; }
 body.light { background: #eef2f7; color: #1a2434; color-scheme: light; }
-.wrap { max-width: 520px; margin: 0 auto; display: grid; gap: 16px; }
-.bar { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; }
-button { padding: 6px 12px; border-radius: 8px; border: 1px solid #2f3d55; background: #212d40; color: inherit; cursor: pointer; }
+h1 { font-size: 1.2rem; margin: 0 0 4px; }
+p.note { margin: 0 0 14px; font-size: .85rem; opacity: .75; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; margin-bottom: 16px; }
+button { padding: 6px 12px; border-radius: 8px; border: 1px solid #2f3d55; background: #212d40; color: inherit; cursor: pointer; font: inherit; }
+button.on { border-color: #1d93e3; box-shadow: inset 0 -2px 0 #1d93e3; }
 body.light button { background: #fff; border-color: #dbe2ec; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; max-width: 1400px; margin: 0 auto; }
+body.phone .grid { grid-template-columns: 380px; justify-content: center; }
 </style></head>
 <body>
-<div class="wrap">
+<div style="max-width:1400px;margin:0 auto">
+  <h1>Cartes Météo</h1>
+  <p class="note">La vraie carte avec des données fictives (villes et capteurs inventés). Cliquez sur la lune pour ouvrir les phases.</p>
   <div class="bar">
-    <button data-theme="v2">Bleu nuit</button><button data-theme="auto-light">Clair</button>
-    <button data-act="pluie">Pluie et vigilance</button><button data-act="soleil">Beau temps</button><button data-act="heures">Par heure</button>
+    <button data-theme="v2" class="on">Bleu nuit</button><button data-theme="auto-light">Clair</button><button data-theme="ha">Thème HA</button>
+    <button data-act="pluie" class="on">Pluie et vigilance</button><button data-act="soleil">Beau temps</button>
+    <button data-act="phone">Téléphone</button><button data-act="windy">Carte Windy</button>
   </div>
-  <div id="host"></div>
 </div>
+<div class="grid" id="host"></div>
 <script>
 // Home Assistant fournit <ha-card> et <ha-icon> ; ici, <ha-icon> affiche les icônes Material Design Icons.
 if (!customElements.get("ha-card")) customElements.define("ha-card", class extends HTMLElement {});
@@ -36,60 +43,91 @@ if (!customElements.get("ha-icon")) customElements.define("ha-icon", class exten
 </script>
 <script src="../meteo-card.js"></script>
 <script>
-// Données fictives : aucune donnée réelle
-const DAY = 86400e3;
+// Données fictives : aucune donnée réelle (villes, capteurs et coordonnées inventés)
+const DAY = 86400e3, HOUR = 3600e3;
 const mk = (conds, base) => conds.map((c, i) => ({ datetime: new Date(Date.now() + i * DAY).toISOString(), condition: c,
-  temperature: base[i][0], templow: base[i][1], precipitation_probability: base[i][2] }));
+  temperature: base[i][0], templow: base[i][1], precipitation_probability: base[i][2], precipitation: base[i][3] }));
 const SCEN = {
-  pluie: { state: "rainy", attrs: { temperature: 13.6, apparent_temperature: 11.2, humidity: 90, pressure: 1000.1, wind_speed: 25.2, wind_gust_speed: 64.8, wind_bearing: 280 },
+  pluie: { state: "rainy", attrs: { temperature: 13.6, apparent_temperature: 11.2, humidity: 90, pressure: 996.4, wind_speed: 32.4, wind_gust_speed: 64.8, wind_bearing: 250 },
     alert: { state: "Jaune", attrs: { "Vent violent": "Jaune", "Pluie-inondation": "Jaune", "Orages": "Vert", "Inondation": "Vert", "Neige-verglas": "Vert" } },
-    fc: mk(["rainy", "pouring", "cloudy", "partlycloudy", "sunny", "partlycloudy", "rainy"], [[15, 9, 90], [14, 8, 100], [16, 8, 30], [17, 7, 10], [18, 6, 0], [17, 8, 20], [14, 9, 70]]) },
-  soleil: { state: "sunny", attrs: { temperature: 24.3, humidity: 48, pressure: 1021.4, wind_speed: 8.5, wind_gust_speed: 18, wind_bearing: 45 },
+    mf: { cloud_cover: 90, rain_chance: 80, freeze_chance: 0, snow_chance: 0, uv: 1, daily_precipitation: 12.4 },
+    pollen: { state: "faible", risk: 1, plants: { "Graminées": "faible", "Urticacées": "faible", "Ambroisies": "nul", "Chêne": "nul" } },
+    fc: mk(["rainy", "pouring", "cloudy", "partlycloudy", "sunny", "partlycloudy", "rainy"], [[15, 9, 90, 8.2], [14, 8, 100, 15.1], [16, 8, 30, 0.4], [17, 7, 10, 0], [18, 6, 0, 0], [17, 8, 20, 0], [14, 9, 70, 3.2]]) },
+  soleil: { state: "partlycloudy", attrs: { temperature: 27.4, humidity: 55, pressure: 1013.8, wind_speed: 18, wind_gust_speed: 32, wind_bearing: 290 },
     alert: { state: "Vert", attrs: { "Vent violent": "Vert", "Orages": "Vert", "Canicule": "Vert" } },
-    fc: mk(["sunny", "sunny", "partlycloudy", "lightning-rainy", "sunny", "sunny", "cloudy"], [[26, 14, 0], [28, 15, 0], [27, 16, 10], [23, 15, 80], [25, 13, 0], [27, 14, 0], [24, 15, 20]]) },
+    mf: { cloud_cover: 40, rain_chance: 10, freeze_chance: 0, snow_chance: 0, uv: 8, daily_precipitation: 3.6 },
+    pollen: { state: "élevé", risk: 3, plants: { "Graminées": "élevé", "Chêne": "faible", "Olivier": "faible", "Oseille": "faible", "Plantain": "faible", "Urticacées": "moyen", "Ambroisies": "nul" } },
+    fc: mk(["sunny", "sunny", "partlycloudy", "lightning-rainy", "sunny", "sunny", "cloudy"], [[28, 17, 0, 0], [30, 15, 0, 0], [31, 17, 10, 0], [29, 19, 80, 2.2], [31, 18, 0, 0], [31, 19, 0, 0], [32, 19, 20, 0.8]]) },
 };
-let scen = "pluie", hourly = false;
+let scen = "pluie", windy = false, theme = "v2";
 const listeners = [];
 function hassFor() {
   const s = SCEN[scen];
+  const states = {}, entities = {};
+  const add = (id, state, attributes = {}, platform) => { states[id] = { entity_id: id, state: String(state), attributes, last_updated: `${scen}${id}` }; if (platform) entities[id] = { platform, device_id: platform === "meteo_france" ? "dev_ville" : undefined }; };
+  add("weather.ville_exemple", s.state, { ...s.attrs, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Exemple" }, "meteo_france");
+  add("weather.station_montagne", scen === "pluie" ? "snowy" : "sunny", { temperature: scen === "pluie" ? -1.5 : 12.3, humidity: 70, pressure: 1004, wind_speed: 22, wind_bearing: 200, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Station-Montagne" });
+  for (const [k, v] of Object.entries(s.mf)) add(`sensor.ville_exemple_${k}`, v, {}, "meteo_france");
+  add("sensor.00_weather_alert", s.alert.state, s.alert.attrs, "meteo_france");
+  add("sensor.saison", scen === "pluie" ? "autumn" : "spring", { options: ["spring", "summer", "autumn", "winter"] });
+  add("sensor.zodiac", "scorpio", { options: ["aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"] });
+  add("sun.sun", "above_horizon", { friendly_name: "Soleil" });
+  add("sensor.pollens_00", s.pollen.state, { friendly_name: "Pollens Département-Exemple" });
+  add("sensor.pollens_00_risklevel", s.pollen.risk, {});
+  for (const [name, lv] of Object.entries(s.pollen.plants)) add(`sensor.pollens_00_${name.normalize("NFD").replace(/[^\w]/g, "").toLowerCase()}`, lv, { pollen_name: name });
+  add("sensor.salon_temperature", 21.4, { friendly_name: "Salon" });
+  add("sensor.salon_humidity", 52, {});
+  add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
+  add("sensor.jardin_humidity", s.attrs.humidity - 4, {});
   return {
-    themes: { darkMode: !document.body.classList.contains("light") }, config: { latitude: 48 },
-    states: {
-      "weather.ville_exemple": { entity_id: "weather.ville_exemple", state: s.state, last_updated: scen,
-        attributes: { ...s.attrs, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Exemple" } },
-      "sensor.00_weather_alert": { entity_id: "sensor.00_weather_alert", state: s.alert.state, last_updated: scen, attributes: s.alert.attrs },
-      "sensor.saison": { entity_id: "sensor.saison", state: "autumn", attributes: { options: ["spring", "summer", "autumn", "winter"] } },
-      "sensor.moon_phase": { entity_id: "sensor.moon_phase", state: "waxing_gibbous", attributes: { options: ["new_moon", "waxing_crescent", "first_quarter", "waxing_gibbous", "full_moon", "waning_gibbous", "last_quarter", "waning_crescent"] } },
-      "sensor.zodiac": { entity_id: "sensor.zodiac", state: "scorpio", attributes: { options: ["aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"] } },
-    },
-    entities: { "weather.ville_exemple": { platform: "meteo_france" }, "sensor.00_weather_alert": { platform: "meteo_france" } },
+    themes: { darkMode: !document.body.classList.contains("light") },
+    config: { latitude: 46.6, longitude: 2.4 }, // centre de la France, fictif
+    states, entities,
     connection: { subscribeMessage(cb, msg) {
       const send = () => {
-        const s = SCEN[scen];
+        const sc = SCEN[scen], mount = msg.entity_id === "weather.station_montagne";
         const fc = msg.forecast_type === "hourly"
-          ? Array.from({ length: 12 }, (_, i) => ({ datetime: new Date(Date.now() + (i + 1) * 3600e3).toISOString(), condition: s.fc[0].condition, temperature: s.attrs.temperature + Math.sin(i / 3) * 3, precipitation_probability: s.fc[0].precipitation_probability }))
-          : s.fc;
+          ? Array.from({ length: 24 }, (_, i) => ({ datetime: new Date(Math.ceil(Date.now() / HOUR) * HOUR + i * HOUR).toISOString(),
+            condition: i > 3 && new Date(Date.now() + i * HOUR).getHours() >= 21 ? "clear-night" : sc.fc[0].condition,
+            temperature: (mount ? sc.attrs.temperature - 14 : sc.attrs.temperature) - i * 0.4 + Math.sin(i / 3), precipitation: i < 3 && scen === "pluie" ? 1.2 - i * 0.4 : 0,
+            precipitation_probability: sc.fc[0].precipitation_probability, wind_speed: sc.attrs.wind_speed + (i % 3) * 2, wind_bearing: sc.attrs.wind_bearing + i * 3 }))
+          : sc.fc.map((d) => mount ? { ...d, temperature: d.temperature - 14, templow: d.templow - 12, condition: d.condition === "rainy" ? "snowy" : d.condition } : d);
         cb({ type: msg.forecast_type, forecast: fc });
       };
-      listeners.push(send); setTimeout(send, 50);
+      listeners.push(send); setTimeout(send, 30);
       return Promise.resolve(() => listeners.splice(listeners.indexOf(send), 1));
     } },
   };
 }
-const card = document.createElement("meteo-card");
-let theme = "v2";
+const host = document.getElementById("host");
+const cards = {
+  meteo: document.createElement("meteo-card"),
+  ciel: document.createElement("meteo-ciel-card"),
+  astro: document.createElement("meteo-astro-card"),
+};
+Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
-  card.setConfig({ theme, forecast_type: hourly ? "hourly" : "daily", days: hourly ? 8 : 5 });
-  card.hass = hassFor();
+  const t = theme;
+  cards.meteo.setConfig({ theme: t, entities: [{ entity: "weather.ville_exemple", name: "Ville-Exemple" }, { entity: "weather.station_montagne", name: "Station-Montagne" }],
+    forecasts: ["hourly", "daily"], hours: 8, days: 7, show_sky: false });
+  cards.ciel.setConfig({ theme: t, windy, temperatures: [{ name: "Salon", entity: "sensor.salon_temperature", humidity: "sensor.salon_humidity" },
+    { name: "Jardin", entity: "sensor.jardin_temperature", humidity: "sensor.jardin_humidity", icon: "mdi:tree-outline" }] });
+  cards.astro.setConfig({ theme: t });
+  const h = hassFor();
+  Object.values(cards).forEach((c) => { c.hass = h; });
   listeners.forEach((f) => f());
 }
-document.getElementById("host").appendChild(card);
 apply();
 document.querySelector(".bar").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.theme) { theme = b.dataset.theme === "auto-light" ? "auto" : "v2"; document.body.classList.toggle("light", b.dataset.theme === "auto-light"); }
-  if (b.dataset.act === "heures") hourly = !hourly;
-  else if (b.dataset.act) { scen = b.dataset.act; hourly = false; }
+  if (b.dataset.theme) {
+    theme = b.dataset.theme === "auto-light" ? "auto" : b.dataset.theme;
+    document.body.classList.toggle("light", b.dataset.theme === "auto-light");
+    document.querySelectorAll("[data-theme]").forEach((x) => x.classList.toggle("on", x === b));
+  }
+  if (b.dataset.act === "phone") { document.body.classList.toggle("phone"); b.classList.toggle("on"); }
+  else if (b.dataset.act === "windy") { windy = !windy; b.classList.toggle("on", windy); }
+  else if (b.dataset.act) { scen = b.dataset.act; document.querySelectorAll("[data-act=pluie],[data-act=soleil]").forEach((x) => x.classList.toggle("on", x === b)); }
   apply();
 });
 </script>
