@@ -1000,7 +1000,7 @@ class MeteoAstroCard extends MeteoBase {
   }
 
   /** Capteur principal de pollens et ses capteurs par plante :
-   *  intégration « Pollens » (sensor.pollens_60, sensor.pollens_60_<plante>, sensor.pollens_60_risklevel)
+   *  intégration « Pollens » (sensor.pollens_00, sensor.pollens_00_<plante>, sensor.pollens_00_risklevel)
    *  ou « Pollen Information » (sensor.polleninformation_<lieu>_allergy_risk, sensor.polleninformation_<lieu>_<plante>). */
   _pollens() {
     const c = this._config, ids = Object.keys(this._hass.states);
