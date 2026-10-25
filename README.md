@@ -211,6 +211,6 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 
 ## Licence
 
-MIT. Idées, vue météo d'origine et propositions : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
+MIT. Inspirée des cartes « [Dashboard météo all inclusive V2](https://forum.hacf.fr/t/dashboard-meteo-all-inclusive-v2-maj-02-08-23/25804) » ([@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary)). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
 
 Icônes météo animées et statiques : [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), dans la version de la [carte Météo-France de HACF](https://github.com/hacf-fr/lovelace-meteofrance-weather-card) (MIT).
