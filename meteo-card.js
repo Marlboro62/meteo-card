@@ -22,7 +22,7 @@
  */
 
 (() => {
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -86,6 +86,8 @@ const PHENO_ICON = [
 ];
 const phenoIcon = (name) => (PHENO_ICON.find(([re]) => re.test(name)) || [, "mdi:alert"])[1];
 const levelOf = (v) => LEVELS[String(v ?? "").trim().toLowerCase()];
+/** Un capteur de vigilance porte un niveau (Vert, Jaune…) dans son état ou ses attributs. */
+const isAlert = (st) => !!st && (levelOf(st.state) !== undefined || Object.values(st.attributes || {}).some((v) => levelOf(v) !== undefined));
 
 /** Saison, lune, zodiaque : libellé et icône. */
 const SEASON = {
@@ -225,7 +227,9 @@ const detect = (hass, c) => {
   const weathers = ids.filter((id) => id.startsWith("weather."));
   const weather = [c.entity, c.weather, c.weather_hourly, c.weather_daily].find((id) => String(id || "").startsWith("weather."))
     || weathers.find((id) => reg[id]?.platform === "meteo_france" || id.includes("meteo_france")) || weathers[0];
-  const alert = c.alert || c.weather_alert
+  const given = c.alert || c.weather_alert;
+  // un capteur choisi qui n'est pas une vigilance (ex. nuages) est ignoré au profit de la détection
+  const alert = (given && (given === "-" || isAlert(hass.states[given])) ? given : null)
     || ids.find((id) => id.startsWith("sensor.") && (reg[id]?.platform === "meteo_france" || id.includes("meteo_france")) && id.endsWith("weather_alert"))
     || ids.find((id) => id.startsWith("sensor.") && id.endsWith("_weather_alert"));
   const enumOf = (want) => ids.find((id) => {
@@ -421,7 +425,10 @@ class MeteoCard extends MeteoBase {
     // la première ville profite de la détection automatique (vigilance, saison, lune…)
     const ent = detect(this._hass, { ...c, ...(city.entity ? { entity: city.entity } : {}), ...(city.alert ? { alert: city.alert } : ti > 0 ? { alert: "-" } : {}) });
     if (ent.alert === "-") ent.alert = null;
-    const types = this._types();
+    const w0 = this._st(ent.weather);
+    const feat = num(w0?.attributes?.supported_features);
+    // WeatherEntityFeature : 1 par jour, 2 par heure, 4 jour et nuit
+    const types = this._types().filter((t) => feat === null || !w0?.attributes || (feat & { daily: 1, hourly: 2, twice_daily: 4 }[t]));
     this._keepSubs(types.map((t) => `${ent.weather}|${t}`));
     this._fcs = types.map((t) => [t, this._forecastOf(ent.weather, t)]);
     const w = this._st(ent.weather);
@@ -551,7 +558,7 @@ class MeteoCard extends MeteoBase {
     const several = this._types().length > 1;
     const n = Math.max(1, Math.min(hourly ? 24 : 14, Number(hourly && several ? c.hours : c.days) || (hourly ? 8 : 5)));
     fc = fc.slice(0, n);
-    if (!fc.length) return `<div class="fc-empty">Prévisions indisponibles pour ${esc(ent.weather)}.</div>`;
+    if (!fc.length) return this._types().length > 1 ? "" : `<div class="fc-empty">Prévisions indisponibles pour ${esc(ent.weather)}.</div>`;
     // barre de température : position du min et du max du jour sur l'échelle de la période
     const his = fc.map((d) => num(d.temperature)).filter((v) => v !== null);
     const los = fc.map((d) => num(d.templow) ?? num(d.temperature)).filter((v) => v !== null);
@@ -1100,7 +1107,7 @@ svg .ndl { stroke: var(--med-text); stroke-width: 2.5; stroke-linecap: round; }
 svg .hub { fill: var(--med-text); }
 svg .big { font-size: 19px; font-weight: 700; fill: var(--med-text); text-anchor: middle; }
 svg .sm { font-size: 8.5px; fill: var(--med-muted); text-anchor: middle; }
-svg .ring { fill: color-mix(in srgb, var(--med-bg) 60%, transparent); stroke: var(--med-blue); stroke-width: 2; }
+svg .ring { fill: color-mix(in srgb, var(--med-text) 5%, transparent); stroke: var(--med-blue); stroke-width: 2; }
 svg .tk { stroke: var(--med-muted); stroke-width: 1; opacity: .7; }
 svg .cn { font-size: 10px; font-weight: 700; fill: var(--med-muted); text-anchor: middle; }
 svg .cn.n { fill: var(--med-blue); }
@@ -1196,7 +1203,7 @@ const SCHEMA = [
   { name: "entity", selector: { entity: { domain: "weather" } } },
   { name: "entities", selector: { entity: { domain: "weather", multiple: true } } },
   { name: "title", selector: { text: {} } },
-  { name: "alert", selector: { entity: { domain: "sensor" } } },
+  { name: "alert", selector: { entity: { domain: "sensor", integration: "meteo_france" } } },
   { name: "forecasts", selector: { select: { multiple: true, mode: "list", options: [
     { value: "hourly", label: "Par heure" }, { value: "daily", label: "Par jour" }, { value: "twice_daily", label: "Jour et nuit" }] } } },
   { name: "days", selector: { number: { min: 1, max: 14, step: 1, mode: "box" } } },
@@ -1316,7 +1323,9 @@ const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
       this._form.computeLabel = (s) => labels[s.name] || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         const v = { ...ev.detail.value };
-        for (const [k, x] of Object.entries(v)) if (x === "" || x === undefined || (Array.isArray(x) && !x.length)) delete v[k];
+        for (const [k, x] of Object.entries(v)) {
+          if (x === "" || x === undefined || (Array.isArray(x) && !x.length) || (k !== "type" && JSON.stringify(x) === JSON.stringify(defaults[k]))) delete v[k];
+        }
         this._config = v;
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: v }, bubbles: true, composed: true }));
       });
