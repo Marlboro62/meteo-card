@@ -21,5 +21,9 @@ show_stats: true                    # ressenti, vent, humidité, pression
 show_details: true                  # nuages, pluie, gel, neige, UV (capteurs Météo-France)
 show_alert: true
 show_forecast: true
-show_sky: true                      # saison, lune, zodiaque
+show_sky: true                      # soleil (lever, coucher), saison, lune, zodiaque
+show_rain_hour: true                # pluie dans l'heure (Météo-France)
+forecast_details: full              # full (toutes les lignes) ou compact
+icons: animated                     # animated, static, drawn, drawn_static ou mdi
+# icons_path: /local/meteo-icons/   # icônes servies par Home Assistant (hors ligne)
 theme: v2                           # v2, auto ou ha

@@ -75,6 +75,25 @@ function hassFor() {
   add("sensor.pollens_00", s.pollen.state, { friendly_name: "Pollens Département-Exemple" });
   add("sensor.pollens_00_risklevel", s.pollen.risk, {});
   for (const [name, lv] of Object.entries(s.pollen.plants)) add(`sensor.pollens_00_${name.normalize("NFD").replace(/[^\w]/g, "").toLowerCase()}`, lv, { pollen_name: name });
+  // pluie dans l'heure (Météo-France), qualité de l'air et pollens (Atmo France), sécheresse (VigiEau), éclairs (Blitzortung)
+  const ref = new Date(Math.floor(Date.now() / 3e5) * 3e5);
+  const rainy = scen === "pluie";
+  add("sensor.ville_exemple_next_rain", rainy ? new Date(ref.getTime() + 15 * 6e4).toISOString() : "unknown", { forecast_time_ref: ref.toISOString(),
+    "1_hour_forecast": Object.fromEntries([0, 5, 10, 15, 20, 25, 35, 45, 55].map((m) => [`${m} min`, !rainy ? "Temps sec" : m < 15 ? "Temps sec" : m < 25 ? "Pluie faible" : m < 45 ? "Pluie modérée" : "Pluie forte"])) }, "meteo_france");
+  const atmo = (id, lv, extra = {}) => add(id, lv, { "Libellé": undefined, ...extra }, "atmofrance");
+  atmo("sensor.qualite_globale_ville_exemple", rainy ? 1 : 2);
+  atmo("sensor.dioxyde_d_azote_ville_exemple", 1); atmo("sensor.dioxyde_de_soufre_ville_exemple", 1);
+  atmo("sensor.ozone_ville_exemple", rainy ? 1 : 2); atmo("sensor.pm10_ville_exemple", rainy ? 1 : 3); atmo("sensor.pm25_ville_exemple", 1);
+  atmo("sensor.qualite_globale_pollen_ville_exemple", rainy ? 1 : 4);
+  for (const [k, lv, cv] of [["ambroisie", 1, 0], ["armoise", 1, 0], ["aulne", 1, 0], ["bouleau", rainy ? 1 : 2, rainy ? 0 : 3.2], ["gramine", rainy ? 1 : 4, rainy ? 0 : 41.5], ["olivier", rainy ? 1 : 3, rainy ? 0 : 12]]) {
+    atmo(`sensor.niveau_${k}_ville_exemple`, lv);
+    add(`sensor.${k}_ville_exemple`, cv, { unit_of_measurement: "µg/m³" }, "atmofrance");
+  }
+  add("sensor.alert_level", rainy ? "Vigilance" : "Crise", { zone: "Bassin-Exemple" }, "vigieau");
+  add("sensor.blitzortung_lightning_counter", rainy ? 12 : 0, {});
+  add("sensor.blitzortung_lightning_distance", rainy ? 18.4 : "unknown", { unit_of_measurement: "km" });
+  add("sensor.blitzortung_lightning_azimuth", rainy ? 248 : "unknown", { unit_of_measurement: "°" });
+  add("sensor.eclairs_du_mois", rainy ? 63 : 41, {});
   add("sensor.salon_temperature", 21.4, { friendly_name: "Salon" });
   add("sensor.salon_humidity", 52, {});
   add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
@@ -90,7 +109,7 @@ function hassFor() {
           ? Array.from({ length: 24 }, (_, i) => ({ datetime: new Date(Math.ceil(Date.now() / HOUR) * HOUR + i * HOUR).toISOString(),
             condition: i > 3 && new Date(Date.now() + i * HOUR).getHours() >= 21 ? "clear-night" : sc.fc[0].condition,
             temperature: (mount ? sc.attrs.temperature - 14 : sc.attrs.temperature) - i * 0.4 + Math.sin(i / 3), precipitation: i < 3 && scen === "pluie" ? 1.2 - i * 0.4 : 0,
-            precipitation_probability: sc.fc[0].precipitation_probability, wind_speed: sc.attrs.wind_speed + (i % 3) * 2, wind_bearing: sc.attrs.wind_bearing + i * 3 }))
+            precipitation_probability: sc.fc[0].precipitation_probability, wind_speed: sc.attrs.wind_speed + (i % 3) * 2, wind_gust_speed: sc.attrs.wind_gust_speed - i * 2, humidity: Math.min(98, sc.attrs.humidity + i * 2), wind_bearing: sc.attrs.wind_bearing + i * 3 }))
           : sc.fc.map((d) => mount ? { ...d, temperature: d.temperature - 14, templow: d.templow - 12, condition: d.condition === "rainy" ? "snowy" : d.condition } : d);
         cb({ type: msg.forecast_type, forecast: fc });
       };
@@ -104,15 +123,19 @@ const cards = {
   meteo: document.createElement("meteo-card"),
   ciel: document.createElement("meteo-ciel-card"),
   astro: document.createElement("meteo-astro-card"),
+  air: document.createElement("meteo-air-card"),
+  eclairs: document.createElement("meteo-eclairs-card"),
 };
 Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
   const t = theme;
   cards.meteo.setConfig({ theme: t, entities: [{ entity: "weather.ville_exemple", name: "Ville-Exemple" }, { entity: "weather.station_montagne", name: "Station-Montagne" }],
-    forecasts: ["hourly", "daily"], hours: 8, days: 7, show_sky: false });
+    forecasts: ["hourly", "daily"], hours: 8, days: 7 });
   cards.ciel.setConfig({ theme: t, windy, temperatures: [{ name: "Salon", entity: "sensor.salon_temperature", humidity: "sensor.salon_humidity" },
     { name: "Jardin", entity: "sensor.jardin_temperature", humidity: "sensor.jardin_humidity", icon: "mdi:tree-outline" }] });
   cards.astro.setConfig({ theme: t });
+  cards.air.setConfig({ theme: t });
+  cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
   const h = hassFor();
   Object.values(cards).forEach((c) => { c.hass = h; });
   listeners.forEach((f) => f());

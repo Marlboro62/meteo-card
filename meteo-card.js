@@ -4,12 +4,15 @@
  *                     pression, détails Météo-France, vigilance, prévisions par heure et par jour, saison, lune ;
  *   meteo-ciel-card   baromètre, boussole du vent, températures, pluie du jour, indice UV, carte Windy ;
  *   meteo-astro-card  soleil (boussole, course du jour, aube, lever, midi, coucher, crépuscule), lune (phase,
- *                     lever, coucher, fenêtre des phases), cycles et pollens.
+ *                     lever, coucher, fenêtre des phases), cycles et pollens ;
+ *   meteo-air-card    qualité de l'air et polluants (Atmo France), pollens, vigilance sécheresse (VigiEau) ;
+ *   meteo-eclairs-card  direction et distance du dernier éclair, compteur d'éclairs (Blitzortung).
  * Soleil et lune sont calculés d'après les coordonnées de Home Assistant : aucun capteur ni image à fournir.
  * Fonctionne avec toute entité weather (Météo-France, OpenWeatherMap, Met.no…) ; les prévisions sont lues
  * comme le fait Home Assistant (abonnement weather/subscribe_forecast).
  * Même style que la Carte Enedis Linky New et les Cartes Linky Énergie, mais indépendante.
- * Inspirée de la carte « Météo Glossy » (glossy-weather-card).
+ * Idées et vue météo d'origine : WarC0zes (forum HACF). Inspirée aussi de la carte « Météo Glossy ».
+ * Icônes météo : amCharts (CC BY 4.0), jeu repris par la carte Météo-France de HACF.
  *
  *   type: custom:meteo-card
  *   entity: weather.ma_ville          (facultatif : la première entité weather, Météo-France en priorité)
@@ -19,10 +22,12 @@
  *
  *   type: custom:meteo-ciel-card      (tout est détecté ; voir le README pour les options)
  *   type: custom:meteo-astro-card
+ *   type: custom:meteo-air-card
+ *   type: custom:meteo-eclairs-card
  */
 
 (() => {
-const CARD_VERSION = "1.1.1";
+const CARD_VERSION = "2.0.0";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -73,6 +78,8 @@ const condOf = (c) => COND[c] || [c ? String(c) : "Inconnu", "mdi:weather-cloudy
 
 const DAYS_FR = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 const COMPASS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const COMPASS16 = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
+const compass16 = (deg) => COMPASS16[Math.round((((Number(deg) % 360) + 360) % 360) / 22.5) % 16];
 const compass = (deg) => (num(deg) === null ? "" : COMPASS[Math.round((((Number(deg) % 360) + 360) % 360) / 45) % 8]);
 
 /** Vigilance Météo-France : niveaux et phénomènes. */
@@ -206,6 +213,65 @@ const moonSvg = (phase, r, cx = 0, cy = 0) => {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#2b3446" stroke="#55627a" stroke-width=".6"/>${lit}`;
 };
 
+
+/* -------------------------------------------------------- icônes météo SVG */
+/* Dessinées ici (aucun fichier externe) ; version animée avec la classe « anim ». */
+
+const SUN_C = "#f7c948", MOON_C = "#d9e2f2", CLOUD_C = "#dfe7f2", CLOUD_D = "#8fa0b8", RAIN_C = "#4aa8f0", SNOW_C = "#ffffff", BOLT_C = "#ffd23f";
+const svgSun = (cx, cy, r) => `<g class="sun"><g class="rays">${Array.from({ length: 8 }, (_, i) => {
+  const a = (i * Math.PI) / 4, x1 = cx + Math.cos(a) * (r + 4), y1 = cy + Math.sin(a) * (r + 4), x2 = cx + Math.cos(a) * (r + 9), y2 = cy + Math.sin(a) * (r + 9);
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+}).join("")}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="${SUN_C}"/></g>`;
+const svgMoon = (cx, cy, r) => `<path class="moon" d="M${cx + r * 0.35} ${cy - r}a${r} ${r} 0 1 0 ${r * 0.65} ${r * 1.55}a${r * 0.8} ${r * 0.8} 0 1 1 ${-r * 0.65} ${-r * 1.55}z" fill="${MOON_C}"/>`;
+const svgCloud = (dx, dy, k, fill, cls = "cloud") =>
+  `<path class="${cls}" transform="translate(${dx} ${dy}) scale(${k})" d="M14 40h30a9 9 0 0 0 1-18 13 13 0 0 0-25-3 10 10 0 0 0-6 21z" fill="${fill}"/>`;
+const svgDrops = (n, x0, y0, step) => Array.from({ length: n }, (_, i) =>
+  `<line class="drop" style="animation-delay:${(i * 0.37) % 1}s" x1="${x0 + i * step}" y1="${y0}" x2="${x0 + i * step - 2}" y2="${y0 + 7}" stroke="${RAIN_C}"/>`).join("");
+const svgFlakes = (n, x0, y0, step) => Array.from({ length: n }, (_, i) =>
+  `<circle class="flake" style="animation-delay:${(i * 0.6) % 2}s" cx="${x0 + i * step}" cy="${y0 + (i % 2) * 4}" r="2.2" fill="${SNOW_C}"/>`).join("");
+const svgBolt = (x, y) => `<path class="bolt" transform="translate(${x} ${y})" d="M6 0L0 12h6l-3 10 11-14H8l4-8z" fill="${BOLT_C}"/>`;
+const svgStars = `<g class="stars"><circle cx="50" cy="14" r="1.4"/><circle cx="56" cy="26" r="1"/><circle cx="44" cy="8" r="1"/></g>`;
+
+/** Icône d'une condition météo : « night » remplace le soleil par la lune. */
+const weatherSvg = (cond, night = false, anim = false, cls = "") => {
+  const sky = (x, y, r) => (night ? svgMoon(x, y, r) : svgSun(x, y, r));
+  const body = {
+    "sunny": () => (night ? svgMoon(30, 32, 16) + svgStars : svgSun(32, 32, 13)),
+    "clear-night": () => svgMoon(30, 32, 16) + svgStars,
+    "partlycloudy": () => sky(23, 22, 10) + svgCloud(6, 12, 1, CLOUD_C),
+    "cloudy": () => svgCloud(12, 2, 0.9, CLOUD_D, "cloud back") + svgCloud(2, 12, 1, CLOUD_C),
+    "fog": () => svgCloud(4, 4, 1, CLOUD_C) + `<g class="fog"><line x1="10" y1="50" x2="54" y2="50"/><line x1="16" y1="57" x2="48" y2="57"/></g>`,
+    "rainy": () => svgCloud(4, 2, 1, CLOUD_C) + svgDrops(3, 22, 46, 9),
+    "pouring": () => svgCloud(4, 2, 1, CLOUD_D) + svgDrops(5, 16, 46, 7),
+    "lightning": () => svgCloud(4, 2, 1, CLOUD_D) + svgBolt(26, 38),
+    "lightning-rainy": () => svgCloud(4, 2, 1, CLOUD_D) + svgBolt(28, 38) + svgDrops(2, 18, 46, 24),
+    "snowy": () => svgCloud(4, 2, 1, CLOUD_C) + svgFlakes(4, 18, 48, 9),
+    "snowy-rainy": () => svgCloud(4, 2, 1, CLOUD_C) + svgDrops(2, 20, 46, 18) + svgFlakes(2, 29, 50, 18),
+    "hail": () => svgCloud(4, 2, 1, CLOUD_D) + Array.from({ length: 4 }, (_, i) => `<circle class="flake" style="animation-delay:${i * 0.4}s" cx="${18 + i * 9}" cy="${49 + (i % 2) * 4}" r="2.6" fill="#cfe3ff" stroke="#8fb7e6"/>`).join(""),
+    "windy": () => `<g class="wind"><path d="M8 24h30a7 7 0 1 0-7-7"/><path d="M8 34h42a7 7 0 1 1-7 7"/><path d="M8 44h22"/></g>`,
+    "windy-variant": () => svgCloud(10, -2, 0.85, CLOUD_C) + `<g class="wind"><path d="M6 44h34a6 6 0 1 1-6 6"/><path d="M6 53h22"/></g>`,
+    "exceptional": () => `<path d="M32 8l26 46H6z" fill="#ee4a4a"/><path d="M32 24v14M32 44v4" stroke="#fff" stroke-width="5" stroke-linecap="round"/>`,
+  }[cond] || (() => svgCloud(4, 8, 1, CLOUD_D));
+  return `<svg class="wi${anim ? " anim" : ""}${cls ? ` ${cls}` : ""}" viewBox="0 0 64 64" aria-hidden="true">${body()}</svg>`;
+};
+
+/** Icônes amCharts (CC BY 4.0, https://www.amcharts.com/free-animated-svg-weather-icons/), jeu repris par la
+ *  carte Météo-France de HACF ; servies par jsDelivr à une version figée, ou depuis « icons_path ». */
+const AMCHARTS_URL = "https://cdn.jsdelivr.net/gh/hacf-fr/lovelace-meteofrance-weather-card@56f1264b401b3cc37f9a6756eb9dc8b30b5f02bd/dist/icons/";
+const AMCHARTS = {
+  "sunny": ["day", "night"], "clear-night": ["night", "night"], "partlycloudy": ["cloudy-day-3", "cloudy-night-3"],
+  "cloudy": ["cloudy"], "fog": ["fog"], "hail": ["rainy-7"], "lightning": ["thunder"], "lightning-rainy": ["lightning-rainy"],
+  "pouring": ["rainy-6"], "rainy": ["rainy-5"], "snowy": ["snowy-6"], "snowy-rainy": ["snowy-rainy"],
+  "windy": ["windy", "windy-night"], "windy-variant": ["windy", "windy-night"],
+};
+
+/** Nuit à un instant donné : le soleil est sous l'horizon (calculé d'après les coordonnées). */
+const isNight = (date, hass) => {
+  const lat = num(hass?.config?.latitude), lon = num(hass?.config?.longitude);
+  if (lat === null || lon === null) return false;
+  return position("sun", date, lat, lon).el < -0.833;
+};
+
 /* -------------------------------------------------------- détection auto */
 
 const DEFAULTS = {
@@ -213,10 +279,13 @@ const DEFAULTS = {
   hours: 8,
   forecast_type: "daily",
   show_details: true,
+  show_rain_hour: true,
   show_stats: true,
   show_alert: true,
   show_forecast: true,
   show_sky: true,
+  icons: "animated",
+  forecast_details: "full",
   theme: "v2",
 };
 
@@ -260,6 +329,18 @@ const related = (hass, weather) => {
     next_rain: find(/_next_rain$/), pressure: find(/_pressure$/), wind: find(/_wind_speed$/),
   };
 };
+
+/** Capteur Météo-France « pluie dans l'heure » (attribut 1_hour_forecast) de la ville. */
+const rainHourOf = (hass, weather, given) => {
+  if (given) return given;
+  const ids = Object.keys(hass?.states || {}).filter((id) => id.startsWith("sensor.") && hass.states[id].attributes?.["1_hour_forecast"]);
+  if (ids.length < 2) return ids[0];
+  const tail = String(weather || "").split("_").pop();
+  return ids.find((id) => tail && id.includes(tail)) || ids[0];
+};
+const RAIN_LEVEL = [[/sec|aucune|dry/i, 0], [/faible|light/i, 1], [/mod[ée]r|moderate/i, 2], [/fort|heavy/i, 3]];
+const rainLevel = (v) => (RAIN_LEVEL.find(([re]) => re.test(String(v ?? ""))) || [, 1])[1];
+const RAIN_COLOR = ["var(--med-line)", "#7cc4f5", "#1d93e3", "#0b5fa8"];
 
 /** Une ville : chaîne « weather.… » ou objet { entity, name, alert }. */
 const cityOf = (x) => (typeof x === "string" ? { entity: x } : x && typeof x === "object" ? x : {});
@@ -448,10 +529,32 @@ class MeteoCard extends MeteoBase {
       body = `<div class="empty"><b>Aucune entité météo</b><span>Ajoutez une intégration météo (Météo-France, Met.no…) ou choisissez l'entité dans l'éditeur de la carte.</span></div>`;
     } else {
       body = this._header(w, al, ent, city) + this._now(w, ent) + (c.show_details !== false ? this._details(w, rel) : "") +
+        (c.show_rain_hour !== false ? this._rainHour(rainHourOf(this._hass, ent.weather, city.rain_hour || (ti === 0 ? c.rain_hour : null))) : "") +
         (c.show_alert !== false ? this._alerts(al, ent) : "") +
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
     }
     this._card(tabs + body);
+  }
+
+  /** Pluie dans l'heure (Météo-France) : barre par tranche de 5 à 10 minutes. */
+  _rainHour(id) {
+    const st = this._st(id);
+    const fc = st?.attributes?.["1_hour_forecast"];
+    if (!fc || typeof fc !== "object") return "";
+    const steps = Object.entries(fc).map(([k, v]) => [parseInt(k, 10), v]).filter(([m]) => Number.isFinite(m)).sort((a, b) => a[0] - b[0]);
+    if (!steps.length) return "";
+    const ref = new Date(st.attributes.forecast_time_ref || st.last_updated || Date.now());
+    const start = isNaN(ref) ? new Date() : ref;
+    const segs = steps.map(([m, v], i) => {
+      const end = i + 1 < steps.length ? steps[i + 1][0] : 60;
+      return `<span style="flex:${Math.max(1, end - m)};background:${RAIN_COLOR[rainLevel(v)]}" title="${hm(new Date(start.getTime() + m * 6e4))} : ${esc(v)}"></span>`;
+    }).join("");
+    const first = steps.find(([, v]) => rainLevel(v) > 0);
+    const text = !first ? "Pas de pluie dans l'heure"
+      : first[0] === 0 ? `${steps[0][1]} en ce moment` : `${first[1]} à ${hm(new Date(start.getTime() + first[0] * 6e4))}`;
+    const ticks = [10, 20, 30, 40, 50].map((m) => `<i style="left:${(m / 60) * 100}%">${m}</i>`).join("");
+    return `<div class="rh" data-entity="${esc(id)}"><div class="rh-h"><span>${hm(start)}</span><b>${esc(text)}</b><span>${hm(new Date(start.getTime() + 36e5))}</span></div>
+      <div class="rh-b">${segs}</div><div class="rh-t">${ticks}</div></div>`;
   }
 
   /** Détails Météo-France : nuages, risque de pluie, de gel, de neige, indice UV, pluie dans l'heure. */
@@ -467,7 +570,9 @@ class MeteoCard extends MeteoBase {
       [rel.snow, "mdi:weather-snowy", "Neige", pct(rel.snow)],
       [rel.uv, "mdi:sun-wireless-outline", "UV", uv === null ? null : fmt(uv)],
     ].filter((x) => x[3] !== null);
-    const nr = this._st(rel.next_rain);
+    // l'heure de la prochaine pluie est déjà dans la barre « pluie dans l'heure » quand elle est affichée
+    const hourBar = this._config.show_rain_hour !== false && this._st(rainHourOf(this._hass, w.entity_id, this._config.rain_hour))?.attributes?.["1_hour_forecast"];
+    const nr = hourBar ? null : this._st(rel.next_rain);
     if (nr && nr.state !== "unknown" && nr.state !== "unavailable") {
       const d = new Date(nr.state);
       if (!isNaN(d) && d > new Date()) items.push([rel.next_rain, "mdi:weather-pouring", "Pluie à", hm(d)]);
@@ -498,7 +603,7 @@ class MeteoCard extends MeteoBase {
       ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
       : "";
     return `<header>
-      <div class="brand"><ha-icon class="b-ic" icon="${icon}" style="color:${color}"></ha-icon>
+      <div class="brand">${this._wicon(w.state, new Date(), "b-ic", false, `<ha-icon class="b-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
         <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
       ${pill}</header>`;
   }
@@ -526,7 +631,7 @@ class MeteoCard extends MeteoBase {
       ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`)}
     </div>`;
     return `<div class="now" data-entity="${esc(ent.weather)}">
-      <ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>
+      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(tu)}</span></div>
       ${hilo}</div>${stats}`;
   }
@@ -564,27 +669,67 @@ class MeteoCard extends MeteoBase {
     const los = fc.map((d) => num(d.templow) ?? num(d.temperature)).filter((v) => v !== null);
     const gMin = Math.min(...los, ...his), gMax = Math.max(...los, ...his);
     const pct = (v) => (gMax > gMin ? ((v - gMin) / (gMax - gMin)) * 100 : 50);
+    // affichage complet : mêmes lignes pour chaque heure et chaque jour (0 mm compris), alignées d'une colonne à l'autre
+    const full = c.forecast_details !== "compact";
+    const has = (k) => fc.some((d) => num(d[k]) !== null);
+    const rows = { mm: has("precipitation"), rain: has("precipitation_probability"), hum: hourly && has("humidity"), wind: has("wind_speed"),
+      // rafales : ligne affichée seulement si au moins une colonne a des rafales supérieures au vent moyen
+      gust: fc.some((d) => num(d.wind_gust_speed) > Math.max(0, num(d.wind_speed) ?? 0)) };
     const days = fc.map((d, i) => {
       const dt = new Date(d.datetime);
       const name = hourly ? dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-        : type === "twice_daily" ? `${DAYS_FR[dt.getDay()]} ${d.is_daytime === false ? "nuit" : "jour"}` : i === 0 ? "Auj." : DAYS_FR[dt.getDay()];
+        : type === "twice_daily" ? `${DAYS_FR[dt.getDay()]} ${d.is_daytime === false ? "nuit" : "jour"}` : i === 0 ? "Auj." : `${DAYS_FR[dt.getDay()]} ${dt.getDate()}`;
       const [lab, icon, color] = condOf(d.condition);
       const hi = num(d.temperature), lo = num(d.templow);
       const rain = num(d.precipitation_probability);
       const mm = num(d.precipitation);
       const ws = num(d.wind_speed), wb = num(d.wind_bearing);
+      const gust = num(d.wind_gust_speed);
       const wind = hourly && ws !== null
-        ? `<div class="f-w">${wb !== null ? `<ha-icon icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)"></ha-icon>` : ""}${fmt(ws)}</div>` : "";
-      const wet = mm !== null && mm > 0 ? `${fmt(mm, mm < 10 ? 1 : 0)}<small>mm</small>`
-        : rain !== null && rain > 0 ? `<ha-icon icon="mdi:water"></ha-icon>${fmt(rain)}%` : "";
+        ? `<div class="f-w">${wb !== null ? `<ha-icon icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)"></ha-icon>` : ""}${fmt(ws)}</div>` +
+          (gust !== null && gust > ws ? `<div class="f-g" title="Rafales">${fmt(gust)}</div>` : "") : "";
+      const hum = num(d.humidity);
+      if (full) {
+        const row = (on, cls, html) => (on ? `<div class="${cls}">${html}</div>` : "");
+        const details =
+          row(rows.mm, "f-mm", mm === null ? "—" : `${fmt(mm, mm > 0 && mm < 10 ? 1 : 0)} <small>mm</small>`) +
+          row(rows.rain, "f-pp", rain === null ? "—" : `<ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(rain)} %`) +
+          row(rows.hum, "f-hu", hum === null ? "—" : `<ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)} %`) +
+          row(rows.wind, "f-w", ws === null ? "—" : `${fmt(ws)} <small>km/h</small>`) +
+          row(rows.gust, "f-gb", gust === null || gust <= 0 || (ws !== null && gust <= ws) ? "&nbsp;" : `<span>${fmt(gust)} <small>km/h</small></span>`) +
+          row(rows.wind, "f-dir", wb === null ? "" : `<ha-icon icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)" title="${compass(wb)}"></ha-icon>`);
+        const barF = !hourly && hi !== null && lo !== null
+          ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
+        return `<div class="fc-d full" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
+          ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
+          <div class="f-hi">${hi === null ? "—" : `${fmt(hi, 1)}°`}</div>${!hourly ? `<div class="f-lo">${lo === null ? "&nbsp;" : `${fmt(lo, 1)}°`}</div>` : ""}${barF}${details}</div>`;
+      }
+      const wet = (mm !== null && mm > 0 ? `<span>${fmt(mm, mm < 10 ? 1 : 0)}<small>mm</small></span>` : "") +
+        (rain !== null && rain > 0 ? `<span class="pp" title="Risque de pluie"><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(rain)}%</span>` : "");
       const bar = !hourly && hi !== null && lo !== null
         ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
       return `<div class="fc-d" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
-        <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
+        ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
         <div class="f-hi">${hi === null ? "—" : `${fmt(hi)}°`}</div>${lo !== null ? `<div class="f-lo">${fmt(lo)}°</div>` : ""}${bar}
-        <div class="f-r">${wet}</div>${wind}</div>`;
+        <div class="f-r">${wet}</div>${hourly && hum !== null ? `<div class="f-hu" title="Humidité"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)}%</div>` : ""}${wind}</div>`;
     }).join("");
-    return `<div class="sec">${title}</div><div class="fc" data-entity="${esc(ent.weather)}">${days}</div>`;
+    return `<div class="sec">${title}</div><div class="fc${full ? " full" : ""}" data-entity="${esc(ent.weather)}">${days}</div>`;
+  }
+
+  /** Icône météo : amCharts animée ou statique (défaut), dessinée par la carte, ou MDI.
+   *  icons : animated | static | drawn | drawn_static | mdi. */
+  _wicon(cond, date, cls, anim, mdi) {
+    const mode = this._config.icons || "animated";
+    if (mode === "mdi") return mdi;
+    // prévision par jour (pas d'heure) : toujours l'icône de jour, sauf « nuit claire »
+    const night = cond === "clear-night" || (date ? isNight(date, this._hass) : false);
+    const am = AMCHARTS[cond];
+    if ((mode === "animated" || mode === "static") && am) {
+      const base = String(this._config.icons_path || AMCHARTS_URL).replace(/\/?$/, "/");
+      const name = (night && am[1]) || am[0];
+      return `<img class="wi-img ${cls}" src="${esc(base + name + (mode === "static" ? "-static" : ""))}.svg" alt="" loading="lazy" decoding="async">`;
+    }
+    return weatherSvg(cond, night, mode === "drawn" && anim, cls);
   }
 
   _sky(ent) {
@@ -597,7 +742,15 @@ class MeteoCard extends MeteoBase {
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
     const tile = (id, icon, color, value, label) =>
       `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${color}"></ha-icon><div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
+    // soleil : au-dessus ou sous l'horizon, lever et coucher du jour (calculés d'après les coordonnées)
+    const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
+    const sunSt = this._st("sun.sun")?.state;
+    const sunI = SUN_ICON[sunSt] || (lat !== null && lon !== null ? SUN_ICON[isNight(now, this._hass) ? "below_horizon" : "above_horizon"] : null);
+    const st = lat !== null && lon !== null ? sunTimes(now, lat, lon) : null;
     return `<div class="sky">
+      ${sunI ? tile(sunSt ? "sun.sun" : null, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
+      ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
+        <div class="k-v"><span class="sr">↑ ${hm(st.rise)}</span> <span class="ss">↓ ${hm(st.set)}</span></div><div class="k-l">Lever · coucher</div></div>` : ""}
       ${tile(SEASON[sRaw] ? ent.season : null, season[1], season[2], season[0], "Saison")}
       ${tile(MOON[mRaw] ? ent.moon : null, moon[1], "#d9e2f2", moon[0], "Lune")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
@@ -699,19 +852,29 @@ class MeteoCielCard extends MeteoBase {
   }
 
   /** Carte Windy : iframe créée une seule fois (recréée seulement si l'adresse change). */
+  _action(act, el) {
+    if (act === "wtab") { this._wtab = el.dataset.v; store.set("meteo-ciel-card:windy", this._wtab); this._windy(); }
+  }
+
   _windy() {
     const c = this._config;
     if (!this._keep) return;
     if (!c.windy) { if (this._keep.innerHTML) this._keep.innerHTML = ""; this._windySrc = null; return; }
+    if (this._wtab === undefined) this._wtab = store.get("meteo-ciel-card:windy") === "fc" ? "fc" : "map";
     const lat = num(c.latitude) ?? num(this._hass.config?.latitude), lon = num(c.longitude) ?? num(this._hass.config?.longitude);
     if (lat === null || lon === null) return;
     const q = new URLSearchParams({ lat: lat.toFixed(3), lon: lon.toFixed(3), detailLat: lat.toFixed(3), detailLon: lon.toFixed(3),
       zoom: String(c.windy_zoom || 8), level: "surface", overlay: c.windy_overlay || "wind", product: "ecmwf", menu: "", message: "true",
       marker: "", calendar: "now", pressure: "", type: "map", location: "coordinates", detail: "", metricWind: "km/h", metricTemp: "°C", radarRange: "-1" });
-    const src = `https://embed.windy.com/embed2.html?${q}`;
+    // Prévisions : tableau Windy du lieu (heure par heure)
+    const fq = new URLSearchParams({ type: "forecast", location: "coordinates", detail: "true", detailLat: lat.toFixed(3), detailLon: lon.toFixed(3),
+      metricTemp: "°C", metricRain: "mm", metricWind: "km/h" });
+    const src = this._wtab === "fc" ? `https://embed.windy.com/embed.html?${fq}` : `https://embed.windy.com/embed2.html?${q}`;
     if (src === this._windySrc) return;
     this._windySrc = src;
-    this._keep.innerHTML = `<iframe class="windy" title="Carte Windy" loading="lazy" referrerpolicy="no-referrer" src="${esc(src)}"></iframe>`;
+    const tab = (v, label, icon) => `<button class="tab${this._wtab === v ? " on" : ""}" data-act="wtab" data-v="${v}" aria-selected="${this._wtab === v}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
+    this._keep.innerHTML = `<div class="tabs wt" role="tablist">${tab("map", "Carte", "mdi:map-outline")}${tab("fc", "Prévisions", "mdi:chart-timeline-variant")}</div>
+      <iframe class="windy${this._wtab === "fc" ? " fc" : ""}" title="Windy" loading="lazy" referrerpolicy="no-referrer" src="${esc(src)}"></iframe>`;
   }
 
   _baro(p, id, unit) {
@@ -750,9 +913,16 @@ class MeteoCielCard extends MeteoBase {
   _temps(list) {
     return `<div class="temps">${list.map((t) => {
       const v = this._num(t.entity), h = this._num(t.humidity);
+      // tendance : sens de la dernière variation vue par la carte
+      this._trend = this._trend || {};
+      const tr = this._trend[t.entity] || {};
+      if (v !== null && tr.v !== undefined && v !== tr.v) tr.dir = v > tr.v ? 1 : -1;
+      if (v !== null) tr.v = v;
+      this._trend[t.entity] = tr;
+      const arrow = tr.dir ? `<ha-icon class="tp-tr ${tr.dir > 0 ? "up" : "down"}" icon="mdi:arrow-${tr.dir > 0 ? "up" : "down"}-bold"></ha-icon>` : "";
       const name = t.name || this._st(t.entity)?.attributes?.friendly_name || t.entity;
       return `<div class="tp" data-entity="${esc(t.entity)}"><ha-icon icon="${esc(t.icon || "mdi:home-thermometer-outline")}"></ha-icon>
-        <div class="tp-c"><span class="tp-n">${esc(name)}</span><div><b>${v === null ? "—" : `${fmt(v, 1)}°`}</b>${h !== null ? `<span class="tp-h"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(h)}%</span>` : ""}</div></div></div>`;
+        <div class="tp-c"><span class="tp-n">${esc(name)}</span><div><b>${v === null ? "—" : `${fmt(v, 1)}°`}</b>${arrow}${h !== null ? `<span class="tp-h"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(h)}%</span>` : ""}</div></div></div>`;
     }).join("")}</div>`;
   }
 
@@ -871,11 +1041,15 @@ class MeteoAstroCard extends MeteoBase {
   _sun([lat, lon], now) {
     const st = sunTimes(now, lat, lon), y = sunTimes(new Date(now.getTime() - DAYMS), lat, lon);
     const sp = position("sun", now, lat, lon), mp = position("moon", now, lat, lon);
+    const ent = detect(this._hass, this._config), rel = related(this._hass, ent.weather);
+    const uv = this._num(this._config.uv || rel.uv) ?? num(this._st(ent.weather)?.attributes?.uv_index);
     // boussole : soleil et lune sur le cercle, élévation du soleil au centre
     const dot = (p, r, cls) => { const [x, yy] = pt(70, 70, 52, p.az); return `<circle cx="${f2(x)}" cy="${f2(yy)}" r="${r}" class="${cls}${p.el < 0 ? " under" : ""}"/>`; };
     const rose = `<div class="gauge" data-entity="sun.sun"><svg viewBox="0 0 140 140" role="img" aria-label="Soleil : azimut ${fmt(sp.az)}°, élévation ${fmt(sp.el, 1)}°">
       ${roseSvg(this._config.compass_image)}${dot(mp, 5, "moon")}${dot(sp, 8, "sun")}
-      <text x="70" y="74" class="big">${fmt(sp.el, 1)}°</text><text x="70" y="87" class="sm">élévation</text></svg></div>`;
+      <text x="70" y="56" class="dir">${compass16(sp.az)}</text>
+      <text x="70" y="77" class="big">${fmt(sp.el, 1)}°</text><text x="70" y="88" class="sm">élévation</text>
+      ${uv !== null ? `<text x="70" y="104" class="uvt" style="fill:${UV.find(([to]) => uv < to)[2]}">${fmt(uv)} UV</text>` : ""}</svg></div>`;
     // course du soleil sur la journée : élévation toutes les 20 minutes
     const day0 = new Date(now); day0.setHours(0, 0, 0, 0);
     const pts = Array.from({ length: 73 }, (_, i) => position("sun", new Date(day0.getTime() + i * 12e5), lat, lon).el);
@@ -984,6 +1158,166 @@ class MeteoAstroCard extends MeteoBase {
   }
 }
 
+/* ------------------------------------------------ carte Air, pollens et eau */
+
+const AIR_DEFAULTS = { title: "Air, pollens et eau", show_air: true, show_pollens: true, show_water: true, show_all_pollens: true, theme: "v2" };
+/** Indice Atmo (1 à 6) : libellé et couleur officiels. */
+const ATMO = ["Indisponible", "Bon", "Moyen", "Dégradé", "Mauvais", "Très mauvais", "Extrêmement mauvais", "Événement"];
+const ATMO_POLLEN = ["Indisponible", "Très faible", "Faible", "Modéré", "Élevé", "Très élevé", "Extrêmement élevé"];
+const ATMO_COLOR = ["#8fa0b8", "#50f0e6", "#50ccaa", "#f0e641", "#ff5050", "#960032", "#872181", "#888888"];
+const POLLUTANTS = [
+  [/dioxyde_d_azote|_no2(_|$)/, "NO₂", "Dioxyde d'azote"], [/dioxyde_de_soufre|_so2(_|$)/, "SO₂", "Dioxyde de soufre"],
+  [/[._]ozone|_o3(_|$)/, "O₃", "Ozone"], [/pm_?10/, "PM10", "Particules < 10 µm"], [/pm_?2_?5/, "PM2,5", "Particules < 2,5 µm"],
+];
+const ATMO_PLANTS = [["ambroisie", "Ambroisie"], ["armoise", "Armoise"], ["aulne", "Aulne"], ["bouleau", "Bouleau"], ["gramin", "Graminées"], ["olivier", "Olivier"]];
+/** Sécheresse (VigiEau) : niveau de restriction. */
+const WATER = [[/crise/i, 4, "Crise"], [/renforc/i, 3, "Alerte renforcée"], [/alerte/i, 2, "Alerte"], [/vigilance/i, 1, "Vigilance"], [/aucun|pas de|normal|none/i, 0, "Pas de restriction"]];
+const WATER_COLOR = ["#5fcf8a", "#f7c948", "#ff8c33", "#ee4a4a", "#b3172f"];
+
+class MeteoAirCard extends MeteoBase {
+  static get defaults() {
+    return AIR_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-air-card-editor");
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  /** Entités Atmo France et VigiEau : celles de la configuration, sinon détectées par leur nom. */
+  _find() {
+    const c = this._config, st = this._hass.states, ids = Object.keys(st).filter((id) => id.startsWith("sensor."));
+    const reg = this._hass.entities || {};
+    const atmo = ids.filter((id) => reg[id]?.platform === "atmofrance" || /^sensor\.(qualite_globale|dioxyde|ozone|pm_?10|pm_?25|niveau_|concentration_)/.test(id));
+    const air = c.air || atmo.find((id) => /qualite_globale(?!_pollen)/.test(id) && !/pollen/.test(id));
+    const pollen = c.pollen || atmo.find((id) => /qualite_globale_pollen/.test(id));
+    const pollutants = Array.isArray(c.pollutants) ? c.pollutants
+      : POLLUTANTS.map(([re]) => atmo.find((id) => re.test(id) && !/concentration/.test(id))).filter(Boolean);
+    const plants = Array.isArray(c.pollens) ? c.pollens.map((x) => (typeof x === "string" ? { level: x } : x))
+      : ATMO_PLANTS.map(([k, name]) => {
+        const level = atmo.find((id) => id.includes(`niveau_${k}`));
+        const conc = atmo.find((id) => id.includes(k) && !id.includes("niveau_") && st[id]?.attributes?.unit_of_measurement);
+        return level || conc ? { name, level, concentration: conc } : null;
+      }).filter(Boolean);
+    const water = c.water || ids.find((id) => reg[id]?.platform === "vigieau" && /alert/.test(id))
+      || ids.find((id) => /(^sensor\.|_)alert_level$|secheresse|vigieau/.test(id) && WATER.some(([re]) => re.test(st[id].state)));
+    return { air, pollen, pollutants, plants, water };
+  }
+
+  _atmo(id, pollen) {
+    const st = this._st(id);
+    if (!st) return null;
+    const n = num(st.state);
+    const lv = n === null ? null : Math.max(0, Math.min(7, Math.round(n)));
+    const label = st.attributes?.["Libellé"] || st.attributes?.libelle || st.attributes?.label || (lv === null ? st.state : (pollen ? ATMO_POLLEN : ATMO)[lv] || st.state);
+    const color = st.attributes?.Couleur || st.attributes?.couleur || (lv === null ? ATMO_COLOR[0] : ATMO_COLOR[lv]);
+    return { lv, label: String(label), color };
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const f = this._find();
+    const ids = [f.air, f.pollen, f.water, ...f.pollutants, ...f.plants.flatMap((p) => [p.level, p.concentration])];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${icon}" style="color:${a.color}"></ha-icon>
+      <div class="pol-t"><span>${title}</span><b style="color:${a.color}">${esc(a.label)}${a.lv !== null ? ` (${a.lv})` : ""}</b></div>
+      ${a.lv !== null ? `<div class="pol-r"><div class="rbar"><i style="width:${Math.min(100, (a.lv / max) * 100).toFixed(0)}%;background:${a.color}"></i></div><b>${a.lv}/${max}</b></div>` : ""}</div>`;
+    const tile = (id, icon, name, a, extra = "") => `<div class="pl-t" data-entity="${esc(id)}" style="--pc:${a ? a.color : ATMO_COLOR[0]}">
+      <ha-icon icon="${icon}"></ha-icon><div class="pl-n">${esc(name)}</div><div class="pl-v">${a ? esc(a.label) : "—"}</div>${extra}</div>`;
+    const parts = [];
+    if (c.show_air !== false && (f.air || f.pollutants.length)) {
+      const tiles = f.pollutants.map((id) => {
+        const p = POLLUTANTS.find(([re]) => re.test(id));
+        return tile(id, "mdi:molecule", p ? p[1] : this._st(id)?.attributes?.friendly_name || id, this._atmo(id));
+      }).join("");
+      parts.push(`<div class="sec">Qualité de l'air</div>${bar(f.air, "mdi:air-filter", "Indice Atmo", this._atmo(f.air), 6)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
+    }
+    if (c.show_pollens !== false && (f.pollen || f.plants.length)) {
+      const tiles = f.plants.map((p) => {
+        const a = p.level ? this._atmo(p.level, true) : null;
+        const cv = this._num(p.concentration), unit = this._st(p.concentration)?.attributes?.unit_of_measurement || "µg/m³";
+        if (!c.show_all_pollens && a && a.lv !== null && a.lv <= 1 && !(cv > 0)) return "";
+        const name = p.name || ATMO_PLANTS.find(([k]) => String(p.level || p.concentration).includes(k))?.[1] || this._st(p.level || p.concentration)?.attributes?.friendly_name || p.level;
+        return tile(p.level || p.concentration, pollenIcon(name), name, a, cv !== null ? `<div class="pl-c">${fmt(cv, 1)} ${esc(unit)}</div>` : "");
+      }).join("");
+      parts.push(`<div class="sec">Pollens</div>${bar(f.pollen, "mdi:flower-pollen-outline", "Indice pollens", this._atmo(f.pollen, true), 6)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
+    }
+    if (c.show_water !== false && f.water) {
+      const st = this._st(f.water);
+      const w = WATER.find(([re]) => re.test(st?.state || "")) || [null, null, st?.state];
+      const lv = w[1], col = lv === null ? ATMO_COLOR[0] : WATER_COLOR[lv];
+      const area = st?.attributes?.zone || st?.attributes?.zone_name || st?.attributes?.commune || "";
+      parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(f.water)}"><ha-icon icon="mdi:water-alert" style="color:${col}"></ha-icon>
+        <div class="pol-t"><span>Vigilance sécheresse${area ? ` · ${esc(area)}` : ""}</span><b style="color:${col}">${esc(w[2])}${lv !== null ? ` (${lv})` : ""}</b></div>
+        ${lv !== null ? `<div class="pol-r"><div class="wbar">${[0, 1, 2, 3, 4].map((i) => `<i style="background:${WATER_COLOR[i]};opacity:${i <= lv ? 1 : 0.25}"></i>`).join("")}</div></div>` : ""}</div>`);
+    }
+    const body = this._head("mdi:leaf", "#5fcf8a", c.title || "Air, pollens et eau", "") + (parts.join("") ||
+      `<div class="empty"><b>Aucun capteur trouvé</b><span>Installez les intégrations Atmo France (air, pollens) ou VigiEau (sécheresse), ou choisissez les capteurs dans l'éditeur.</span></div>`);
+    this._card(body);
+  }
+}
+
+/* ---------------------------------------------------------- carte Éclairs */
+
+const ECLAIRS_DEFAULTS = { title: "Éclairs", counter_max: 100, theme: "v2" };
+
+class MeteoEclairsCard extends MeteoBase {
+  static get defaults() {
+    return ECLAIRS_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-eclairs-card-editor");
+  }
+
+  getCardSize() {
+    return 4;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, ids = Object.keys(this._hass.states);
+    const find = (re) => ids.find((id) => id.startsWith("sensor.") && re.test(id));
+    const counter = c.counter || find(/lightning_counter$/), distance = c.distance || find(/lightning_distance$/), azimuth = c.azimuth || find(/lightning_azimuth$/);
+    const month = c.month_counter;
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + [counter, distance, azimuth, month].map((id) => this._st(id)?.state).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const n = this._num(counter), dist = this._num(distance), az = this._num(azimuth), mn = this._num(month);
+    const last = this._st(counter)?.last_changed ? new Date(this._st(counter).last_changed) : null;
+    const strike = az === null ? "" : (() => {
+      const r = dist === null ? 40 : Math.max(10, 52 - Math.min(1, dist / (Number(c.distance_max) || 100)) * 40);
+      const [x, y] = pt(70, 70, r, az);
+      return `<g class="bolt" transform="translate(${f2(x)} ${f2(y)})"><circle r="9"/><path d="M1.5-6L-3.5 1h3l-1.5 5 5-7h-3z"/></g>`;
+    })();
+    const rose = `<div class="gauge" data-entity="${esc(azimuth || distance || counter)}"><svg viewBox="0 0 140 140" role="img" aria-label="Dernier éclair">
+      ${roseSvg(c.compass_image)}${strike}
+      <text x="70" y="74" class="big">${dist === null ? "—" : fmt(dist, dist < 100 ? 1 : 0)}</text><text x="70" y="87" class="sm">${dist === null ? "aucun éclair" : "km"}</text></svg>
+      <div class="g-l">Dernier éclair${az !== null ? ` · <b>${compass16(az)}</b>` : ""}${last && n ? ` · ${hm(last)}` : ""}</div></div>`;
+    const max = Number(c.counter_max) || 100;
+    const val = n ?? 0;
+    const zones = [[0.33, "#5fcf8a"], [0.66, "#f7c948"], [1, "#ee4a4a"]];
+    let from = 0;
+    const arcs = zones.map(([to, col]) => { const a0 = -130 + from * 260, a1 = -130 + to * 260; from = to; return `<path d="${arcD(70, 66, 52, a0, a1)}" stroke="${col}" class="zn"/>`; }).join("");
+    const [nx, ny] = pt(70, 66, 40, -130 + Math.min(1, val / max) * 260);
+    const gauge = `<div class="gauge" data-entity="${esc(counter || month)}"><svg viewBox="0 0 140 112" role="img" aria-label="${fmt(val)} éclairs">
+      <path d="${arcD(70, 66, 52, -130, 130)}" class="trk"/>${arcs}
+      <line x1="70" y1="66" x2="${f2(nx)}" y2="${f2(ny)}" class="ndl"/><circle cx="70" cy="66" r="4" class="hub"/>
+      <text x="70" y="98" class="big">${n === null ? "—" : fmt(n)}</text><text x="70" y="110" class="sm">éclairs</text></svg>
+      <div class="g-l">Compteur${mn !== null ? ` · <b>${fmt(mn)}</b> ce mois` : ""}</div></div>`;
+    const ok = counter || distance || azimuth;
+    const body = this._head("mdi:flash", "#f7c948", c.title || "Éclairs", n ? `${fmt(n)} éclair${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}` : "Aucun éclair à proximité") +
+      (ok ? `<div class="duo">${rose}${gauge}</div>` : `<div class="empty"><b>Aucun capteur d'éclairs</b><span>Installez l'intégration Blitzortung, ou choisissez les capteurs dans l'éditeur.</span></div>`);
+    this._card(body);
+  }
+}
+
 /* ------------------------------------------------------------------ style */
 
 const STYLE = `<style>
@@ -1070,10 +1404,20 @@ ha-card.light .v-h, ha-card.light .v-p b { filter: brightness(.8); }
 .f-bar span { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: linear-gradient(90deg, var(--med-blue), var(--med-up)); }
 .f-r { min-height: 1.1em; margin-top: 3px; font-size: .68rem; color: var(--med-blue); display: flex; align-items: center; justify-content: center; gap: 1px; }
 .f-r ha-icon { --mdc-icon-size: 11px; margin: 0; }
-.f-r { white-space: nowrap; }
+.f-r { white-space: nowrap; flex-direction: column; gap: 0; line-height: 1.25; }
+.f-r span { display: flex; align-items: center; justify-content: center; }
+.f-r .pp { color: var(--med-muted); }
+.f-g { font-size: .64rem; font-weight: 700; color: var(--t-red); }
+.rh { margin: 10px 12px 0; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; }
+.rh-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .72rem; color: var(--med-muted); }
+.rh-h b { color: var(--med-text); font-size: .8rem; text-align: center; }
+.rh-b { display: flex; gap: 2px; height: 10px; margin-top: 6px; }
+.rh-b span { border-radius: 3px; }
+.rh-t { position: relative; height: 12px; font-size: .6rem; color: var(--med-muted); }
+.rh-t i { position: absolute; top: 1px; transform: translateX(-50%); font-style: normal; }
 .f-r small { font-size: .6rem; margin-left: 1px; opacity: .8; }
 .fc-empty { margin: 12px 12px 0; padding: 14px 0; text-align: center; font-size: .8rem; color: var(--med-muted); border: 1px dashed var(--med-line); border-radius: 12px; }
-.sky { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin: 10px 12px 0; }
+.sky { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin: 10px 12px 0; }
 .sky-t { text-align: center; padding: 8px 4px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
 .sky-t[data-entity] { cursor: pointer; }
 .sky-t ha-icon { --mdc-icon-size: 22px; }
@@ -1090,6 +1434,56 @@ ha-card.light .v-h, ha-card.light .v-p b { filter: brightness(.8); }
   background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; }
 .d-i ha-icon { --mdc-icon-size: 15px; color: var(--med-blue); }
 .d-i b { color: var(--med-text); font-weight: 700; }
+svg.wi { flex: none; overflow: visible; }
+img.wi-img { flex: none; display: block; object-fit: contain; }
+img.wi-img.n-ic { width: 92px; height: 92px; margin: -14px -10px -14px -12px; }
+img.wi-img.b-ic { width: 44px; height: 44px; margin: -6px -4px -6px -6px; }
+img.wi-img.f-ic { width: 44px; height: 44px; margin: -4px auto -6px; }
+svg.wi.n-ic { width: 72px; height: 72px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .35)); }
+svg.wi.b-ic { width: 34px; height: 34px; }
+svg.wi.f-ic { width: 30px; height: 30px; margin: 3px auto 1px; display: block; }
+svg.wi .rays line { stroke: #f7c948; stroke-width: 3; stroke-linecap: round; }
+svg.wi .drop { stroke-width: 2.6; stroke-linecap: round; }
+svg.wi .bolt { stroke: #c79a00; stroke-width: .6; }
+svg.wi .fog line, svg.wi .wind path { stroke: #b8c6d8; stroke-width: 3.5; stroke-linecap: round; fill: none; }
+svg.wi .stars circle { fill: #ffffff; }
+svg.wi .moon { stroke: #8fa0b8; stroke-width: 1; }
+ha-card.light svg.wi .stars circle { fill: #8fa0b8; }
+svg.wi .cloud.back { opacity: .9; }
+svg.wi .cloud { stroke: rgba(26, 36, 52, .18); stroke-width: 1; }
+svg.wi.anim .rays { animation: wi-spin 14s linear infinite; transform-box: fill-box; transform-origin: center; }
+svg.wi.anim .cloud:not(.back) { animation: wi-drift 5s ease-in-out infinite alternate; }
+svg.wi.anim .drop { animation: wi-fall 1s linear infinite; }
+svg.wi.anim .flake { animation: wi-snow 2.2s linear infinite; }
+svg.wi.anim .bolt { animation: wi-flash 2.6s ease-in-out infinite; }
+svg.wi.anim .fog line { animation: wi-fog 4s ease-in-out infinite alternate; }
+svg.wi.anim .stars circle { animation: wi-twinkle 3s ease-in-out infinite; }
+svg.wi.anim .stars circle:nth-child(2) { animation-delay: 1s; } svg.wi.anim .stars circle:nth-child(3) { animation-delay: 2s; }
+svg.wi.anim .wind path { stroke-dasharray: 60; animation: wi-wind 2.5s ease-in-out infinite; }
+@keyframes wi-spin { to { transform: rotate(360deg); } }
+@keyframes wi-drift { from { transform: translateX(-1.5px); } to { transform: translateX(1.5px); } }
+@keyframes wi-fall { 0% { transform: translateY(-4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(8px); opacity: 0; } }
+@keyframes wi-snow { 0% { transform: translate(0, -4px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(2px, 9px); opacity: 0; } }
+@keyframes wi-flash { 0%, 70%, 100% { opacity: 1; } 75%, 85% { opacity: .15; } 80% { opacity: 1; } }
+@keyframes wi-fog { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+@keyframes wi-twinkle { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes wi-wind { 0% { stroke-dashoffset: 60; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -60; } }
+@media (prefers-reduced-motion: reduce) { svg.wi * { animation: none !important; } }
+.fc.full { grid-auto-columns: minmax(58px, 1fr); }
+.fc-d.full > div { line-height: 1.35; }
+.fc-d.full .f-hi { font-size: .9rem; }
+.f-mm { font-size: .7rem; color: var(--med-blue); white-space: nowrap; }
+.f-mm small, .f-w small, .f-gb small { font-size: .58rem; opacity: .8; }
+.f-pp { font-size: .66rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+.f-pp ha-icon { --mdc-icon-size: 11px; margin: 0; }
+.fc-d.full .f-w { white-space: nowrap; font-size: .68rem; color: var(--med-text); }
+.f-gb { margin-top: 2px; }
+.f-gb span { display: inline-block; padding: 0 4px; border-radius: 4px; background: var(--t-red); color: #fff; font-size: .66rem; font-weight: 700; white-space: nowrap; }
+.f-dir { margin-top: 3px; min-height: 18px; }
+.f-dir ha-icon { --mdc-icon-size: 18px; margin: 0; color: var(--med-blue); }
+.f-hu { font-size: .64rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; }
+.f-hu ha-icon { --mdc-icon-size: 11px; margin: 0; color: var(--med-blue); }
+.k-v .sr { color: var(--med-up); } .k-v .ss { color: var(--med-blue); }
 .f-w { font-size: .66rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; gap: 1px; }
 .f-w ha-icon { --mdc-icon-size: 11px; margin: 0; color: var(--med-blue); }
 /* Vent et ciel */
@@ -1111,6 +1505,8 @@ svg .ring { fill: color-mix(in srgb, var(--med-text) 5%, transparent); stroke: v
 svg .tk { stroke: var(--med-muted); stroke-width: 1; opacity: .7; }
 svg .cn { font-size: 10px; font-weight: 700; fill: var(--med-muted); text-anchor: middle; }
 svg .cn.n { fill: var(--med-blue); }
+svg .dir { font-size: 11px; font-weight: 700; fill: var(--med-muted); text-anchor: middle; letter-spacing: .5px; }
+svg .uvt { font-size: 10px; font-weight: 700; text-anchor: middle; }
 svg .arw { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 50%, #000); stroke-width: .6; }
 .temps { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .tp { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; }
@@ -1119,6 +1515,8 @@ svg .arw { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 50%, #000); stroke-
 .tp-c > div { display: flex; align-items: baseline; gap: 8px; }
 .tp-n { display: block; font-size: .74rem; color: var(--med-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp b { font-size: 1.05rem; }
+.tp-tr { --mdc-icon-size: 15px; align-self: center; }
+.tp-tr.up { color: var(--med-up); } .tp-tr.down { color: var(--med-blue); }
 .tp-h { display: inline-flex; align-items: center; font-size: .74rem; color: var(--med-muted); }
 .tp-h ha-icon { --mdc-icon-size: 14px; color: var(--med-blue); }
 svg.drop { width: 34px; flex: none; margin: 0; }
@@ -1130,6 +1528,8 @@ svg .dropl { fill: none; stroke: var(--med-blue); stroke-width: 2; }
 .uv-s { position: relative; height: 7px; margin-top: 8px; border-radius: 4px;
   background: linear-gradient(90deg, #5fcf8a 0 25%, #f7c948 25% 50%, #ff8c33 50% 66%, #ee4a4a 66% 91%, #b38cf0 91%); }
 .uv-s span { position: absolute; top: -4px; width: 4px; height: 15px; margin-left: -2px; border-radius: 2px; background: var(--med-text); box-shadow: 0 0 0 2px var(--med-bg); }
+.tabs.wt { padding-top: 10px; }
+.windy.fc { aspect-ratio: 16 / 10; }
 .windy { display: block; width: calc(100% - 24px); margin: 10px 12px 0; aspect-ratio: 4 / 3; border: 1px solid var(--med-line); border-radius: 12px; }
 /* Soleil et lune */
 .astro { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr); gap: 10px; margin: 0 12px; align-items: center; }
@@ -1181,6 +1581,11 @@ svg .pl { font-size: 10px; font-weight: 700; fill: #c9d4e5; text-anchor: middle;
 svg .pl.on { fill: #f7c948; }
 .d-f { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; font-size: .8rem; color: var(--med-muted); }
 .d-f b { color: var(--med-text); }
+.pl-c { font-size: .64rem; color: var(--med-muted); }
+.wbar { display: flex; gap: 3px; flex: 1; height: 9px; }
+.wbar i { flex: 1; border-radius: 3px; }
+svg .bolt circle { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 40%, #000); stroke-width: 1; filter: drop-shadow(0 0 4px #f7c948); }
+svg .bolt path { fill: #1a2434; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -1213,9 +1618,18 @@ const SCHEMA = [
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
   { name: "show_stats", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
+  { name: "show_rain_hour", selector: { boolean: {} } },
   { name: "show_alert", selector: { boolean: {} } },
   { name: "show_forecast", selector: { boolean: {} } },
   { name: "show_sky", selector: { boolean: {} } },
+  { name: "icons", selector: { select: { mode: "dropdown", options: [
+    { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
+    { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
+    { value: "mdi", label: "Icônes Material Design (MDI)" }] } } },
+  { name: "icons_path", selector: { text: {} } },
+  { name: "forecast_details", selector: { select: { mode: "dropdown", options: [
+    { value: "full", label: "Complètes : mm, risque de pluie, humidité, vent, rafales et direction, heure et jour" },
+    { value: "compact", label: "Compactes : seulement les valeurs utiles" }] } } },
   THEME_SELECT,
 ];
 const LABELS = {
@@ -1231,9 +1645,13 @@ const LABELS = {
   zodiac: "Signe du zodiaque (vide = détecté)",
   show_stats: "Ressenti, vent, humidité et pression",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
+  show_rain_hour: "Pluie dans l'heure (Météo-France)",
   show_alert: "Vigilance",
   show_forecast: "Prévisions",
-  show_sky: "Saison, lune et zodiaque",
+  show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
+  icons: "Icônes météo",
+  forecast_details: "Détails des prévisions",
+  icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
   theme: "Couleurs de la carte",
 };
 
@@ -1304,6 +1722,49 @@ const ASTRO_LABELS = {
   theme: "Couleurs de la carte",
 };
 
+const AIR_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "air", selector: { entity: { domain: "sensor" } } },
+  { name: "pollen", selector: { entity: { domain: "sensor" } } },
+  { name: "water", selector: { entity: { domain: "sensor" } } },
+  { name: "show_air", selector: { boolean: {} } },
+  { name: "show_pollens", selector: { boolean: {} } },
+  { name: "show_all_pollens", selector: { boolean: {} } },
+  { name: "show_water", selector: { boolean: {} } },
+  THEME_SELECT,
+];
+const AIR_LABELS = {
+  title: "Titre (Air, pollens et eau par défaut)",
+  air: "Qualité de l'air globale (vide = Atmo France détecté)",
+  pollen: "Qualité globale des pollens (vide = détectée)",
+  water: "Vigilance sécheresse (vide = VigiEau détecté)",
+  show_air: "Qualité de l'air et polluants",
+  show_pollens: "Pollens",
+  show_all_pollens: "Afficher aussi les pollens à « très faible »",
+  show_water: "Vigilance sécheresse",
+  theme: "Couleurs de la carte",
+};
+const ECLAIRS_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "counter", selector: { entity: { domain: "sensor" } } },
+  { name: "distance", selector: { entity: { domain: "sensor" } } },
+  { name: "azimuth", selector: { entity: { domain: "sensor" } } },
+  { name: "month_counter", selector: { entity: { domain: "sensor" } } },
+  { name: "counter_max", selector: { number: { min: 10, max: 10000, step: 10, mode: "box" } } },
+  { name: "compass_image", selector: { text: {} } },
+  THEME_SELECT,
+];
+const ECLAIRS_LABELS = {
+  title: "Titre (Éclairs par défaut)",
+  counter: "Compteur d'éclairs (vide = Blitzortung détecté)",
+  distance: "Distance du dernier éclair (vide = détectée)",
+  azimuth: "Direction du dernier éclair (vide = détectée)",
+  month_counter: "Éclairs du mois (facultatif, ex. compteur utility_meter)",
+  counter_max: "Maximum de la jauge",
+  compass_image: "Image au centre de la boussole",
+  theme: "Couleurs de la carte",
+};
+
 /** Éditeur visuel commun : formulaire ha-form ; les champs vidés sont retirés de la configuration. */
 const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
   setConfig(config) {
@@ -1348,10 +1809,16 @@ if (typeof customElements !== "undefined") {
   define("meteo-ciel-card-editor", makeEditor(CIEL_SCHEMA, CIEL_LABELS, CIEL_DEFAULTS));
   define("meteo-astro-card", MeteoAstroCard);
   define("meteo-astro-card-editor", makeEditor(ASTRO_SCHEMA, ASTRO_LABELS, ASTRO_DEFAULTS));
+  define("meteo-air-card", MeteoAirCard);
+  define("meteo-air-card-editor", makeEditor(AIR_SCHEMA, AIR_LABELS, AIR_DEFAULTS));
+  define("meteo-eclairs-card", MeteoEclairsCard);
+  define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
   window.customCards = window.customCards || [];
   for (const card of [
     { type: "meteo-card", name: "Carte Météo", description: "Météo du jour, une ou plusieurs villes : conditions, ressenti, vent, détails et vigilance Météo-France, prévisions par heure et par jour, saison, lune." },
     { type: "meteo-ciel-card", name: "Carte Météo : vent et ciel", description: "Baromètre, boussole du vent, températures, pluie du jour, indice UV et carte Windy." },
+    { type: "meteo-air-card", name: "Carte Météo : air, pollens et eau", description: "Qualité de l'air et polluants (Atmo France), pollens, vigilance sécheresse (VigiEau)." },
+    { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
     { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, cycles et pollens." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");

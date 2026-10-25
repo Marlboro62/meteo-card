@@ -7,8 +7,10 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Météo** | `custom:meteo-card` | La météo du jour, une ou plusieurs villes en onglets : conditions, ressenti, vent, humidité, pression, détails et **vigilance Météo-France**, **prévisions par heure et par jour**, saison, lune et zodiaque |
 | **Vent et ciel** | `custom:meteo-ciel-card` | **Baromètre**, **boussole du vent**, températures de vos capteurs, **pluie du jour**, **indice UV** et carte **Windy** |
 | **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles et **pollens** |
+| **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
+| **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
-Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir.
+Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir. Les **icônes météo animées** sont celles de la carte Météo-France de HACF (amCharts).
 
 *Basées sur les idées et la vue météo partagées par [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) sur le forum HACF : merci à lui !*
 
@@ -20,9 +22,13 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- | --- |
 | ![Météo](images/meteo-sombre.png) | ![Vent et ciel](images/meteo-ciel.png) | ![Soleil et lune](images/meteo-astro.png) |
 
-| Phases de la lune (clic sur la lune) | Version claire | Téléphone |
+| Air, pollens et eau | Éclairs | Phases de la lune (clic sur la lune) |
 | --- | --- | --- |
-| ![Phases de la lune](images/meteo-phases.png) | ![Clair](images/meteo-clair.png) | ![Téléphone](images/meteo-telephone.png) |
+| ![Air, pollens et eau](images/meteo-air.png) | ![Éclairs](images/meteo-eclairs.png) | ![Phases de la lune](images/meteo-phases.png) |
+
+| Version claire | Téléphone |
+| --- | --- |
+| ![Clair](images/meteo-clair.png) | ![Téléphone](images/meteo-telephone.png) |
 
 *Aperçus avec des villes et des données fictives.*
 
@@ -30,7 +36,7 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 
 Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, tabbed-card, card-mod, meteofrance-weather-card, compass-card, tempometer-gauge-card, rain-gauge-card, uv-index-card, sun-card, button-card, bar-card, auto-entities, popup-card…
 
-Ces trois cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](exemples/vue-meteo.yaml).
+Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](exemples/vue-meteo.yaml).
 
 ## Installation
 
@@ -40,7 +46,7 @@ Ces trois cartes font la même chose avec **une seule ressource**, sans CSS à m
 2. Ajoutez `https://github.com/Marlboro62/meteo-card` avec le type **Tableau de bord** (Dashboard).
 3. Cherchez **Carte Météo**, installez-la, puis rechargez la page (Ctrl+F5).
 
-Les trois cartes apparaissent ensuite dans la liste des cartes, chacune avec son éditeur visuel.
+Les cinq cartes apparaissent ensuite dans la liste des cartes, chacune avec son éditeur visuel.
 
 ### Manuellement
 
@@ -56,12 +62,15 @@ Les trois cartes apparaissent ensuite dans la liste des cartes, chacune avec son
 type: custom:meteo-card
 ```
 
+- **Icônes météo** animées ou statiques (jeu amCharts de la carte Météo-France), avec les variantes de nuit d'après l'heure de chaque prévision.
 - **En-tête** : icône du temps, ville, conditions en français et une **pastille de vigilance** (vert, jaune, orange, rouge).
 - **Maintenant** : température en grand, minimale et maximale du jour.
 - **Ressenti, vent, humidité, pression** : le vent avec sa direction (N, NE, E…), une flèche et les rafales. Sans ressenti fourni, la carte le calcule.
 - **Détails Météo-France** : nuages, risque de pluie, de gel, de neige, indice UV et heure de la prochaine pluie, lus dans les capteurs Météo-France de la ville.
+- **Pluie dans l'heure** (Météo-France) : une barre par tranche de 5 à 10 minutes, « Pas de pluie dans l'heure » ou « Pluie faible à 17:30 ».
 - **Vigilance Météo-France** : chaque phénomène actif avec son icône et sa couleur.
-- **Prévisions** : par heure (température, pluie en mm, vent), par jour (barre de température sur la semaine, pluie) ou jour et nuit, **l'une sous l'autre** si vous le souhaitez.
+- **Prévisions** par heure, par jour ou jour et nuit, **l'une sous l'autre** si vous le souhaitez, avec les **mêmes lignes pour les heures et les jours** : température, minimale, pluie en mm (0 mm compris), risque de pluie, humidité, vent, **rafales en rouge** et direction. Seules les lignes que votre intégration fournit sont affichées.
+- **Soleil, saison, lune, zodiaque** : soleil au-dessus ou sous l'horizon, heures de lever et de coucher, saison, phase de lune et signe.
 - **Plusieurs villes** : des onglets en haut de la carte ; la carte retient l'onglet choisi.
 
 | Option | Rôle | Défaut |
@@ -73,11 +82,16 @@ type: custom:meteo-card
 | `forecasts` | Liste parmi `hourly`, `daily`, `twice_daily`, affichées l'une sous l'autre | `[daily]` |
 | `hours` | Nombre d'heures (avec plusieurs prévisions) | `8` |
 | `days` | Nombre de jours | `5` |
+| `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
+| `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
+| `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
-| `show_stats`, `show_details`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
+| `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
 
 > L'ancienne option `forecast_type` (une seule prévision) reste acceptée. Avec plusieurs villes, la vigilance détectée va à la première ; indiquez `alert` pour les autres.
+>
+> Les icônes amCharts sont chargées depuis jsDelivr, à une version figée du dépôt de la carte Météo-France. Pour ne rien charger depuis Internet, copiez le dossier [`dist/icons`](https://github.com/hacf-fr/lovelace-meteofrance-weather-card/tree/Meteo-France/dist/icons) dans `/config/www/meteo-icons/` et indiquez `icons_path: /local/meteo-icons/`.
 
 ## Carte Vent et ciel
 
@@ -92,10 +106,10 @@ windy: true
 
 - **Baromètre** de 960 à 1060 hPa avec ses zones : tempête, pluie, variable, beau temps, très sec.
 - **Boussole du vent** : flèche tournée vers le centre (le vent vient de là), vitesse, direction et rafales ; une image peut remplir le cadran (par exemple une vue du dessus de votre maison).
-- **Températures** : autant de capteurs que vous voulez (intérieur, extérieur, avant, arrière…), avec leur humidité.
+- **Températures** : autant de capteurs que vous voulez (intérieur, extérieur, avant, arrière…), avec leur humidité et une flèche de tendance.
 - **Pluie du jour** : une goutte qui se remplit jusqu'à `rain_max`.
 - **Indice UV** sur une échelle colorée, avec le risque (faible à extrême).
-- **Carte Windy** (facultative) centrée sur les coordonnées de Home Assistant : vent, pluie, température, nuages, radar ou pression.
+- **Carte Windy** (facultative) centrée sur les coordonnées de Home Assistant : vent, pluie, température, nuages, radar ou pression, avec un onglet **Prévisions** (tableau heure par heure de Windy).
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
@@ -119,7 +133,7 @@ windy: true
 type: custom:meteo-astro-card
 ```
 
-- **Soleil** : boussole avec la position du soleil et de la lune, élévation, **courbe de la journée** avec la position actuelle, aube, lever, midi solaire, coucher, crépuscule, durée du jour (et son évolution depuis la veille).
+- **Soleil** : boussole avec la position du soleil et de la lune, direction (OSO…), élévation et indice UV, **courbe de la journée** avec la position actuelle, aube, lever, midi solaire, coucher, crépuscule, durée du jour (et son évolution depuis la veille).
 - **Lune** : phase dessinée, lever, coucher, éclairement, azimut et élévation.
 - **Cycles** : lune, soleil (au-dessus ou sous l'horizon), saison et zodiaque.
 - **Phases de la lune** : un clic sur la lune ouvre une fenêtre avec les huit phases autour de la Terre, la phase du jour entourée, l'âge de la lune et les dates de la prochaine pleine lune et de la prochaine nouvelle lune.
@@ -139,6 +153,52 @@ type: custom:meteo-astro-card
 
 Les heures et positions du soleil et de la lune sont calculées dans le navigateur (formules de [SunCalc](https://github.com/mourner/suncalc)), à la minute près.
 
+## Carte Air, pollens et eau
+
+```yaml
+type: custom:meteo-air-card
+```
+
+- **Qualité de l'air** : indice Atmo (1 à 6, couleurs officielles) et une tuile par polluant : NO₂, SO₂, O₃, PM10, PM2,5.
+- **Pollens** : indice pollens et une tuile par plante (ambroisie, armoise, aulne, bouleau, graminées, olivier) avec son niveau et sa concentration en µg/m³.
+- **Eau** : vigilance sécheresse, de « Pas de restriction » à « Crise », avec la zone et une barre à 5 niveaux.
+
+Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Air, pollens et eau` |
+| `air` | Qualité de l'air globale (`sensor.qualite_globale_…`) | détectée |
+| `pollutants` | Liste des capteurs de polluants | détectés |
+| `pollen` | Qualité globale des pollens (`sensor.qualite_globale_pollen_…`) | détectée |
+| `pollens` | Liste de `{ name, level, concentration }` | détectés |
+| `water` | Vigilance sécheresse (VigiEau) | détectée |
+| `show_air`, `show_pollens`, `show_water` | Afficher chaque partie | `true` |
+| `show_all_pollens` | Afficher aussi les pollens à « très faible » | `true` |
+| `theme` | Couleurs de la carte | `v2` |
+
+## Carte Éclairs
+
+```yaml
+type: custom:meteo-eclairs-card
+month_counter: sensor.eclairs_du_mois   # facultatif
+```
+
+- **Boussole** : l'éclair est placé dans la direction du dernier impact, plus près du centre quand il est proche ; distance au centre, direction (OSO…) et heure.
+- **Jauge** : nombre d'éclairs détectés, et le total du mois si vous indiquez un compteur.
+
+Les capteurs de l'intégration **Blitzortung** (`…_lightning_counter`, `…_lightning_distance`, `…_lightning_azimuth`) sont trouvés tout seuls.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Éclairs` |
+| `counter`, `distance`, `azimuth` | Capteurs à utiliser à la place de ceux détectés | Blitzortung |
+| `month_counter` | Éclairs du mois (par exemple un compteur `utility_meter`) | — |
+| `counter_max` | Maximum de la jauge | `100` |
+| `distance_max` | Distance (km) qui place l'éclair au bord de la boussole | `100` |
+| `compass_image` | Image au centre de la boussole | — |
+| `theme` | Couleurs de la carte | `v2` |
+
 ## Support
 
 Questions et problèmes : uniquement via les [issues GitHub](https://github.com/Marlboro62/meteo-card/issues).
@@ -151,4 +211,6 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 
 ## Licence
 
-MIT. Idées et vue météo d'origine : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Inspirée aussi de la carte « Météo Glossy » (glossy-weather-card). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
+MIT. Idées, vue météo d'origine et propositions : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Inspirée aussi de la carte « Météo Glossy » (glossy-weather-card). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
+
+Icônes météo animées et statiques : [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), dans la version de la [carte Météo-France de HACF](https://github.com/hacf-fr/lovelace-meteofrance-weather-card) (MIT).

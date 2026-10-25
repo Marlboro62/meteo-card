@@ -1,4 +1,4 @@
-# Vue « Météo » complète avec les trois Cartes Météo.
+# Vue « Météo » complète avec les cinq Cartes Météo.
 # Remplace une vue construite avec stack-in-card, tabbed-card, card-mod, meteofrance-weather-card,
 # compass-card, tempometer-gauge-card, rain-gauge-card, uv-index-card, sun-card, button-card,
 # bar-card, auto-entities et popup-card : une seule ressource, rien d'autre à installer.
@@ -43,3 +43,10 @@ cards:
   - type: custom:meteo-astro-card
     # pollens: sensor.pollens_00   # vide : détecté (intégration Pollens)
     # compass_image: /local/images/maison.png
+
+  # Qualité de l'air, pollens et sécheresse (intégrations Atmo France et VigiEau)
+  - type: custom:meteo-air-card
+
+  # Éclairs (intégration Blitzortung)
+  - type: custom:meteo-eclairs-card
+    # month_counter: sensor.eclairs_du_mois   # compteur mensuel facultatif
