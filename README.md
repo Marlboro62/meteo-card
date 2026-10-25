@@ -151,4 +151,4 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 
 ## Licence
 
-MIT. Idées et vue météo d'origine : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Inspirée aussi de la carte « Météo Glossy » (glossy-weather-card). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
+MIT. Idées et vue météo d'origine : [@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary) (forum HACF). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
