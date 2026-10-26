@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.0.1";
+const CARD_VERSION = "3.0.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -298,6 +298,7 @@ const DEFAULTS = {
   show_sky: true,
   icons: "animated",
   layout: "classic",
+  halo: false,
   forecast_details: "full",
   hourly_wind: true, hourly_gust: true, hourly_precipitation: true, hourly_humidity: true, hourly_direction: true,
   daily_wind: true, daily_gust: true, daily_precipitation: true, daily_humidity: false, daily_direction: true,
@@ -552,7 +553,7 @@ class MeteoCard extends MeteoBase {
         (c.show_alert !== false ? this._alerts(al, ent) : "") +
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
     }
-    this._card(tabs + body, neon ? "neon" : "");
+    this._card(tabs + body, [neon ? "neon" : "", c.halo === true ? "glow" : ""].filter(Boolean).join(" "));
   }
 
   /** Présentation « WarC0zes » : grande icône, titre, température, maximum et minimum du jour et vigilance sur une seule ligne. */
@@ -2020,16 +2021,19 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bm .leaflet-control-attribution { background: color-mix(in srgb, var(--med-bg) 80%, transparent); color: var(--med-muted); font-size: 9px; }
 .bm .leaflet-control-attribution a { color: var(--med-blue); }
 .bm .leaflet-bar a { background: var(--med-bg); color: var(--med-text); border-color: var(--med-line); }
-/* présentation « WarC0zes » : halo, en-tête sur une ligne, textes plus grands ;
-   couleur du halo : bleu MyElectricalData, ou couleur principale du thème avec theme: ha */
-ha-card.neon { --nx: var(--med-blue); }
-ha-card.th-ha.neon { --nx: var(--primary-color, var(--med-blue)); border-radius: var(--ha-card-border-radius, 12px); }
-ha-card.neon { --nb: color-mix(in srgb, var(--nx) 55%, transparent); border: 1.5px solid var(--nb);
+/* option « halo » (avec les deux présentations) : bordures et reflets colorés ;
+   couleur : bleu MyElectricalData, ou couleur principale du thème avec theme: ha */
+ha-card.glow { --nx: var(--med-blue); }
+ha-card.th-ha.glow { --nx: var(--primary-color, var(--med-blue)); }
+ha-card.glow { --nb: color-mix(in srgb, var(--nx) 55%, transparent); border: 1.5px solid var(--nb);
   background: radial-gradient(120% 70% at 15% 0%, color-mix(in srgb, var(--nx) 20%, var(--med-bg)) 0%, transparent 60%), var(--med-bg);
   box-shadow: 0 0 22px color-mix(in srgb, var(--nx) 28%, transparent), inset 0 0 28px color-mix(in srgb, var(--nx) 8%, transparent); }
-ha-card.neon :is(.stat, .fc-d, .sky-t, .rh, .d-i, .pill, .tab) { border-color: color-mix(in srgb, var(--nx) 40%, transparent);
+ha-card.glow :is(.stat, .fc-d, .sky-t, .rh, .d-i, .pill, .tab) { border-color: color-mix(in srgb, var(--nx) 40%, transparent);
   background: color-mix(in srgb, var(--nx) 7%, var(--med-surface)); box-shadow: inset 0 0 14px color-mix(in srgb, var(--nx) 10%, transparent); }
-ha-card.neon .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 25%, transparent); }
+ha-card.glow .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 25%, transparent); }
+ha-card.glow .sec { color: color-mix(in srgb, var(--nx) 35%, var(--med-text)); }
+ha-card.glow .f-lo { color: var(--med-blue); }
+/* présentation « WarC0zes » : en-tête sur une ligne, textes plus grands, couleurs du thème choisi */
 .nh { padding: 16px 16px 6px; flex-wrap: nowrap; }
 .nh-m { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; flex: 1; }
 .nh-n { min-width: 64px; flex: 0 1 auto; }
@@ -2040,7 +2044,8 @@ ha-card.neon .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 2
 .nh .title { font-size: 1.3rem; }
 .nh .sub { font-size: .9rem; }
 .nh .n-t { font-size: 3.1rem; flex: none; }
-.nh-sep { align-self: stretch; width: 2px; margin: 6px 0; border-radius: 1px; background: color-mix(in srgb, var(--nx) 45%, transparent); }
+.nh-sep { align-self: stretch; width: 2px; margin: 6px 0; border-radius: 1px; background: var(--med-line); }
+ha-card.glow .nh-sep { background: color-mix(in srgb, var(--nx) 45%, transparent); }
 .nh .n-hl { margin-left: 0; text-align: left; font-size: 1.1rem; white-space: nowrap; flex: none; }
 .nh .pill { padding: 7px 12px; font-size: .88rem; white-space: nowrap; }
 ha-card.neon .s-h { font-size: .88rem; }
@@ -2050,10 +2055,10 @@ ha-card.neon .s-v small { font-size: .9rem; }
 ha-card.neon .s-n { font-size: .8rem; }
 ha-card.neon .d-i { font-size: .9rem; padding: 6px 12px 6px 9px; }
 ha-card.neon .d-i ha-icon { --mdc-icon-size: 19px; }
-ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; color: color-mix(in srgb, var(--nx) 35%, var(--med-text)); }
+ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; }
 ha-card.neon .f-n { font-size: .88rem; }
 ha-card.neon .f-hi, ha-card.neon .fc-d.full .f-hi { font-size: 1.15rem; }
-ha-card.neon .f-lo { font-size: .92rem; color: var(--med-blue); }
+ha-card.neon .f-lo { font-size: .92rem; }
 ha-card.neon :is(.f-mm, .f-pp, .f-hu, .fc-d.full .f-w) { font-size: .82rem; }
 ha-card.neon .rh-h { font-size: .86rem; }
 ha-card.neon .rh-h b { font-size: .95rem; }
@@ -2115,7 +2120,8 @@ const SCHEMA = [
   { name: "show_forecast", selector: { boolean: {} } },
   { name: "show_sky", selector: { boolean: {} } },
   { name: "layout", selector: { select: { mode: "dropdown", options: [
-    { value: "classic", label: "Classique" }, { value: "warc0zes", label: "WarC0zes : en-tête sur une ligne, textes plus grands, halo bleu" }] } } },
+    { value: "classic", label: "Classique" }, { value: "warc0zes", label: "WarC0zes : en-tête sur une ligne, textes plus grands" }] } } },
+  { name: "halo", selector: { boolean: {} } },
   { name: "icons", selector: { select: { mode: "dropdown", options: [
     { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
     { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
@@ -2148,6 +2154,7 @@ const LABELS = {
   show_forecast: "Prévisions",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
   layout: "Présentation",
+  halo: "Halo coloré : bordures et reflets (bleu, ou couleur du thème avec le thème Home Assistant)",
   icons: "Icônes météo",
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
