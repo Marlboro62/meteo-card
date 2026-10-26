@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "2.0.3";
+const CARD_VERSION = "2.0.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1670,7 +1670,12 @@ const TEXT_SIZE = { name: "text_size", selector: { number: { min: 80, max: 160, 
 
 const SCHEMA = [
   { name: "entity", selector: { entity: { domain: "weather" } } },
-  { name: "entities", selector: { entity: { domain: "weather", multiple: true } } },
+  // villes en onglets : une ligne par ville, avec son nom et sa vigilance (sélecteur « object » de Home Assistant)
+  { name: "entities", selector: { object: { multiple: true, label_field: "name", description_field: "entity", fields: {
+    entity: { label: "Entité météo", required: true, selector: { entity: { domain: "weather" } } },
+    name: { label: "Nom de l'onglet (facultatif)", selector: { text: {} } },
+    alert: { label: "Vigilance (facultatif, capteur de vigilance Météo-France ou équivalent)", selector: { entity: { domain: "sensor" } } },
+  } } } },
   { name: "title", selector: { text: {} } },
   { name: "alert", selector: { entity: { domain: "sensor", integration: "meteo_france" } } },
   { name: "forecasts", selector: { select: { multiple: true, mode: "list", options: [
@@ -1873,11 +1878,30 @@ const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
       this.appendChild(this._form);
     }
     this._form.hass = this._hass;
-    this._form.schema = schema;
-    this._form.data = { ...defaults, ...this._config };
+    this._form.schema = typeof schema === "function" ? schema(this._hass, this._config) : schema;
+    const data = { ...defaults, ...this._config };
+    if (Array.isArray(data.entities)) data.entities = data.entities.map(cityOf);
+    this._form.data = data;
   }
 };
-const MeteoCardEditor = makeEditor(SCHEMA, LABELS, DEFAULTS);
+/** Vigilance d'une ville : seuls les capteurs qui portent un niveau (vert, jaune, orange, rouge) sont proposés,
+ *  plus ceux déjà choisis. Sans aucun capteur de ce type, tous les capteurs restent proposés. */
+let alertKey = "", alertSchema = SCHEMA;
+const meteoSchema = (hass, config) => {
+  const chosen = (Array.isArray(config.entities) ? config.entities : []).map((x) => cityOf(x).alert).filter(Boolean);
+  const ids = [...new Set([...Object.keys(hass.states).filter((id) => id.startsWith("sensor.") && isAlert(hass.states[id])), ...chosen])].sort();
+  const key = ids.join(",");
+  if (key === alertKey) return alertSchema;
+  alertKey = key;
+  alertSchema = SCHEMA.map((f) => {
+    if (f.name !== "entities" || !ids.length) return f;
+    const fields = f.selector.object.fields;
+    return { ...f, selector: { object: { ...f.selector.object, fields: { ...fields,
+      alert: { ...fields.alert, selector: { entity: { domain: "sensor", include_entities: ids } } } } } } };
+  });
+  return alertSchema;
+};
+const MeteoCardEditor = makeEditor(meteoSchema, LABELS, DEFAULTS);
 
 /* ---------------------------------------------------------- enregistrement */
 
