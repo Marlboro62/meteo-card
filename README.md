@@ -129,7 +129,7 @@ type: custom:meteo-card
 | `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
 | `hourly_wind`, `hourly_gust`, `hourly_precipitation`, `hourly_humidity`, `hourly_direction` | Prévisions par heure : afficher le vent, les rafales, les précipitations (mm et risque de pluie), l'humidité, la girouette (direction du vent) | `true` |
 | `daily_wind`, `daily_gust`, `daily_precipitation`, `daily_humidity`, `daily_direction` | Les mêmes lignes pour les prévisions par jour (et jour et nuit) | `true`, sauf `daily_humidity` : `false` |
-| `layout` | Présentation : `classic` (classique) ou `warc0zes` (mode WarC0zes : en-tête sur une ligne avec la température, textes plus grands, halo bleu) | `classic` |
+| `layout` | Présentation : `classic` (classique) ou `warc0zes` (mode WarC0zes : en-tête sur une ligne avec la température, textes plus grands, halo bleu, ou de la couleur principale du thème avec `theme: ha`) | `classic` |
 | `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
 | `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |

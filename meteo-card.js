@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.0.0";
+const CARD_VERSION = "3.0.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2020,12 +2020,15 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bm .leaflet-control-attribution { background: color-mix(in srgb, var(--med-bg) 80%, transparent); color: var(--med-muted); font-size: 9px; }
 .bm .leaflet-control-attribution a { color: var(--med-blue); }
 .bm .leaflet-bar a { background: var(--med-bg); color: var(--med-text); border-color: var(--med-line); }
-/* présentation « WarC0zes » : halo bleu, en-tête sur une ligne, textes plus grands */
-ha-card.neon { --nb: color-mix(in srgb, var(--med-blue) 55%, transparent); border: 1.5px solid var(--nb);
-  background: radial-gradient(120% 70% at 15% 0%, color-mix(in srgb, var(--med-blue) 20%, var(--med-bg)) 0%, transparent 60%), var(--med-bg);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--med-blue) 28%, transparent), inset 0 0 28px color-mix(in srgb, var(--med-blue) 8%, transparent); }
-ha-card.neon :is(.stat, .fc-d, .sky-t, .rh, .d-i, .pill, .tab) { border-color: color-mix(in srgb, var(--med-blue) 40%, transparent);
-  background: color-mix(in srgb, var(--med-blue) 7%, var(--med-surface)); box-shadow: inset 0 0 14px color-mix(in srgb, var(--med-blue) 10%, transparent); }
+/* présentation « WarC0zes » : halo, en-tête sur une ligne, textes plus grands ;
+   couleur du halo : bleu MyElectricalData, ou couleur principale du thème avec theme: ha */
+ha-card.neon { --nx: var(--med-blue); }
+ha-card.th-ha.neon { --nx: var(--primary-color, var(--med-blue)); border-radius: var(--ha-card-border-radius, 12px); }
+ha-card.neon { --nb: color-mix(in srgb, var(--nx) 55%, transparent); border: 1.5px solid var(--nb);
+  background: radial-gradient(120% 70% at 15% 0%, color-mix(in srgb, var(--nx) 20%, var(--med-bg)) 0%, transparent 60%), var(--med-bg);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--nx) 28%, transparent), inset 0 0 28px color-mix(in srgb, var(--nx) 8%, transparent); }
+ha-card.neon :is(.stat, .fc-d, .sky-t, .rh, .d-i, .pill, .tab) { border-color: color-mix(in srgb, var(--nx) 40%, transparent);
+  background: color-mix(in srgb, var(--nx) 7%, var(--med-surface)); box-shadow: inset 0 0 14px color-mix(in srgb, var(--nx) 10%, transparent); }
 ha-card.neon .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 25%, transparent); }
 .nh { padding: 16px 16px 6px; flex-wrap: nowrap; }
 .nh-m { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; flex: 1; }
@@ -2037,7 +2040,7 @@ ha-card.neon .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 2
 .nh .title { font-size: 1.3rem; }
 .nh .sub { font-size: .9rem; }
 .nh .n-t { font-size: 3.1rem; flex: none; }
-.nh-sep { align-self: stretch; width: 2px; margin: 6px 0; border-radius: 1px; background: color-mix(in srgb, var(--med-blue) 45%, transparent); }
+.nh-sep { align-self: stretch; width: 2px; margin: 6px 0; border-radius: 1px; background: color-mix(in srgb, var(--nx) 45%, transparent); }
 .nh .n-hl { margin-left: 0; text-align: left; font-size: 1.1rem; white-space: nowrap; flex: none; }
 .nh .pill { padding: 7px 12px; font-size: .88rem; white-space: nowrap; }
 ha-card.neon .s-h { font-size: .88rem; }
@@ -2047,7 +2050,7 @@ ha-card.neon .s-v small { font-size: .9rem; }
 ha-card.neon .s-n { font-size: .8rem; }
 ha-card.neon .d-i { font-size: .9rem; padding: 6px 12px 6px 9px; }
 ha-card.neon .d-i ha-icon { --mdc-icon-size: 19px; }
-ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; color: color-mix(in srgb, var(--med-blue) 35%, var(--med-text)); }
+ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; color: color-mix(in srgb, var(--nx) 35%, var(--med-text)); }
 ha-card.neon .f-n { font-size: .88rem; }
 ha-card.neon .f-hi, ha-card.neon .fc-d.full .f-hi { font-size: 1.15rem; }
 ha-card.neon .f-lo { font-size: .92rem; color: var(--med-blue); }
