@@ -88,6 +88,7 @@ type: custom:meteo-card
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
+| `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
 
 > L'ancienne option `forecast_type` (une seule prévision) reste acceptée. Avec plusieurs villes, la vigilance détectée va à la première ; indiquez `alert` pour les autres.
 >
@@ -126,6 +127,7 @@ windy: true
 | `latitude`, `longitude` | Centre de la carte Windy | coordonnées de Home Assistant |
 | `show_barometer`, `show_wind`, `show_temperatures`, `show_rain`, `show_uv` | Afficher chaque partie | `true` |
 | `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
 ## Carte Soleil et lune
 
@@ -150,6 +152,7 @@ type: custom:meteo-astro-card
 | `latitude`, `longitude` | Lieu des calculs | coordonnées de Home Assistant |
 | `show_sun`, `show_moon`, `show_cycles`, `show_pollens` | Afficher chaque partie | `true` |
 | `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
 Les heures et positions du soleil et de la lune sont calculées dans le navigateur (formules de [SunCalc](https://github.com/mourner/suncalc)), à la minute près.
 
@@ -163,7 +166,7 @@ type: custom:meteo-air-card
 - **Pollens** : indice pollens et une tuile par plante (ambroisie, armoise, aulne, bouleau, graminées, olivier) avec son niveau et sa concentration en µg/m³.
 - **Eau** : vigilance sécheresse, de « Pas de restriction » à « Crise », avec la zone et une barre à 5 niveaux.
 
-Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée.
+Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée. Seules les valeurs du jour sont affichées (les capteurs Atmo France du lendemain, « …-J+1 », sont ignorés). VigiEau : un niveau par type d'eau (eau potable, eaux souterraines, eaux superficielles) et les usages interdits.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
@@ -172,32 +175,36 @@ Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout
 | `pollutants` | Liste des capteurs de polluants | détectés |
 | `pollen` | Qualité globale des pollens (`sensor.qualite_globale_pollen_…`) | détectée |
 | `pollens` | Liste de `{ name, level, concentration }` | détectés |
-| `water` | Vigilance sécheresse (VigiEau) | détectée |
+| `water` | Vigilance sécheresse (VigiEau), un capteur ou une liste | détectée |
 | `show_air`, `show_pollens`, `show_water` | Afficher chaque partie | `true` |
 | `show_all_pollens` | Afficher aussi les pollens à « très faible » | `true` |
 | `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
 ## Carte Éclairs
 
 ```yaml
 type: custom:meteo-eclairs-card
-month_counter: sensor.eclairs_du_mois   # facultatif
+month_counter: sensor.eclairs_du_mois   # facultatif, détecté s'il existe
 ```
 
 - **Boussole** : l'éclair est placé dans la direction du dernier impact, plus près du centre quand il est proche ; distance au centre, direction (OSO…) et heure.
 - **Jauge** : nombre d'éclairs détectés, et le total du mois si vous indiquez un compteur.
 
-Les capteurs de l'intégration **Blitzortung** (`…_lightning_counter`, `…_lightning_distance`, `…_lightning_azimuth`) sont trouvés tout seuls.
+Les capteurs de l'intégration **Blitzortung** sont trouvés tout seuls, en anglais (`…_lightning_counter`, `…_lightning_distance`, `…_lightning_azimuth`) comme en français (`…_compteur_de_foudre`, `…_distance_de_foudre`, `…_azimut_de_foudre`).
+
+Pour le total du mois, créez un compteur **Paramètres › Appareils et services › Entrées › Compteur de services publics** (source : le compteur de foudre, cycle mensuel) : un compteur nommé par exemple « Éclairs du mois » est détecté tout seul.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `title` | Titre | `Éclairs` |
 | `counter`, `distance`, `azimuth` | Capteurs à utiliser à la place de ceux détectés | Blitzortung |
-| `month_counter` | Éclairs du mois (par exemple un compteur `utility_meter`) | — |
+| `month_counter` | Éclairs du mois (compteur `utility_meter`) | détecté |
 | `counter_max` | Maximum de la jauge | `100` |
 | `distance_max` | Distance (km) qui place l'éclair au bord de la boussole | `100` |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
 ## Support
 

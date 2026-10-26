@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "2.0.0";
+const CARD_VERSION = "2.0.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -444,6 +444,9 @@ class MeteoBase extends HTMLElement {
       this._keep = this.shadowRoot.querySelector(".keep");
     }
     this._hc.className = `${themeClass(this._config.theme, this._hass)}${cls ? ` ${cls}` : ""}`;
+    // taille du texte : agrandit toute la carte (texte, icônes, jauges), de 80 à 160 %
+    const zoom = Math.min(160, Math.max(80, Number(this._config.text_size) || 100));
+    this._hc.style.zoom = zoom === 100 ? "" : String(zoom / 100);
     this._main.innerHTML = body;
   }
 
@@ -595,7 +598,7 @@ class MeteoCard extends MeteoBase {
 
   _header(w, al, ent, city = {}) {
     const c = this._config;
-    const [label, icon, color] = condOf(w.state);
+    const [label] = condOf(w.state);
     const title = city.name || c.title || "Météo";
     const sub = label;
     const vg = this._vigilance(al);
@@ -603,7 +606,7 @@ class MeteoCard extends MeteoBase {
       ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
       : "";
     return `<header>
-      <div class="brand">${this._wicon(w.state, new Date(), "b-ic", false, `<ha-icon class="b-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
+      <div class="brand">
         <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
       ${pill}</header>`;
   }
@@ -626,7 +629,7 @@ class MeteoCard extends MeteoBase {
       ${this._stat("mdi:thermometer", "Ressenti", fl === null ? "—" : `${fmt(fl)}°`)}
       ${this._stat("mdi:weather-windy", "Vent", ws === null ? "—" : `${fmt(ws)} <small>${esc(a.wind_speed_unit || "km/h")}</small>`,
         [compass(a.wind_bearing), num(a.wind_gust_speed) !== null ? `rafales ${fmt(a.wind_gust_speed)}` : null].filter(Boolean).join(" · "),
-        num(a.wind_bearing) !== null ? `<ha-icon class="arrow" icon="mdi:navigation" style="transform:rotate(${(Number(a.wind_bearing) + 180) % 360}deg)"></ha-icon>` : "")}
+        num(a.wind_bearing) !== null ? `<ha-icon class="arrow rot" icon="mdi:navigation" style="transform:rotate(${(Number(a.wind_bearing) + 180) % 360}deg)"></ha-icon>` : "")}
       ${this._stat("mdi:water-percent", "Humidité", num(a.humidity) === null ? "—" : `${fmt(a.humidity)} <small>%</small>`)}
       ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`)}
     </div>`;
@@ -685,8 +688,12 @@ class MeteoCard extends MeteoBase {
       const mm = num(d.precipitation);
       const ws = num(d.wind_speed), wb = num(d.wind_bearing);
       const gust = num(d.wind_gust_speed);
+      // flèche orientée vers où va le vent ; vent nul ou sans direction : icône « calme / variable »
+      const dirIcon = ws === null && wb === null ? "" : ws === 0 || wb === null
+        ? `<ha-icon class="rot" icon="mdi:autorenew" title="Vent calme ou variable"></ha-icon>`
+        : `<ha-icon class="rot" icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)" title="${compass(wb)}"></ha-icon>`;
       const wind = hourly && ws !== null
-        ? `<div class="f-w">${wb !== null ? `<ha-icon icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)"></ha-icon>` : ""}${fmt(ws)}</div>` +
+        ? `<div class="f-w">${dirIcon}${fmt(ws)}</div>` +
           (gust !== null && gust > ws ? `<div class="f-g" title="Rafales">${fmt(gust)}</div>` : "") : "";
       const hum = num(d.humidity);
       if (full) {
@@ -697,7 +704,7 @@ class MeteoCard extends MeteoBase {
           row(rows.hum, "f-hu", hum === null ? "—" : `<ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)} %`) +
           row(rows.wind, "f-w", ws === null ? "—" : `${fmt(ws)} <small>km/h</small>`) +
           row(rows.gust, "f-gb", gust === null || gust <= 0 || (ws !== null && gust <= ws) ? "&nbsp;" : `<span>${fmt(gust)} <small>km/h</small></span>`) +
-          row(rows.wind, "f-dir", wb === null ? "" : `<ha-icon icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)" title="${compass(wb)}"></ha-icon>`);
+          row(rows.wind, "f-dir", dirIcon);
         const barF = !hourly && hi !== null && lo !== null
           ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
         return `<div class="fc-d full" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
@@ -1191,7 +1198,9 @@ class MeteoAirCard extends MeteoBase {
   _find() {
     const c = this._config, st = this._hass.states, ids = Object.keys(st).filter((id) => id.startsWith("sensor."));
     const reg = this._hass.entities || {};
-    const atmo = ids.filter((id) => reg[id]?.platform === "atmofrance" || /^sensor\.(qualite_globale|dioxyde|ozone|pm_?10|pm_?25|niveau_|concentration_)/.test(id));
+    // Atmo France crée aussi les capteurs du lendemain (« Dioxyde d'azote-Ville-J+1 ») : seul le jour même est affiché
+    const nextDay = (id) => /_j_?\d+(_\d+)?$/.test(id) || /-J\+\d/.test(String(st[id]?.attributes?.friendly_name || ""));
+    const atmo = ids.filter((id) => (reg[id]?.platform === "atmofrance" || /^sensor\.(qualite_globale|dioxyde|ozone|pm_?10|pm_?25|niveau_|concentration_)/.test(id)) && !nextDay(id));
     const air = c.air || atmo.find((id) => /qualite_globale(?!_pollen)/.test(id) && !/pollen/.test(id));
     const pollen = c.pollen || atmo.find((id) => /qualite_globale_pollen/.test(id));
     const pollutants = Array.isArray(c.pollutants) ? c.pollutants
@@ -1202,9 +1211,14 @@ class MeteoAirCard extends MeteoBase {
         const conc = atmo.find((id) => id.includes(k) && !id.includes("niveau_") && st[id]?.attributes?.unit_of_measurement);
         return level || conc ? { name, level, concentration: conc } : null;
       }).filter(Boolean);
-    const water = c.water || ids.find((id) => reg[id]?.platform === "vigieau" && /alert/.test(id))
-      || ids.find((id) => /(^sensor\.|_)alert_level$|secheresse|vigieau/.test(id) && WATER.some(([re]) => re.test(st[id].state)));
-    return { air, pollen, pollutants, plants, water };
+    // VigiEau : un niveau d'alerte texte par type d'eau (AEP, SOU, SUP), en plus de sa version numérique
+    const isLevel = (id) => !/numeri|numeric/.test(id) && WATER.some(([re]) => re.test(st[id].state));
+    const waters = c.water ? [].concat(c.water)
+      : ids.filter((id) => (reg[id]?.platform === "vigieau" && /alert|niveau/.test(id)) || /(^sensor\.|_)alert_level$|secheresse/.test(id)).filter(isLevel);
+    // usages interdits : capteurs binaires VigiEau à « off » (non autorisé), sans doublon entre types d'eau
+    const bans = [...new Set(Object.keys(st).filter((id) => id.startsWith("binary_sensor.") && reg[id]?.platform === "vigieau" && st[id].state === "off")
+      .map((id) => String(st[id].attributes?.friendly_name || id).replace(/^vigieau\s+.*?\s+(aep|sou|sup)\s+/i, "").replace(/\s+autoris.*$/i, "").trim()))];
+    return { air, pollen, pollutants, plants, waters, bans };
   }
 
   _atmo(id, pollen) {
@@ -1221,8 +1235,8 @@ class MeteoAirCard extends MeteoBase {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config;
     const f = this._find();
-    const ids = [f.air, f.pollen, f.water, ...f.pollutants, ...f.plants.flatMap((p) => [p.level, p.concentration])];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|");
+    const ids = [f.air, f.pollen, ...f.waters, ...f.pollutants, ...f.plants.flatMap((p) => [p.level, p.concentration])];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|") + `|${f.bans.join(",")}`;
     if (sig === this._sig) return;
     this._sig = sig;
     const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${icon}" style="color:${a.color}"></ha-icon>
@@ -1248,14 +1262,22 @@ class MeteoAirCard extends MeteoBase {
       }).join("");
       parts.push(`<div class="sec">Pollens</div>${bar(f.pollen, "mdi:flower-pollen-outline", "Indice pollens", this._atmo(f.pollen, true), 6)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
     }
-    if (c.show_water !== false && f.water) {
-      const st = this._st(f.water);
-      const w = WATER.find(([re]) => re.test(st?.state || "")) || [null, null, st?.state];
-      const lv = w[1], col = lv === null ? ATMO_COLOR[0] : WATER_COLOR[lv];
-      const area = st?.attributes?.zone || st?.attributes?.zone_name || st?.attributes?.commune || "";
-      parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(f.water)}"><ha-icon icon="mdi:water-alert" style="color:${col}"></ha-icon>
-        <div class="pol-t"><span>Vigilance sécheresse${area ? ` · ${esc(area)}` : ""}</span><b style="color:${col}">${esc(w[2])}${lv !== null ? ` (${lv})` : ""}</b></div>
-        ${lv !== null ? `<div class="pol-r"><div class="wbar">${[0, 1, 2, 3, 4].map((i) => `<i style="background:${WATER_COLOR[i]};opacity:${i <= lv ? 1 : 0.25}"></i>`).join("")}</div></div>` : ""}</div>`);
+    if (c.show_water !== false && f.waters.length) {
+      const TYPES = [[/_aep_|-aep\b|aep/i, "Eau potable"], [/_sou_|-sou\b|sou/i, "Eaux souterraines"], [/_sup_|-sup\b|sup/i, "Eaux superficielles"]];
+      const levels = f.waters.map((id) => {
+        const st = this._st(id);
+        const w = WATER.find(([re]) => re.test(st?.state || "")) || [null, null, st?.state];
+        const type = f.waters.length > 1 ? (TYPES.find(([re]) => re.test(id.replace(/^sensor\./, ""))) || [, ""])[1] : "";
+        return { id, lv: w[1], label: w[2], type, col: st?.attributes?.Couleur || (w[1] === null ? ATMO_COLOR[0] : WATER_COLOR[w[1]]),
+          area: st?.attributes?.zone || st?.attributes?.zone_name || st?.attributes?.commune || "" };
+      });
+      const top = levels.reduce((a, b) => ((b.lv ?? -1) > (a.lv ?? -1) ? b : a));
+      const lv = top.lv, col = lv === null ? ATMO_COLOR[0] : WATER_COLOR[lv];
+      const detail = levels.length > 1 ? `<div class="wl">${levels.map((l) => `<span class="w-i" data-entity="${esc(l.id)}" style="--pc:${l.lv === null ? ATMO_COLOR[0] : WATER_COLOR[l.lv]}">${esc(l.type || l.id)}<b>${esc(l.label)}</b></span>`).join("")}</div>` : "";
+      const bans = f.bans.length ? `<div class="wl">${f.bans.map((b) => `<span class="w-b"><ha-icon icon="mdi:water-off"></ha-icon>${esc(b)}</span>`).join("")}</div>` : "";
+      parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(top.id)}"><ha-icon icon="mdi:water-alert" style="color:${col}"></ha-icon>
+        <div class="pol-t"><span>Vigilance sécheresse${top.area ? ` · ${esc(top.area)}` : ""}</span><b style="color:${col}">${esc(top.label)}${lv !== null ? ` (${lv})` : ""}</b></div>
+        ${lv !== null ? `<div class="pol-r"><div class="wbar">${[0, 1, 2, 3, 4].map((i) => `<i style="background:${WATER_COLOR[i]};opacity:${i <= lv ? 1 : 0.25}"></i>`).join("")}</div></div>` : ""}</div>${detail}${bans}`);
     }
     const body = this._head("mdi:leaf", "#5fcf8a", c.title || "Air, pollens et eau", "") + (parts.join("") ||
       `<div class="empty"><b>Aucun capteur trouvé</b><span>Installez les intégrations Atmo France (air, pollens) ou VigiEau (sécheresse), ou choisissez les capteurs dans l'éditeur.</span></div>`);
@@ -1283,9 +1305,21 @@ class MeteoEclairsCard extends MeteoBase {
   _render() {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config, ids = Object.keys(this._hass.states);
-    const find = (re) => ids.find((id) => id.startsWith("sensor.") && re.test(id));
-    const counter = c.counter || find(/lightning_counter$/), distance = c.distance || find(/lightning_distance$/), azimuth = c.azimuth || find(/lightning_azimuth$/);
-    const month = c.month_counter;
+    const reg = this._hass.entities || {}, st = this._hass.states;
+    // Blitzortung : capteurs reconnus par leur plateforme et leur unité (km, °, ↯), sinon par leur nom (anglais ou français)
+    const blitz = ids.filter((id) => id.startsWith("sensor.") && reg[id]?.platform === "blitzortung");
+    const unit = (id) => String(st[id]?.attributes?.unit_of_measurement || "");
+    const find = (re, u) => blitz.find((id) => u.test(unit(id))) || blitz.find((id) => re.test(id)) || ids.find((id) => id.startsWith("sensor.") && re.test(id));
+    const counter = c.counter || find(/lightning_counter$|compteur_de_foudre$/, /↯/);
+    const distance = c.distance || find(/lightning_distance$|distance_de_foudre$/, /^(km|mi)$/);
+    const azimuth = c.azimuth || find(/lightning_azimuth$|azimut_de_foudre$/, /^°$/);
+    // éclairs du mois : compteur (utility_meter) alimenté par le compteur Blitzortung (attribut source en YAML),
+    // sinon compteur utility_meter ou capteur dont le nom évoque les éclairs du mois
+    const monthRe = /eclairs?_mensuel|eclairs?_du_mois|foudre_du_mois|lightning.*month/;
+    const month = c.month_counter || (counter && ids.find((id) => id.startsWith("sensor.") && st[id]?.attributes?.source === counter
+      && /month/.test(String(st[id].attributes.meter_period || ""))))
+      || ids.find((id) => id.startsWith("sensor.") && reg[id]?.platform === "utility_meter" && /eclair|foudre|lightning/.test(id))
+      || ids.find((id) => id.startsWith("sensor.") && monthRe.test(id));
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + [counter, distance, azimuth, month].map((id) => this._st(id)?.state).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1398,6 +1432,7 @@ ha-card.light .v-h, ha-card.light .v-p b { filter: brightness(.8); }
 .fc-d { text-align: center; padding: 8px 2px 7px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
 .f-n { font-size: .72rem; color: var(--med-muted); text-transform: capitalize; white-space: nowrap; }
 .fc-d ha-icon { --mdc-icon-size: 26px; margin: 4px 0 2px; }
+ha-icon.rot { display: inline-block; }
 .f-hi { font-weight: 700; font-size: .95rem; }
 .f-lo { font-size: .78rem; color: var(--med-muted); }
 .f-bar { position: relative; height: 4px; margin: 5px 8px 0; border-radius: 2px; background: var(--med-line); }
@@ -1584,6 +1619,14 @@ svg .pl.on { fill: #f7c948; }
 .pl-c { font-size: .64rem; color: var(--med-muted); }
 .wbar { display: flex; gap: 3px; flex: 1; height: 9px; }
 .wbar i { flex: 1; border-radius: 3px; }
+.wl { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0; }
+.w-i { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .74rem; color: var(--med-muted); cursor: pointer;
+  background: color-mix(in srgb, var(--pc) 10%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--pc) 50%, transparent); }
+.w-i b { color: var(--pc); }
+.w-b { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 7px; border-radius: 999px; font-size: .74rem;
+  background: color-mix(in srgb, #ee4a4a 10%, var(--med-surface)); border: 1px solid color-mix(in srgb, #ee4a4a 45%, transparent); }
+.w-b ha-icon { --mdc-icon-size: 14px; color: #ee4a4a; }
+ha-card.light .w-i b { filter: brightness(.75); }
 svg .bolt circle { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 40%, #000); stroke-width: 1; filter: drop-shadow(0 0 4px #f7c948); }
 svg .bolt path { fill: #1a2434; }
 </style>`;
@@ -1603,6 +1646,8 @@ const THEME_SELECT = {
     },
   },
 };
+
+const TEXT_SIZE = { name: "text_size", selector: { number: { min: 80, max: 160, step: 5, mode: "slider", unit_of_measurement: "%" } } };
 
 const SCHEMA = [
   { name: "entity", selector: { entity: { domain: "weather" } } },
@@ -1631,6 +1676,7 @@ const SCHEMA = [
     { value: "full", label: "Complètes : mm, risque de pluie, humidité, vent, rafales et direction, heure et jour" },
     { value: "compact", label: "Compactes : seulement les valeurs utiles" }] } } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const LABELS = {
   entity: "Entité météo (vide = Météo-France, sinon la première trouvée)",
@@ -1653,6 +1699,7 @@ const LABELS = {
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
   theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
 };
 
 const CIEL_SCHEMA = [
@@ -1674,6 +1721,7 @@ const CIEL_SCHEMA = [
     { value: "clouds", label: "Nuages" }, { value: "radar", label: "Radar" }, { value: "pressure", label: "Pression" }] } } },
   { name: "windy_zoom", selector: { number: { min: 3, max: 12, step: 1, mode: "box" } } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const CIEL_LABELS = {
   title: "Titre (Vent et ciel par défaut)",
@@ -1692,6 +1740,7 @@ const CIEL_LABELS = {
   windy_overlay: "Couche de la carte Windy",
   windy_zoom: "Zoom de la carte Windy",
   theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
 };
 const ASTRO_SCHEMA = [
   { name: "title", selector: { text: {} } },
@@ -1706,6 +1755,7 @@ const ASTRO_SCHEMA = [
   { name: "show_pollens", selector: { boolean: {} } },
   { name: "show_all_pollens", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const ASTRO_LABELS = {
   title: "Titre (Soleil et lune par défaut)",
@@ -1720,6 +1770,7 @@ const ASTRO_LABELS = {
   show_pollens: "Pollens",
   show_all_pollens: "Afficher aussi les pollens à « nul »",
   theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
 };
 
 const AIR_SCHEMA = [
@@ -1732,6 +1783,7 @@ const AIR_SCHEMA = [
   { name: "show_all_pollens", selector: { boolean: {} } },
   { name: "show_water", selector: { boolean: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const AIR_LABELS = {
   title: "Titre (Air, pollens et eau par défaut)",
@@ -1743,6 +1795,7 @@ const AIR_LABELS = {
   show_all_pollens: "Afficher aussi les pollens à « très faible »",
   show_water: "Vigilance sécheresse",
   theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
 };
 const ECLAIRS_SCHEMA = [
   { name: "title", selector: { text: {} } },
@@ -1753,6 +1806,7 @@ const ECLAIRS_SCHEMA = [
   { name: "counter_max", selector: { number: { min: 10, max: 10000, step: 10, mode: "box" } } },
   { name: "compass_image", selector: { text: {} } },
   THEME_SELECT,
+  TEXT_SIZE,
 ];
 const ECLAIRS_LABELS = {
   title: "Titre (Éclairs par défaut)",
@@ -1763,6 +1817,7 @@ const ECLAIRS_LABELS = {
   counter_max: "Maximum de la jauge",
   compass_image: "Image au centre de la boussole",
   theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
 };
 
 /** Éditeur visuel commun : formulaire ha-form ; les champs vidés sont retirés de la configuration. */
