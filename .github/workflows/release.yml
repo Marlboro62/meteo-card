@@ -50,7 +50,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: plugin
-          ignore: brands topics description
 
   release:
     name: Publication de la release
