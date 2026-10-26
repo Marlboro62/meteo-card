@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.0.3";
+const CARD_VERSION = "3.0.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2060,7 +2060,9 @@ ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; }
 ha-card.neon .f-n { font-size: .88rem; }
 ha-card.neon .f-hi, ha-card.neon .fc-d.full .f-hi { font-size: 1.15rem; }
 ha-card.neon .f-lo { font-size: .92rem; }
-ha-card.neon :is(.f-mm, .f-pp, .f-hu, .fc-d.full .f-w) { font-size: .82rem; }
+ha-card.neon :is(.f-mm, .f-pp, .f-hu, .fc-d.full .f-w) { font-size: 14px; }
+ha-card.neon :is(.f-mm, .f-w, .f-gb) small { font-size: 12px; }
+ha-card.neon :is(.f-hu, .f-pp) ha-icon { --mdc-icon-size: 16px; }
 ha-card.neon .rh-h { font-size: .86rem; }
 ha-card.neon .rh-h b { font-size: .95rem; }
 ha-card.neon .k-v { font-size: .95rem; }
