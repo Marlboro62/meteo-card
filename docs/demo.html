@@ -21,7 +21,7 @@ body.phone .grid { grid-template-columns: 380px; justify-content: center; }
   <div class="bar">
     <button data-theme="v2" class="on">Bleu nuit</button><button data-theme="auto-light">Clair</button><button data-theme="ha">Thème HA</button>
     <button data-act="pluie" class="on">Pluie et vigilance</button><button data-act="soleil">Beau temps</button>
-    <button data-act="phone">Téléphone</button><button data-act="windy">Carte Windy</button>
+    <button data-act="phone">Téléphone</button><button data-act="windy">Carte Windy</button><button data-act="photos">Photos lune et Terre</button>
   </div>
 </div>
 <div class="grid" id="host"></div>
@@ -59,7 +59,9 @@ const SCEN = {
     pollen: { state: "élevé", risk: 3, plants: { "Graminées": "élevé", "Chêne": "faible", "Olivier": "faible", "Oseille": "faible", "Plantain": "faible", "Urticacées": "moyen", "Ambroisies": "nul" } },
     fc: mk(["sunny", "sunny", "partlycloudy", "lightning-rainy", "sunny", "sunny", "cloudy"], [[28, 17, 0, 0], [30, 15, 0, 0], [31, 17, 10, 0], [29, 19, 80, 2.2], [31, 18, 0, 0], [31, 19, 0, 0], [32, 19, 20, 0.8]]) },
 };
-let scen = "pluie", windy = false, theme = "v2";
+let scen = "pluie", windy = false, photos = false, theme = "v2";
+// photos facultatives (options moon_image et earth_image), fournies dans le dossier photos/ du dépôt
+const PHOTOS = () => (photos ? { moon_image: "../photos/lune.svg", earth_image: "../photos/terre.svg" } : {});
 const listeners = [];
 function hassFor() {
   const s = SCEN[scen];
@@ -141,10 +143,10 @@ Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
   const t = theme;
   cards.meteo.setConfig({ theme: t, entities: [{ entity: "weather.ville_exemple", name: "Ville-Exemple" }, { entity: "weather.station_montagne", name: "Station-Montagne" }],
-    forecasts: ["hourly", "daily"], hours: 8, days: 7 });
+    forecasts: ["hourly", "daily"], hours: 8, days: 7, ...(photos ? { moon_image: PHOTOS().moon_image } : {}) });
   cards.ciel.setConfig({ theme: t, windy, temperatures: [{ name: "Salon", entity: "sensor.salon_temperature", humidity: "sensor.salon_humidity" },
     { name: "Jardin", entity: "sensor.jardin_temperature", humidity: "sensor.jardin_humidity", icon: "mdi:tree-outline" }] });
-  cards.astro.setConfig({ theme: t });
+  cards.astro.setConfig({ theme: t, ...PHOTOS() });
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
   const h = hassFor();
@@ -161,6 +163,7 @@ document.querySelector(".bar").addEventListener("click", (e) => {
   }
   if (b.dataset.act === "phone") { document.body.classList.toggle("phone"); b.classList.toggle("on"); }
   else if (b.dataset.act === "windy") { windy = !windy; b.classList.toggle("on", windy); }
+  else if (b.dataset.act === "photos") { photos = !photos; b.classList.toggle("on", photos); }
   else if (b.dataset.act) { scen = b.dataset.act; document.querySelectorAll("[data-act=pluie],[data-act=soleil]").forEach((x) => x.classList.toggle("on", x === b)); }
   apply();
 });

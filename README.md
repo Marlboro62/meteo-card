@@ -30,6 +30,10 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- |
 | ![Clair](images/meteo-clair.png) | ![Téléphone](images/meteo-telephone.png) |
 
+| Soleil et lune avec les photos de la lune | Phases de la lune avec les photos de la lune et de la Terre |
+| --- | --- |
+| ![Soleil et lune avec photos](images/meteo-astro-photos.png) | ![Phases avec photos](images/meteo-phases-photos.png) |
+
 *Aperçus avec des villes et des données fictives.*
 
 ## Remplacer une vue météo « à rallonge »
@@ -55,6 +59,24 @@ Les cinq cartes apparaissent ensuite dans la liste des cartes, chacune avec son 
    - URL : `/local/meteo-card.js`
    - Type : **Module JavaScript**
 3. Rechargez la page (Ctrl+F5).
+
+## Photos de la lune et de la Terre (facultatif)
+
+Par défaut, la lune et la Terre sont dessinées par la carte. Pour afficher de vraies photos, comme sur les aperçus ci-dessus :
+
+1. Téléchargez les deux images (clic droit → Enregistrer sous) :
+   - [`lune.svg`](https://raw.githubusercontent.com/Marlboro62/meteo-card/main/photos/lune.svg) : pleine lune, assombrie par la carte selon la phase du jour ;
+   - [`terre.svg`](https://raw.githubusercontent.com/Marlboro62/meteo-card/main/photos/terre.svg) : la Terre, au centre de la fenêtre des phases.
+2. Copiez-les dans `/config/www/images/` (par exemple avec l'add-on **File editor** ou **Samba**).
+3. Dans l'éditeur des cartes, renseignez :
+
+```yaml
+type: custom:meteo-astro-card
+moon_image: /local/images/lune.svg
+earth_image: /local/images/terre.svg
+```
+
+L'option `moon_image` fonctionne aussi dans la carte Météo (tuile Lune). Vous pouvez utiliser vos propres photos (PNG, JPG ou SVG) : une pleine lune et une Terre bien centrées, sur fond transparent ou noir. Les crédits des photos fournies sont dans la section [Licence](#licence).
 
 ## Intégrations Home Assistant à installer
 
@@ -245,4 +267,4 @@ Photo de lune pour l'option `moon_image` : la pleine lune de la photo « [Séque
 
 Photo de la Terre pour l'option `earth_image` : « [Terre](https://www.pexels.com/fr-fr/photo/terre-30596274/) » de **Zelch Csaba**, sur Pexels ([licence Pexels](https://www.pexels.com/fr-fr/license/)). Un grand merci à Zelch Csaba pour cette image !
 
-Ces photos ne sont pas incluses dans ce dépôt : téléchargez-les sur Pexels (ou utilisez vos propres photos) et copiez-les dans `/config/www/images/`.
+Ces deux photos, recadrées et détourées, sont fournies dans le dossier [`photos/`](photos/) sous la [licence Pexels](https://www.pexels.com/fr-fr/license/) (et non sous la licence MIT du code) : elles peuvent être utilisées et modifiées librement, mais pas revendues telles quelles.
