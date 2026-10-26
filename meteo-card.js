@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "2.0.5";
+const CARD_VERSION = "3.0.0";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -297,7 +297,10 @@ const DEFAULTS = {
   show_forecast: true,
   show_sky: true,
   icons: "animated",
+  layout: "classic",
   forecast_details: "full",
+  hourly_wind: true, hourly_gust: true, hourly_precipitation: true, hourly_humidity: true, hourly_direction: true,
+  daily_wind: true, daily_gust: true, daily_precipitation: true, daily_humidity: false, daily_direction: true,
   theme: "v2",
 };
 
@@ -540,15 +543,43 @@ class MeteoCard extends MeteoBase {
       return `<button class="tab${i === ti ? " on" : ""}" role="tab" aria-selected="${i === ti}" data-act="tab" data-i="${i}"><ha-icon icon="${condOf(this._st(x.entity)?.state)[1]}"></ha-icon>${esc(name)}</button>`;
     }).join("")}</div>` : "";
     let body;
+    const neon = c.layout === "warc0zes";
     if (!w) {
       body = `<div class="empty"><b>Aucune entité météo</b><span>Ajoutez une intégration météo (Météo-France, Met.no…) ou choisissez l'entité dans l'éditeur de la carte.</span></div>`;
     } else {
-      body = this._header(w, al, ent, city) + this._now(w, ent) + (c.show_details !== false ? this._details(w, rel) : "") +
+      body = (neon ? this._neonHead(w, al, ent, city) : this._header(w, al, ent, city)) + this._now(w, ent, neon) + (c.show_details !== false ? this._details(w, rel) : "") +
         (c.show_rain_hour !== false ? this._rainHour(rainHourOf(this._hass, ent.weather, city.rain_hour || (ti === 0 ? c.rain_hour : null))) : "") +
         (c.show_alert !== false ? this._alerts(al, ent) : "") +
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
     }
-    this._card(tabs + body);
+    this._card(tabs + body, neon ? "neon" : "");
+  }
+
+  /** Présentation « WarC0zes » : grande icône, titre, température, maximum et minimum du jour et vigilance sur une seule ligne. */
+  _neonHead(w, al, ent, city = {}) {
+    const c = this._config, a = w.attributes || {};
+    const [label, icon, color] = condOf(w.state);
+    const t = num(a.temperature);
+    const today = this._today();
+    const vg = this._vigilance(al);
+    const pill = vg && c.show_alert !== false
+      ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
+      : "";
+    return `<header class="nh"><div class="nh-m" data-entity="${esc(ent.weather)}">
+      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
+      <div class="nh-n"><div class="title">${esc(city.name || c.title || "Météo")}</div><div class="sub">${esc(label)}</div></div>
+      <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(a.temperature_unit || "°C")}</span></div>
+      ${today ? `<i class="nh-sep"></i>${this._hilo(today)}` : ""}</div>${pill}</header>`;
+  }
+
+  /** Prévision du jour (première journée des prévisions par jour), pour le maximum et le minimum. */
+  _today() {
+    const daily = (this._fcs || []).find(([t, fc]) => t !== "hourly" && Array.isArray(fc) && fc.length);
+    return daily && num(daily[1][0].temperature) !== null ? daily[1][0] : null;
+  }
+
+  _hilo(today) {
+    return `<div class="n-hl"><span class="hi">↑ ${fmt(today.temperature)}°</span>${num(today.templow) !== null ? `<span class="lo">↓ ${fmt(today.templow)}°</span>` : ""}</div>`;
   }
 
   /** Pluie dans l'heure (Météo-France) : barre par tranche de 5 à 10 minutes. */
@@ -624,7 +655,8 @@ class MeteoCard extends MeteoBase {
       ${pill}</header>`;
   }
 
-  _now(w, ent) {
+  /** Conditions du moment (icône, température, maximum et minimum) puis tuiles ; seulement les tuiles avec la présentation « WarC0zes ». */
+  _now(w, ent, statsOnly = false) {
     const c = this._config;
     const a = w.attributes || {};
     const tu = a.temperature_unit || "°C";
@@ -634,10 +666,8 @@ class MeteoCard extends MeteoBase {
     let fl = num(a.apparent_temperature ?? a.feels_like);
     if (fl === null && t !== null) fl = ws !== null && ws > 4.8 && t < 10 ? 13.12 + 0.6215 * t - 11.37 * ws ** 0.16 + 0.3965 * t * ws ** 0.16 : t;
     const [, icon, color] = condOf(w.state);
-    const daily = (this._fcs || []).find(([t, fc]) => t !== "hourly" && Array.isArray(fc) && fc.length);
-    const today = daily ? daily[1][0] : null;
-    const hilo = today && num(today.temperature) !== null
-      ? `<div class="n-hl"><span class="hi">↑ ${fmt(today.temperature)}°</span>${num(today.templow) !== null ? `<span class="lo">↓ ${fmt(today.templow)}°</span>` : ""}</div>` : "";
+    const today = this._today();
+    const hilo = today ? this._hilo(today) : "";
     const stats = c.show_stats === false ? "" : `<div class="stats">
       ${this._stat("mdi:thermometer", "Ressenti", fl === null ? "—" : `${fmt(fl)}°`)}
       ${this._stat("mdi:weather-windy", "Vent", ws === null ? "—" : `${fmt(ws)} <small>${esc(a.wind_speed_unit || "km/h")}</small>`,
@@ -646,6 +676,7 @@ class MeteoCard extends MeteoBase {
       ${this._stat("mdi:water-percent", "Humidité", num(a.humidity) === null ? "—" : `${fmt(a.humidity)} <small>%</small>`)}
       ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`)}
     </div>`;
+    if (statsOnly) return stats;
     return `<div class="now" data-entity="${esc(ent.weather)}">
       ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(tu)}</span></div>
@@ -688,9 +719,14 @@ class MeteoCard extends MeteoBase {
     // affichage complet : mêmes lignes pour chaque heure et chaque jour (0 mm compris), alignées d'une colonne à l'autre
     const full = c.forecast_details !== "compact";
     const has = (k) => fc.some((d) => num(d[k]) !== null);
-    const rows = { mm: has("precipitation"), rain: has("precipitation_probability"), hum: hourly && has("humidity"), wind: has("wind_speed"),
+    // lignes choisies dans l'éditeur (hourly_* pour les heures, daily_* pour les jours) ; humidité par jour masquée par défaut
+    const pre = hourly ? "hourly_" : "daily_";
+    const on = { wind: c[pre + "wind"] !== false, gust: c[pre + "gust"] !== false, mm: c[pre + "precipitation"] !== false,
+      hum: hourly ? c.hourly_humidity !== false : c.daily_humidity === true, dir: c[pre + "direction"] !== false };
+    const rows = { mm: on.mm && has("precipitation"), rain: on.mm && has("precipitation_probability"), hum: on.hum && has("humidity"),
+      wind: on.wind && has("wind_speed"), dir: on.dir && has("wind_speed"),
       // rafales : ligne affichée seulement si au moins une colonne a des rafales supérieures au vent moyen
-      gust: fc.some((d) => num(d.wind_gust_speed) > Math.max(0, num(d.wind_speed) ?? 0)) };
+      gust: on.gust && fc.some((d) => num(d.wind_gust_speed) > Math.max(0, num(d.wind_speed) ?? 0)) };
     const days = fc.map((d, i) => {
       const dt = new Date(d.datetime);
       const name = hourly ? dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
@@ -705,9 +741,9 @@ class MeteoCard extends MeteoBase {
       const dirIcon = ws === null && wb === null ? "" : ws === 0 || wb === null
         ? `<ha-icon class="rot" icon="mdi:autorenew" title="Vent calme ou variable"></ha-icon>`
         : `<ha-icon class="rot" icon="mdi:navigation" style="transform:rotate(${(wb + 180) % 360}deg)" title="${compass(wb)}"></ha-icon>`;
-      const wind = hourly && ws !== null
-        ? `<div class="f-w">${dirIcon}${fmt(ws)}</div>` +
-          (gust !== null && gust > ws ? `<div class="f-g" title="Rafales">${fmt(gust)}</div>` : "") : "";
+      const wind = hourly && ws !== null && (on.wind || on.dir)
+        ? `<div class="f-w">${on.dir ? dirIcon : ""}${on.wind ? fmt(ws) : ""}</div>` +
+          (on.gust && gust !== null && gust > ws ? `<div class="f-g" title="Rafales">${fmt(gust)}</div>` : "") : "";
       const hum = num(d.humidity);
       if (full) {
         const row = (on, cls, html) => (on ? `<div class="${cls}">${html}</div>` : "");
@@ -717,21 +753,21 @@ class MeteoCard extends MeteoBase {
           row(rows.hum, "f-hu", hum === null ? "—" : `<ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)} %`) +
           row(rows.wind, "f-w", ws === null ? "—" : `${fmt(ws)} <small>km/h</small>`) +
           row(rows.gust, "f-gb", gust === null || gust <= 0 || (ws !== null && gust <= ws) ? "&nbsp;" : `<span>${fmt(gust)} <small>km/h</small></span>`) +
-          row(rows.wind, "f-dir", dirIcon);
+          row(rows.dir, "f-dir", dirIcon);
         const barF = !hourly && hi !== null && lo !== null
           ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
         return `<div class="fc-d full" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
           ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
           <div class="f-hi">${hi === null ? "—" : `${fmt(hi, 1)}°`}</div>${!hourly ? `<div class="f-lo">${lo === null ? "&nbsp;" : `${fmt(lo, 1)}°`}</div>` : ""}${barF}${details}</div>`;
       }
-      const wet = (mm !== null && mm > 0 ? `<span>${fmt(mm, mm < 10 ? 1 : 0)}<small>mm</small></span>` : "") +
+      const wet = !on.mm ? "" : (mm !== null && mm > 0 ? `<span>${fmt(mm, mm < 10 ? 1 : 0)}<small>mm</small></span>` : "") +
         (rain !== null && rain > 0 ? `<span class="pp" title="Risque de pluie"><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(rain)}%</span>` : "");
       const bar = !hourly && hi !== null && lo !== null
         ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
       return `<div class="fc-d" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
         ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
         <div class="f-hi">${hi === null ? "—" : `${fmt(hi)}°`}</div>${lo !== null ? `<div class="f-lo">${fmt(lo)}°</div>` : ""}${bar}
-        <div class="f-r">${wet}</div>${hourly && hum !== null ? `<div class="f-hu" title="Humidité"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)}%</div>` : ""}${wind}</div>`;
+        <div class="f-r">${wet}</div>${on.hum && hum !== null ? `<div class="f-hu" title="Humidité"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)}%</div>` : ""}${wind}</div>`;
     }).join("");
     return `<div class="sec">${title}</div><div class="fc${full ? " full" : ""}" data-entity="${esc(ent.weather)}">${days}</div>`;
   }
@@ -974,6 +1010,7 @@ const ASTRO_DEFAULTS = {
   show_sun: true,
   show_moon: true,
   show_cycles: true,
+  show_meteors: true,
   show_pollens: true,
   show_all_pollens: false,
   theme: "v2",
@@ -1000,6 +1037,52 @@ const pollenLevel = (st) => {
 };
 const pollenIcon = (name) => (/gramin/i.test(name) ? "mdi:grass" : /ambroisie|armoise|oseille|plantain|urtic|chénopod|chenopod/i.test(name) ? "mdi:sprout" : "mdi:tree");
 const SUN_ICON = { above_horizon: ["Au-dessus de l'horizon", "mdi:white-balance-sunny", "#f7c948"], below_horizon: ["Sous l'horizon", "mdi:weather-night", "#9fb4d8"] };
+
+/** Principales pluies d'étoiles filantes (calendrier IMO) : début, pic (nuit qui commence ce jour-là) et fin en [mois, jour],
+ *  taux horaire zénithal (ZHR), radiant (ascension droite et déclinaison en degrés), vitesse en km/s. */
+const METEORS = [
+  { name: "Quadrantides", sky: "Bouvier", start: [12, 28], peak: [1, 3], end: [1, 12], zhr: 80, ra: 230, dec: 49, v: 41 },
+  { name: "Lyrides", sky: "Lyre", start: [4, 14], peak: [4, 22], end: [4, 30], zhr: 18, ra: 271, dec: 34, v: 49 },
+  { name: "Êta Aquarides", sky: "Verseau", start: [4, 19], peak: [5, 6], end: [5, 28], zhr: 50, ra: 338, dec: -1, v: 66 },
+  { name: "Alpha Capricornides", sky: "Capricorne", start: [7, 3], peak: [7, 30], end: [8, 15], zhr: 5, ra: 307, dec: -10, v: 23 },
+  { name: "Delta Aquarides", sky: "Verseau", start: [7, 12], peak: [7, 30], end: [8, 23], zhr: 25, ra: 340, dec: -16, v: 41 },
+  { name: "Perséides", sky: "Persée", start: [7, 17], peak: [8, 12], end: [8, 24], zhr: 100, ra: 48, dec: 58, v: 59 },
+  { name: "Draconides", sky: "Dragon", start: [10, 6], peak: [10, 8], end: [10, 10], zhr: 10, ra: 262, dec: 54, v: 20 },
+  { name: "Taurides Sud", sky: "Taureau", start: [9, 10], peak: [10, 10], end: [11, 20], zhr: 5, ra: 32, dec: 9, v: 27 },
+  { name: "Orionides", sky: "Orion", start: [10, 2], peak: [10, 21], end: [11, 7], zhr: 20, ra: 95, dec: 16, v: 66 },
+  { name: "Taurides Nord", sky: "Taureau", start: [10, 20], peak: [11, 12], end: [12, 10], zhr: 5, ra: 58, dec: 22, v: 29 },
+  { name: "Léonides", sky: "Lion", start: [11, 6], peak: [11, 17], end: [11, 30], zhr: 15, ra: 152, dec: 22, v: 71 },
+  { name: "Géminides", sky: "Gémeaux", start: [12, 4], peak: [12, 14], end: [12, 20], zhr: 150, ra: 112, dec: 33, v: 35 },
+  { name: "Ursides", sky: "Petite Ourse", start: [12, 17], peak: [12, 22], end: [12, 26], zhr: 10, ra: 217, dec: 76, v: 33 },
+];
+/** Pluies de l'année précédente, en cours et suivante, avec leurs dates réelles (début, pic, fin). */
+const meteorDates = (now) => {
+  const y = now.getFullYear(), out = [];
+  for (const m of METEORS) for (const Y of [y - 1, y, y + 1]) {
+    const peak = new Date(Y, m.peak[0] - 1, m.peak[1]);
+    const start = new Date(Y - (m.start[0] > m.peak[0] ? 1 : 0), m.start[0] - 1, m.start[1]);
+    const end = new Date(Y + (m.end[0] < m.peak[0] ? 1 : 0), m.end[0] - 1, m.end[1], 23, 59);
+    out.push({ ...m, start, peak, end });
+  }
+  return out;
+};
+/** Nuit du pic : meilleure heure (radiant le plus haut, soleil à plus de 12° sous l'horizon), taux observable estimé et lune. */
+const meteorNight = (m, lat, lon) => {
+  const phi = RAD * lat, lw = RAD * -lon;
+  let best = null;
+  for (let i = 0; i <= 26; i++) {
+    const t = new Date(m.peak.getFullYear(), m.peak.getMonth(), m.peak.getDate(), 18, 30 * i);
+    if (position("sun", t, lat, lon).el > -12) continue;
+    const alt = alti(sidereal(toDays(t), lw) - RAD * m.ra, phi, RAD * m.dec) / RAD;
+    if (!best || alt > best.alt) best = { t, alt };
+  }
+  if (!best || best.alt <= 0) return { visible: false };
+  const il = moonIllum(best.t), moonUp = position("moon", best.t, lat, lon).el > 0;
+  // la lune levée efface les étoiles filantes faibles, d'autant plus qu'elle est éclairée
+  const rate = Math.round(m.zhr * Math.sin(best.alt * RAD) * (moonUp ? 1 - 0.6 * il.fraction : 1));
+  const moon = moonUp && il.fraction > 0.5 ? [2, "Lune gênante"] : moonUp && il.fraction > 0.2 ? [1, "Lune un peu gênante"] : [0, moonUp ? "Lune discrète" : "Lune couchée"];
+  return { visible: true, t: best.t, alt: best.alt, rate, phase: il.phase, fraction: il.fraction, moon };
+};
 
 class MeteoAstroCard extends MeteoBase {
   static get defaults() {
@@ -1054,6 +1137,7 @@ class MeteoAstroCard extends MeteoBase {
     if (xy && c.show_sun !== false) parts.push(this._sun(xy, now));
     if (xy && c.show_moon !== false) parts.push(this._moonRow(xy, now));
     if (c.show_cycles !== false) parts.push(`<div class="sec">Cycles</div>${this._cycles(ent, sun, now)}`);
+    if (c.show_meteors !== false) parts.push(this._meteors(xy, now));
     if (c.show_pollens !== false && (pol.main || pol.plants.length)) parts.push(this._pollenHtml(pol));
     const head = this._head("mdi:weather-sunset", "#f7c948", c.title || "Soleil et lune", xy ? "" : "Coordonnées de Home Assistant introuvables");
     this._card(head + parts.join(""));
@@ -1101,6 +1185,33 @@ class MeteoAstroCard extends MeteoBase {
   _moonKey(ent, now) {
     const raw = String(this._st(ent.moon)?.state || "").toLowerCase().replace(/ /g, "_");
     return MOON[raw] ? raw : moonOfDate(now);
+  }
+
+  /** Étoiles filantes : prochaine grande pluie (pic, taux estimé, lune, meilleure heure) et pluies en cours. */
+  _meteors(xy, now) {
+    const all = meteorDates(now);
+    const dayMs = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const today = dayMs(now);
+    // le pic reste « à venir » jusqu'au matin qui suit la nuit du pic
+    const next = all.filter((m) => m.zhr >= 10 && dayMs(m.peak) + DAYMS > today).sort((a, b) => a.peak - b.peak)[0];
+    const active = all.filter((m) => m.start <= now && now <= m.end && m !== next).sort((a, b) => b.zhr - a.zhr);
+    const dm = (d) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const night = (d) => { const n = new Date(d.getTime() + DAYMS); return `nuit du ${d.getDate()}${d.getMonth() === n.getMonth() ? "" : ` ${d.toLocaleDateString("fr-FR", { month: "short" })}`} au ${dm(n)}`; };
+    const days = Math.round((dayMs(next.peak) - today) / DAYMS);
+    const when = days <= 0 ? "pic cette nuit !" : days === 1 ? "pic demain soir" : `pic dans ${days} jours`;
+    const nt = xy ? meteorNight(next, xy[0], xy[1]) : null;
+    const MC = ["#5fcf8a", "#f7c948", "#ff8c33"];
+    const moon = nt?.visible ? `<div class="mt-m" title="Lune lors du pic : éclairée à ${fmt(nt.fraction * 100)} %"><svg viewBox="-22 -22 44 44">${moonSvg(nt.phase, 20, 0, 0, this._config.moon_image)}</svg>
+      <span style="color:${MC[nt.moon[0]]}">${nt.moon[1]}</span></div>` : "";
+    const detail = !nt ? "" : nt.visible
+      ? `≈ <b>${fmt(nt.rate)}</b>/h vers ${nt.t.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · radiant à ${fmt(nt.alt)}°`
+      : "radiant trop bas depuis chez vous";
+    const chips = active.map((m) => `<span class="mt-c" title="Actives du ${dm(m.start)} au ${dm(m.end)}">${esc(m.name)}<b>${m.peak < now ? "pic passé" : `pic ${dm(m.peak)}`}</b></span>`).join("");
+    return `<div class="sec">Étoiles filantes</div><div class="mt">
+      <ha-icon icon="mdi:star-shooting" style="color:#f7c948"></ha-icon>
+      <div class="mt-t"><span>${esc(next.name)} · ${esc(next.sky)} · <span class="mt-w">${when}</span></span>
+        <b>${night(next.peak)}</b><small title="Taux théorique (ZHR) et vitesse des météores">jusqu'à ${fmt(next.zhr)}/h dans un ciel parfait · ${fmt(next.v)} km/s</small>${detail ? `<small>${detail}</small>` : ""}</div>${moon}</div>
+      ${chips ? `<div class="wl"><span class="mt-l">En cours</span>${chips}</div>` : ""}`;
   }
 
   _cycles(ent, sun, now) {
@@ -1367,6 +1478,231 @@ class MeteoEclairsCard extends MeteoBase {
     const body = this._head("mdi:flash", "#f7c948", c.title || "Éclairs", n ? `${fmt(n)} éclair${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}` : "Aucun éclair à proximité") +
       (ok ? `<div class="duo">${rose}${gauge}</div>` : `<div class="empty"><b>Aucun capteur d'éclairs</b><span>Installez l'intégration Blitzortung, ou choisissez les capteurs dans l'éditeur.</span></div>`);
     this._card(body);
+  }
+}
+
+
+/* ---------------------------------------------------------------- bolides */
+
+const BOLIDES_DEFAULTS = { title: "Bolides", period: "all", min_energy: 0, show_home: true, map_height: 320, theme: "v2" };
+const FIREBALL_API = "https://ssd-api.jpl.nasa.gov/fireball.api?req-loc=true";
+const LEAFLET = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/";
+const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/";
+const MAPLIBRE_LEAFLET = "https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
+// fonds vectoriels officiels d'OpenStreetMap (Shortbread), ceux de Home Assistant depuis que CARTO exige une clé
+const OSM_VECTOR = "https://vector.openstreetmap.org/shortbread_v1/tilejson.json";
+const scripts = {};
+/** Script classique chargé une seule fois (délai de 20 s : sans réponse, la carte affiche un message au lieu de rester vide). */
+const loadScript = (src, ready) => (scripts[src] = scripts[src] || new Promise((resolve, reject) => {
+  if (ready()) { resolve(); return; }
+  const s = document.createElement("script");
+  const timer = setTimeout(() => reject(new Error("délai dépassé")), 20000);
+  s.src = src;
+  s.onload = () => { clearTimeout(timer); ready() ? resolve() : reject(new Error(`${src} incomplet`)); };
+  s.onerror = () => { clearTimeout(timer); reject(new Error(`${src} introuvable`)); };
+  document.head.appendChild(s);
+}).catch((e) => { delete scripts[src]; throw e; }));
+/** Leaflet (carte du monde, window.L), à la première carte Bolides affichée. */
+const loadLeaflet = (base) => loadScript(`${base}leaflet.js`, () => window.L?.map).then(() => window.L);
+/** Fond vectoriel : MapLibre GL et son extension Leaflet ; faux si le navigateur n'a pas WebGL2 ou si le chargement échoue. */
+const loadVector = () => {
+  if (!document.createElement("canvas").getContext("webgl2")) return Promise.resolve(false);
+  return loadScript(`${MAPLIBRE}maplibre-gl.js`, () => window.maplibregl?.Map)
+    .then(() => loadScript(MAPLIBRE_LEAFLET, () => window.L?.maplibreGL))
+    .then(() => true, () => false);
+};
+/** Style sobre des fonds Shortbread : continents, océans, lacs et frontières (sans étiquettes, donc sans polices à charger). */
+const vectorStyle = (light) => {
+  const k = light ? { land: "#eef2f6", sea: "#b9d3ea", line: "#9aaabd" } : { land: "#24324a", sea: "#111a28", line: "#4b5e7c" };
+  return { version: 8, sources: { osm: { type: "vector", url: OSM_VECTOR } }, layers: [
+    { id: "land", type: "background", paint: { "background-color": k.land } },
+    { id: "ocean", type: "fill", source: "osm", "source-layer": "ocean", paint: { "fill-color": k.sea } },
+    { id: "water", type: "fill", source: "osm", "source-layer": "water_polygons", paint: { "fill-color": k.sea } },
+    { id: "borders", type: "line", source: "osm", "source-layer": "boundaries", filter: ["all", ["==", ["get", "admin_level"], 2], ["!=", ["get", "maritime"], true]],
+      paint: { "line-color": k.line, "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.4, 6, 1.2] } },
+  ] };
+};
+const BOLIDE_PERIODS = [["30", "30 jours", 30], ["365", "1 an", 365], ["1825", "5 ans", 1825], ["all", "Tout", Infinity]];
+const BOLIDE_ENERGY = [[0, "Tous"], [1, "≥ 1 kt"], [10, "≥ 10 kt"]];
+const bolideColor = (days) => (days < 30 ? "#ee4a4a" : days < 183 ? "#ff8c33" : "#8fa0b8");
+const bolideRadius = (kt, old) => Math.min(22, (old ? 2 : 3) + (old ? 3 : 4) * Math.log10(1 + Math.max(0, kt || 0) * 10));
+/** Distance (km) entre deux points, formule de haversine. */
+const greatCircle = (lat1, lon1, lat2, lon2) => {
+  const a = Math.sin(((lat2 - lat1) * RAD) / 2) ** 2 + Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin(((lon2 - lon1) * RAD) / 2) ** 2;
+  return 12742 * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+/** Réponse de l'API Fireball (fields + data) en liste de bolides localisés, du plus récent au plus ancien. */
+const parseFireballs = (fields, data) => {
+  if (!Array.isArray(fields) || !Array.isArray(data)) return [];
+  const i = (k) => fields.indexOf(k);
+  const v = (row, k) => (i(k) < 0 ? null : num(row[i(k)]));
+  return data.map((row) => {
+    const lat = v(row, "lat"), lon = v(row, "lon");
+    if (lat === null || lon === null) return null;
+    return { date: new Date(`${String(row[i("date")]).replace(" ", "T")}Z`), lat: row[i("lat-dir")] === "S" ? -lat : lat, lon: row[i("lon-dir")] === "W" ? -lon : lon,
+      alt: v(row, "alt"), vel: v(row, "vel"), energy: v(row, "energy"), impact: v(row, "impact-e") };
+  }).filter((b) => b && !isNaN(b.date)).sort((a, b) => b.date - a.date);
+};
+
+class MeteoBolidesCard extends MeteoBase {
+  static get defaults() {
+    return BOLIDES_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-bolides-card-editor");
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  /** Capteur de l'API Fireball : celui de la configuration, sinon le premier qui porte ses attributs fields et data. */
+  _source() {
+    const c = this._config, st = this._hass.states;
+    const ok = (id) => Array.isArray(st[id]?.attributes?.fields) && st[id].attributes.fields.includes("impact-e");
+    return c.entity && st[c.entity] ? c.entity : Object.keys(st).find((id) => id.startsWith("sensor.") && ok(id));
+  }
+
+  /** Sans capteur, l'API est appelée depuis le navigateur (si elle l'autorise), une fois par session. */
+  _direct() {
+    if (this._fetching) return;
+    this._fetching = true;
+    fetch(FIREBALL_API).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
+      .then((j) => { this._directData = parseFireballs(j.fields, j.data); })
+      .catch(() => { this._directData = []; })
+      .finally(() => { this._sig = null; this._render(); });
+  }
+
+  _action(act, el) {
+    if (act === "period") { this._period = el.dataset.v; store.set("meteo-bolides-card:period", this._period); }
+    else if (act === "energy") { this._energy = Number(el.dataset.v); store.set("meteo-bolides-card:energy", this._energy); }
+    else if (act === "fly") { this._fly(Number(el.dataset.i)); return; }
+    else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); return; }
+    this._sig = null;
+    this._render();
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const src = this._source();
+    if (!src && this._directData === undefined) this._direct();
+    const st = this._st(src);
+    if (this._period === undefined) this._period = store.get("meteo-bolides-card:period") || String(c.period || "all");
+    if (this._energy === undefined) this._energy = store.get("meteo-bolides-card:energy") ?? Number(c.min_energy || 0);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${src}|${st?.last_updated}|${this._period}|${this._energy}|${this._directData?.length}`;
+    if (sig === this._sig) return;
+    this._sig = sig;
+    // la liste (environ un millier de bolides) n'est relue que lorsque le capteur change
+    const key = st ? `${src}|${st.last_updated}` : "direct";
+    if (this._allKey !== key || !st) { this._all = st ? parseFireballs(st.attributes.fields, st.attributes.data) : this._directData || []; this._allKey = key; }
+    const all = this._all;
+    const home = [num(c.latitude) ?? num(this._hass.config?.latitude), num(c.longitude) ?? num(this._hass.config?.longitude)];
+    const hasHome = home[0] !== null && home[1] !== null;
+    const now = Date.now();
+    const per = (BOLIDE_PERIODS.find(([k]) => k === this._period) || BOLIDE_PERIODS[3])[2];
+    const list = all.filter((b) => (now - b.date) / DAYMS <= per && (b.impact ?? 0) >= this._energy)
+      .map((b) => ({ ...b, days: (now - b.date) / DAYMS, dist: hasHome ? greatCircle(home[0], home[1], b.lat, b.lon) : null }));
+    this._list = list;
+    const dfull = (d) => d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    const ago = (days) => (days < 1 ? "aujourd'hui" : days < 2 ? "hier" : days < 60 ? `il y a ${Math.floor(days)} jours` : days < 730 ? `il y a ${Math.floor(days / 30.4)} mois` : `il y a ${Math.floor(days / 365.25)} ans`);
+    const kt = (v) => (v === null ? "—" : `${fmt(v, v < 1 ? 2 : v < 10 ? 1 : 0)} kt`);
+    const last = list[0], near = hasHome ? [...list].sort((a, b) => a.dist - b.dist)[0] : null, big = [...list].sort((a, b) => (b.impact ?? 0) - (a.impact ?? 0))[0];
+    const tile = (b, icon, label, value, sub) => (b ? `<div class="sky-t bt" data-act="fly" data-i="${list.indexOf(b)}" role="button" tabindex="0">
+      <ha-icon icon="${icon}" style="color:${bolideColor(b.days)}"></ha-icon><div class="k-v">${value}</div><div class="k-l">${label}</div><div class="bt-s">${sub}</div></div>` : "");
+    const chips = (act, items, cur) => items.map(([k, lab]) => `<button class="mt-c bc${String(k) === String(cur) ? " on" : ""}" data-act="${act}" data-v="${k}">${lab}</button>`).join("");
+    const sub = st || this._directData?.length ? `${fmt(list.length)} bolide${list.length > 1 ? "s" : ""}${all[0] ? ` · dernier connu le ${dfull(all[0].date)}` : ""}` : "";
+    let body = this._head(c.icon || "mdi:meteor", "#ff8c33", c.title || "Bolides", sub);
+    if (!all.length) {
+      body += this._directData === undefined && !src ? `<div class="empty"><b>Chargement…</b></div>`
+        : `<div class="empty"><b>Aucune donnée de bolides</b><span>Ajoutez le capteur REST de l'API Fireball de la NASA (voir la documentation de la carte), ou choisissez-le dans l'éditeur.</span></div>`;
+      this._card(body);
+      if (this._keep) this._keep.innerHTML = "";
+      this._map = null;
+      return;
+    }
+    body += `<div class="sky bts">${tile(last, "mdi:clock-outline", "Dernier", dfull(last?.date || new Date()), last ? ago(last.days) : "")}
+      ${tile(near, "mdi:home-map-marker", "Le plus proche", near ? `${fmt(near.dist)} km` : "", near ? dfull(near.date) : "")}
+      ${tile(big, "mdi:flash-alert", "Le plus puissant", big ? kt(big.impact) : "", big ? dfull(big.date) : "")}</div>
+      <div class="wl bf"><span class="mt-l">Période</span>${chips("period", BOLIDE_PERIODS, this._period)}<span class="mt-l">Énergie</span>${chips("energy", BOLIDE_ENERGY, this._energy)}</div>`;
+    this._card(body);
+    this._mapUpdate(list, hasHome ? home : null);
+  }
+
+  /** Carte Leaflet : créée une fois dans la zone « keep », marqueurs recréés à chaque changement de données ou de filtre. */
+  async _mapUpdate(list, home) {
+    const c = this._config;
+    if (!this._keep) return;
+    if (!this._keep.querySelector(".bm")) {
+      const base = c.leaflet_path || LEAFLET;
+      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${Number(c.map_height) || 320}px">
+        <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
+        <div class="bm-leg"><span><i style="background:#ee4a4a"></i>moins de 30 jours</span><span><i style="background:#ff8c33"></i>moins de 6 mois</span><span><i style="background:#8fa0b8"></i>plus ancien</span><span>taille : énergie</span></div>`;
+      this._map = null;
+    }
+    let L;
+    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
+      const box = this._keep.querySelector(".bm-map");
+      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
+      return;
+    }
+    const el = this._keep.querySelector(".bm-map");
+    if (!el) return;
+    try {
+      const light = /light/.test(themeClass(c.theme, this._hass)) || (c.theme === "ha" && this._hass.themes?.darkMode === false);
+      if (!this._map || this._mapEl !== el) {
+        this._mapEl = el;
+        this._map = L.map(el, { worldCopyJump: true, minZoom: 1, zoomSnap: 0.5, attributionControl: true }).setView([home ? home[0] * 0.4 : 20, home ? home[1] : 0], 1);
+        new ResizeObserver(() => this._map?.invalidateSize()).observe(el);
+        // la source des bolides reste citée quel que soit le fond (le fond vectoriel remplace la mention de sa couche)
+        this._map.attributionControl.addAttribution('bolides : <a href="https://cneos.jpl.nasa.gov/fireballs/">NASA JPL CNEOS</a>');
+        this._layer = L.layerGroup().addTo(this._map);
+      }
+      // fond : vectoriel OpenStreetMap (comme Home Assistant), sinon images OpenStreetMap assombries par un filtre CSS ; tiles_url pour un autre fournisseur
+      const vector = !c.tiles_url && (await loadVector());
+      const attribution = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+      const key = vector ? `vector|${light}` : c.tiles_url || "raster";
+      el.classList.toggle("dark", !vector && !light && !c.tiles_url);
+      if (this._tilesKey !== key) {
+        this._tiles?.remove();
+        this._tiles = vector ? L.maplibreGL({ style: vectorStyle(light), attribution, interactive: false })
+          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution });
+        this._tiles.addTo(this._map);
+        this._tilesKey = key;
+      }
+      this._layer.clearLayers();
+      this._markers = [];
+      const dt = (d) => d.toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      const kt = (v) => (v === null ? "—" : `${fmt(v, v < 1 ? 2 : v < 10 ? 1 : 0)} kt`);
+      // les plus anciens d'abord, pour que les récents restent au-dessus
+      for (const b of [...list].reverse()) {
+        const col = bolideColor(b.days);
+        const old = b.days >= 183;
+        const m = L.circleMarker([b.lat, b.lon], { radius: bolideRadius(b.impact, old), color: col, weight: old ? 0.6 : 1, opacity: old ? 0.6 : 1, fillColor: col, fillOpacity: old ? 0.3 : 0.85 })
+          .bindPopup(`<div class="bp"><b>Bolide du ${dt(b.date)}</b>
+            ${b.vel !== null ? `<span>Vitesse <b>${fmt(b.vel, 1)} km/s</b></span>` : ""}${b.alt !== null ? `<span>Altitude <b>${fmt(b.alt, 1)} km</b></span>` : ""}
+            ${b.energy !== null ? `<span>Énergie rayonnée <b>${fmt(b.energy, b.energy < 10 ? 1 : 0)} × 10¹⁰ J</b></span>` : ""}<span>Énergie d'impact <b>${kt(b.impact)}</b></span>
+            ${b.dist !== null ? `<span>À <b>${fmt(b.dist)} km</b> de chez vous</span>` : ""}</div>`,
+          // la carte se décale pour que la bulle ne passe pas sous les boutons de zoom et de plein écran
+          { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
+        m.addTo(this._layer);
+        this._markers[list.indexOf(b)] = m;
+      }
+      if (home && c.show_home !== false) L.circleMarker(home, { radius: 6, color: "#fff", weight: 2, fillColor: "#1d93e3", fillOpacity: 1 }).bindTooltip("Chez vous").addTo(this._layer);
+    } catch (e) {
+      // erreur affichée dans la carte plutôt qu'une zone vide
+      console.error("Carte Météo (bolides) :", e);
+      this._map = null;
+      el.innerHTML = `<div class="empty"><b>Erreur de la carte</b><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  _fly(i) {
+    const m = this._markers?.[i];
+    if (!m || !this._map) return;
+    this._map.flyTo(m.getLatLng(), Math.max(this._map.getZoom(), 4), { duration: 0.8 });
+    setTimeout(() => m.openPopup(), 850);
   }
 }
 
@@ -1645,7 +1981,82 @@ svg .pl.on { fill: #f7c948; }
 .w-b { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 7px; border-radius: 999px; font-size: .74rem;
   background: color-mix(in srgb, #ee4a4a 10%, var(--med-surface)); border: 1px solid color-mix(in srgb, #ee4a4a 45%, transparent); }
 .w-b ha-icon { --mdc-icon-size: 14px; color: #ee4a4a; }
+.mt { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
+.mt > ha-icon { --mdc-icon-size: 30px; flex: none; }
+.mt-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mt-t > span { font-size: .72rem; color: var(--med-muted); }
+.mt-t b { font-size: .9rem; }
+.mt-t small { font-size: .68rem; color: var(--med-muted); }
+.mt-t small b { font-size: .72rem; color: var(--med-text); }
+.mt-w { color: #f7c948; font-weight: 600; }
+.mt-m { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 74px; text-align: center; }
+.mt-m svg { width: 30px; height: 30px; }
+.mt-m span { font-size: .62rem; line-height: 1.15; }
+.mt-l { font-size: .68rem; color: var(--med-muted); align-self: center; }
+.mt-c { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .72rem; color: var(--med-text);
+  background: var(--med-surface); border: 1px solid var(--med-line); }
+.mt-c b { color: var(--med-muted); font-weight: 600; }
 ha-card.light .w-i b { filter: brightness(.75); }
+.bts .bt { cursor: pointer; }
+.bt-s { font-size: .64rem; color: var(--med-muted); margin-top: 1px; }
+.bf .bc { cursor: pointer; font: inherit; font-size: .72rem; }
+.bf .bc.on { border-color: color-mix(in srgb, var(--med-blue) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-blue) 18%, var(--med-surface)); }
+.bm { position: relative; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
+.bm-map { position: absolute; inset: 0; background: #0f1724; }
+.bm-map.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.85) saturate(.6); }
+.bm-full { position: absolute; top: 10px; right: 10px; z-index: 1000; width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--med-line);
+  background: var(--med-bg); color: var(--med-text); cursor: pointer; display: grid; place-items: center; }
+.bm-full ha-icon { --mdc-icon-size: 20px; }
+.bm:fullscreen { margin: 0; border-radius: 0; height: 100% !important; }
+.bm-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 14px 0; font-size: .66rem; color: var(--med-muted); }
+.bm-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.bm .leaflet-popup-content-wrapper, .bm .leaflet-popup-tip { background: var(--med-bg); color: var(--med-text); box-shadow: 0 4px 18px rgba(0,0,0,.45); }
+.bm .leaflet-popup-content { margin: 10px 14px; font: 12px/1.45 inherit; }
+.bm .leaflet-container a.leaflet-popup-close-button { color: var(--med-muted); }
+.bp { display: flex; flex-direction: column; gap: 2px; }
+.bp > b { font-size: 13px; margin-bottom: 3px; }
+.bp span { color: var(--med-muted); }
+.bp span b { color: var(--med-text); }
+.bm .leaflet-control-attribution { background: color-mix(in srgb, var(--med-bg) 80%, transparent); color: var(--med-muted); font-size: 9px; }
+.bm .leaflet-control-attribution a { color: var(--med-blue); }
+.bm .leaflet-bar a { background: var(--med-bg); color: var(--med-text); border-color: var(--med-line); }
+/* présentation « WarC0zes » : halo bleu, en-tête sur une ligne, textes plus grands */
+ha-card.neon { --nb: color-mix(in srgb, var(--med-blue) 55%, transparent); border: 1.5px solid var(--nb);
+  background: radial-gradient(120% 70% at 15% 0%, color-mix(in srgb, var(--med-blue) 20%, var(--med-bg)) 0%, transparent 60%), var(--med-bg);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--med-blue) 28%, transparent), inset 0 0 28px color-mix(in srgb, var(--med-blue) 8%, transparent); }
+ha-card.neon :is(.stat, .fc-d, .sky-t, .rh, .d-i, .pill, .tab) { border-color: color-mix(in srgb, var(--med-blue) 40%, transparent);
+  background: color-mix(in srgb, var(--med-blue) 7%, var(--med-surface)); box-shadow: inset 0 0 14px color-mix(in srgb, var(--med-blue) 10%, transparent); }
+ha-card.neon .vig.ok { box-shadow: 0 0 12px color-mix(in srgb, var(--med-down) 25%, transparent); }
+.nh { padding: 16px 16px 6px; flex-wrap: nowrap; }
+.nh-m { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; flex: 1; }
+.nh-n { min-width: 64px; flex: 0 1 auto; }
+.nh .title, .nh .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nh .pill { flex: none; }
+@container (max-width: 470px) { .nh { flex-wrap: wrap; } .nh .n-t { font-size: 2.8rem; } .nh .n-ic { --mdc-icon-size: 50px; } }
+.nh .n-ic { --mdc-icon-size: 54px; }
+.nh .title { font-size: 1.3rem; }
+.nh .sub { font-size: .9rem; }
+.nh .n-t { font-size: 3.1rem; flex: none; }
+.nh-sep { align-self: stretch; width: 2px; margin: 6px 0; border-radius: 1px; background: color-mix(in srgb, var(--med-blue) 45%, transparent); }
+.nh .n-hl { margin-left: 0; text-align: left; font-size: 1.1rem; white-space: nowrap; flex: none; }
+.nh .pill { padding: 7px 12px; font-size: .88rem; white-space: nowrap; }
+ha-card.neon .s-h { font-size: .88rem; }
+ha-card.neon .s-h ha-icon { --mdc-icon-size: 19px; }
+ha-card.neon .s-v { font-size: 1.55rem; }
+ha-card.neon .s-v small { font-size: .9rem; }
+ha-card.neon .s-n { font-size: .8rem; }
+ha-card.neon .d-i { font-size: .9rem; padding: 6px 12px 6px 9px; }
+ha-card.neon .d-i ha-icon { --mdc-icon-size: 19px; }
+ha-card.neon .sec { font-size: 1.05rem; font-weight: 700; color: color-mix(in srgb, var(--med-blue) 35%, var(--med-text)); }
+ha-card.neon .f-n { font-size: .88rem; }
+ha-card.neon .f-hi, ha-card.neon .fc-d.full .f-hi { font-size: 1.15rem; }
+ha-card.neon .f-lo { font-size: .92rem; color: var(--med-blue); }
+ha-card.neon :is(.f-mm, .f-pp, .f-hu, .fc-d.full .f-w) { font-size: .82rem; }
+ha-card.neon .rh-h { font-size: .86rem; }
+ha-card.neon .rh-h b { font-size: .95rem; }
+ha-card.neon .k-v { font-size: .95rem; }
+ha-card.neon .k-l { font-size: .74rem; }
+ha-card.neon .sky-t ha-icon { --mdc-icon-size: 28px; }
 svg .bolt circle { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 40%, #000); stroke-width: 1; filter: drop-shadow(0 0 4px #f7c948); }
 svg .bolt path { fill: #1a2434; }
 </style>`;
@@ -1682,6 +2093,15 @@ const SCHEMA = [
     { value: "hourly", label: "Par heure" }, { value: "daily", label: "Par jour" }, { value: "twice_daily", label: "Jour et nuit" }] } } },
   { name: "days", selector: { number: { min: 1, max: 14, step: 1, mode: "box" } } },
   { name: "hours", selector: { number: { min: 1, max: 24, step: 1, mode: "box" } } },
+  // lignes des prévisions, comme la carte Météo-France de HACF : une section par heure, une par jour
+  { type: "expandable", flatten: true, title: "Prévisions par heure : lignes affichées", schema: [{ type: "grid", name: "", schema: [
+    { name: "hourly_wind", selector: { boolean: {} } }, { name: "hourly_gust", selector: { boolean: {} } },
+    { name: "hourly_precipitation", selector: { boolean: {} } }, { name: "hourly_humidity", selector: { boolean: {} } },
+    { name: "hourly_direction", selector: { boolean: {} } }] }] },
+  { type: "expandable", flatten: true, title: "Prévisions par jour : lignes affichées", schema: [{ type: "grid", name: "", schema: [
+    { name: "daily_wind", selector: { boolean: {} } }, { name: "daily_gust", selector: { boolean: {} } },
+    { name: "daily_precipitation", selector: { boolean: {} } }, { name: "daily_humidity", selector: { boolean: {} } },
+    { name: "daily_direction", selector: { boolean: {} } }] }] },
   { name: "season", selector: { entity: { domain: "sensor" } } },
   { name: "moon", selector: { entity: { domain: "sensor" } } },
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
@@ -1691,6 +2111,8 @@ const SCHEMA = [
   { name: "show_alert", selector: { boolean: {} } },
   { name: "show_forecast", selector: { boolean: {} } },
   { name: "show_sky", selector: { boolean: {} } },
+  { name: "layout", selector: { select: { mode: "dropdown", options: [
+    { value: "classic", label: "Classique" }, { value: "warc0zes", label: "WarC0zes : en-tête sur une ligne, textes plus grands, halo bleu" }] } } },
   { name: "icons", selector: { select: { mode: "dropdown", options: [
     { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
     { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
@@ -1711,6 +2133,8 @@ const LABELS = {
   forecasts: "Prévisions affichées (vide = par jour)",
   days: "Nombre de jours affichés",
   hours: "Nombre d'heures affichées",
+  hourly_wind: "Vent", hourly_gust: "Rafales", hourly_precipitation: "Précipitations", hourly_humidity: "Humidité", hourly_direction: "Girouette",
+  daily_wind: "Vent", daily_gust: "Rafales", daily_precipitation: "Précipitations", daily_humidity: "Humidité", daily_direction: "Girouette",
   season: "Saison (vide = détectée, sinon calculée d'après la date)",
   moon: "Phase de lune (vide = détectée, sinon calculée)",
   zodiac: "Signe du zodiaque (vide = détecté)",
@@ -1720,6 +2144,7 @@ const LABELS = {
   show_alert: "Vigilance",
   show_forecast: "Prévisions",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
+  layout: "Présentation",
   icons: "Icônes météo",
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
@@ -1778,6 +2203,7 @@ const ASTRO_SCHEMA = [
   { name: "show_sun", selector: { boolean: {} } },
   { name: "show_moon", selector: { boolean: {} } },
   { name: "show_cycles", selector: { boolean: {} } },
+  { name: "show_meteors", selector: { boolean: {} } },
   { name: "show_pollens", selector: { boolean: {} } },
   { name: "show_all_pollens", selector: { boolean: {} } },
   { name: "moon_image", selector: { text: {} } },
@@ -1795,6 +2221,7 @@ const ASTRO_LABELS = {
   show_sun: "Soleil (boussole, course du jour, heures)",
   show_moon: "Lune (lever, coucher, éclairement)",
   show_cycles: "Cycles (lune, soleil, saison, zodiaque)",
+  show_meteors: "Étoiles filantes (prochaine pluie, pic, lune)",
   show_pollens: "Pollens",
   show_all_pollens: "Afficher aussi les pollens à « nul »",
   moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
@@ -1838,6 +2265,26 @@ const ECLAIRS_SCHEMA = [
   THEME_SELECT,
   TEXT_SIZE,
 ];
+const BOLIDES_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "entity", selector: { entity: { domain: "sensor" } } },
+  { name: "period", selector: { select: { mode: "dropdown", options: BOLIDE_PERIODS.map(([value, label]) => ({ value, label })) } } },
+  { name: "min_energy", selector: { select: { mode: "dropdown", options: BOLIDE_ENERGY.map(([value, label]) => ({ value: String(value), label })) } } },
+  { name: "show_home", selector: { boolean: {} } },
+  { name: "map_height", selector: { number: { min: 200, max: 800, step: 20, mode: "slider", unit_of_measurement: "px" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const BOLIDES_LABELS = {
+  title: "Titre (Bolides par défaut)",
+  entity: "Capteur de l'API Fireball (vide = détecté)",
+  period: "Période affichée au départ",
+  min_energy: "Énergie minimale affichée au départ",
+  show_home: "Afficher votre maison sur la carte",
+  map_height: "Hauteur de la carte",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const ECLAIRS_LABELS = {
   title: "Titre (Éclairs par défaut)",
   counter: "Compteur d'éclairs (vide = Blitzortung détecté)",
@@ -1866,7 +2313,7 @@ const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
     if (!this._hass || !this._config) return;
     if (!this._form) {
       this._form = document.createElement("ha-form");
-      this._form.computeLabel = (s) => labels[s.name] || s.name;
+      this._form.computeLabel = (s) => labels[s.name] || s.title || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         const v = { ...ev.detail.value };
         for (const [k, x] of Object.entries(v)) {
@@ -1917,12 +2364,15 @@ if (typeof customElements !== "undefined") {
   define("meteo-air-card-editor", makeEditor(AIR_SCHEMA, AIR_LABELS, AIR_DEFAULTS));
   define("meteo-eclairs-card", MeteoEclairsCard);
   define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
+  define("meteo-bolides-card", MeteoBolidesCard);
+  define("meteo-bolides-card-editor", makeEditor(BOLIDES_SCHEMA, BOLIDES_LABELS, BOLIDES_DEFAULTS));
   window.customCards = window.customCards || [];
   for (const card of [
     { type: "meteo-card", name: "Carte Météo", description: "Météo du jour, une ou plusieurs villes : conditions, ressenti, vent, détails et vigilance Météo-France, prévisions par heure et par jour, saison, lune." },
     { type: "meteo-ciel-card", name: "Carte Météo : vent et ciel", description: "Baromètre, boussole du vent, températures, pluie du jour, indice UV et carte Windy." },
     { type: "meteo-air-card", name: "Carte Météo : air, pollens et eau", description: "Qualité de l'air et polluants (Atmo France), pollens, vigilance sécheresse (VigiEau)." },
     { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
+    { type: "meteo-bolides-card", name: "Carte Météo : bolides", description: "Carte du monde interactive des bolides (grosses météorites) détectés par la NASA, avec le plus récent, le plus proche et le plus puissant." },
     { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, cycles et pollens." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");

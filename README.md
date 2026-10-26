@@ -6,8 +6,9 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | --- | --- | --- |
 | **Météo** | `custom:meteo-card` | La météo du jour, une ou plusieurs villes en onglets : conditions, ressenti, vent, humidité, pression, détails et **vigilance Météo-France**, **prévisions par heure et par jour**, saison, lune et zodiaque |
 | **Vent et ciel** | `custom:meteo-ciel-card` | **Baromètre**, **boussole du vent**, températures de vos capteurs, **pluie du jour**, **indice UV** et carte **Windy** |
-| **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles et **pollens** |
+| **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes** et **pollens** |
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
+| **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
 Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir. Les **icônes météo animées** sont celles de la carte Météo-France de HACF (amCharts).
@@ -33,6 +34,10 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | Soleil et lune avec les photos de la lune | Phases de la lune avec les photos de la lune et de la Terre |
 | --- | --- |
 | ![Soleil et lune avec photos](images/meteo-astro-photos.png) | ![Phases avec photos](images/meteo-phases-photos.png) |
+
+| Mode WarC0zes (`layout: warc0zes`) | Bolides (carte interactive) |
+| --- | --- |
+| ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) |
 
 *Aperçus avec des villes et des données fictives.*
 
@@ -89,6 +94,7 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | **VigiEau** | HACS : [kamaradclimber/vigieau](https://github.com/kamaradclimber/vigieau) | Air, pollens et eau | Vigilance sécheresse par type d'eau et usages autorisés ou interdits |
 | **Blitzortung.org Lightning Detector** | HACS : [mrk-its/homeassistant-blitzortung](https://github.com/mrk-its/homeassistant-blitzortung) | Éclairs | Compteur, distance et direction des éclairs autour de chez vous |
 | **Pollens** ou **Pollen Information** | HACS : [chris60600/pollens-home-assistant](https://github.com/chris60600/pollens-home-assistant), ou Pollen Information | Soleil et lune | Risque d'allergie et niveau par plante |
+| **REST** (intégration officielle, en YAML) | Fichier `packages/…yaml`, voir la carte Bolides | Bolides | Liste des bolides de l'API Fireball de la NASA, publique et sans clé |
 | **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
 
 Le soleil, la lune et la carte **Windy** n'ont besoin d'aucune intégration : ils utilisent les coordonnées de Home Assistant.
@@ -121,6 +127,9 @@ type: custom:meteo-card
 | `hours` | Nombre d'heures (avec plusieurs prévisions) | `8` |
 | `days` | Nombre de jours | `5` |
 | `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
+| `hourly_wind`, `hourly_gust`, `hourly_precipitation`, `hourly_humidity`, `hourly_direction` | Prévisions par heure : afficher le vent, les rafales, les précipitations (mm et risque de pluie), l'humidité, la girouette (direction du vent) | `true` |
+| `daily_wind`, `daily_gust`, `daily_precipitation`, `daily_humidity`, `daily_direction` | Les mêmes lignes pour les prévisions par jour (et jour et nuit) | `true`, sauf `daily_humidity` : `false` |
+| `layout` | Présentation : `classic` (classique) ou `warc0zes` (mode WarC0zes : en-tête sur une ligne avec la température, textes plus grands, halo bleu) | `classic` |
 | `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
 | `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
@@ -178,6 +187,7 @@ type: custom:meteo-astro-card
 - **Lune** : phase dessinée, lever, coucher, éclairement, azimut et élévation.
 - **Cycles** : lune, soleil (au-dessus ou sous l'horizon), saison et zodiaque.
 - **Phases de la lune** : un clic sur la lune ouvre une fenêtre avec les huit phases autour de la Terre, la phase du jour entourée, l'âge de la lune et les dates de la prochaine pleine lune et de la prochaine nouvelle lune.
+- **Étoiles filantes** : prochaine grande pluie (Perséides, Géminides, Quadrantides…) avec la nuit du pic, le nombre d'étoiles filantes attendu par heure chez vous, la meilleure heure (radiant le plus haut), la gêne de la lune ce soir-là, et les pluies en cours. Calculé d'après les coordonnées de Home Assistant, sans intégration.
 - **Pollens** : niveau du département, barre de risque et une tuile par plante en circulation, avec les intégrations [Pollens](https://github.com/chris60600/pollens-home-assistant) ou Pollen Information (détectées, noms des plantes en français) ou vos propres capteurs.
 
 | Option | Rôle | Défaut |
@@ -191,7 +201,7 @@ type: custom:meteo-astro-card
 | `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.png`), à la place de la Terre dessinée (voir [Licence](#licence)) | — |
 | `compass_image` | Image au centre de la boussole | — |
 | `latitude`, `longitude` | Lieu des calculs | coordonnées de Home Assistant |
-| `show_sun`, `show_moon`, `show_cycles`, `show_pollens` | Afficher chaque partie | `true` |
+| `show_sun`, `show_moon`, `show_cycles`, `show_meteors`, `show_pollens` | Afficher chaque partie | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
@@ -247,6 +257,52 @@ Pour le total du mois, créez un compteur **Paramètres › Appareils et service
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
+## Carte Bolides
+
+```yaml
+type: custom:meteo-bolides-card
+```
+
+- **Carte du monde interactive** (Leaflet, fonds vectoriels officiels d'OpenStreetMap, comme Home Assistant depuis que CARTO exige une clé ; style sombre ou clair selon le thème) : zoom, déplacement, plein écran, un cercle par bolide dont la taille suit l'énergie d'impact et la couleur l'ancienneté (rouge : moins de 30 jours, orange : moins de 6 mois, gris : plus ancien), votre maison en bleu.
+- **Au clic sur un bolide** : date et heure, vitesse, altitude, énergie rayonnée, énergie d'impact et distance depuis chez vous.
+- **Tuiles** : le dernier bolide, le plus proche et le plus puissant de la sélection (un clic centre la carte dessus).
+- **Filtres** : période (30 jours, 1 an, 5 ans, tout) et énergie minimale (tous, 1 kt, 10 kt).
+
+Les données viennent de l'[API Fireball du CNEOS (NASA JPL)](https://ssd-api.jpl.nasa.gov/doc/fireball.html), publique et sans clé : il s'agit des **gros bolides** détectés par des capteurs gouvernementaux (quelques dizaines par an dans le monde), publiés avec quelques jours à quelques semaines de délai. Ce n'est ni une alerte en temps réel, ni la liste des étoiles filantes ordinaires.
+
+Ajoutez ce capteur dans un fichier de paquet, par exemple `/config/packages/meteo_bolides.yaml` (les paquets doivent être activés dans `configuration.yaml` : `homeassistant: packages: !include_dir_named packages`), puis redémarrez Home Assistant :
+
+```yaml
+rest:
+  - resource: https://ssd-api.jpl.nasa.gov/fireball.api?req-loc=true
+    scan_interval: 43200
+    timeout: 30
+    sensor:
+      - name: "Bolides NASA"
+        unique_id: meteo_bolides_nasa
+        icon: mdi:meteor
+        value_template: "{{ value_json.count | int(0) }}"
+        json_attributes:
+          - fields
+          - data
+          - signature
+```
+
+La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API directement depuis le navigateur, ce qui ne fonctionne que si la NASA l'autorise.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Bolides` |
+| `entity` | Capteur de l'API Fireball | détecté |
+| `period` | Période affichée au départ : `30`, `365`, `1825`, `all` | `all` |
+| `min_energy` | Énergie d'impact minimale au départ (kt) : `0`, `1`, `10` | `0` |
+| `show_home` | Votre maison sur la carte | `true` |
+| `map_height` | Hauteur de la carte (px) | `320` |
+| `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
+| `leaflet_path` | Dossier de Leaflet pour un usage hors ligne (ex. `/local/leaflet/`) | jsDelivr |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
 ## Support
 
 Questions et problèmes : uniquement via les [issues GitHub](https://github.com/Marlboro62/meteo-card/issues).
@@ -262,6 +318,8 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 MIT. Inspirée des cartes « [Dashboard météo all inclusive V2](https://forum.hacf.fr/t/dashboard-meteo-all-inclusive-v2-maj-02-08-23/25804) » ([@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary)). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
 
 Icônes météo animées et statiques : [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), dans la version de la [carte Météo-France de HACF](https://github.com/hacf-fr/lovelace-meteofrance-weather-card) (MIT).
+
+Carte Bolides : bibliothèques [Leaflet](https://leafletjs.com/) (licence BSD-2) et [MapLibre GL](https://maplibre.org/) (licence BSD-3), fonds vectoriels Shortbread © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, données de bolides du [CNEOS, NASA JPL](https://cneos.jpl.nasa.gov/fireballs/).
 
 Photo de lune pour l'option `moon_image` : la pleine lune de la photo « [Séquence d'éclipse lunaire sur fond de ciel sombre](https://www.pexels.com/fr-fr/photo/sequence-d-eclipse-lunaire-sur-fond-de-ciel-sombre-39361563/) » de **Julia Iarmolenko**, sur Pexels ([licence Pexels](https://www.pexels.com/fr-fr/license/)). Un grand merci à Julia Iarmolenko pour cette image !
 
