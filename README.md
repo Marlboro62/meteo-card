@@ -124,7 +124,7 @@ type: custom:meteo-card
 | `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
 | `forecasts` | Liste parmi `hourly`, `daily`, `twice_daily`, affichées l'une sous l'autre | `[daily]` |
-| `hours` | Nombre d'heures (avec plusieurs prévisions) | `8` |
+| `hours` | Nombre d'heures des prévisions par heure | `8` |
 | `days` | Nombre de jours | `5` |
 | `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
 | `hourly_wind`, `hourly_gust`, `hourly_precipitation`, `hourly_humidity`, `hourly_direction` | Prévisions par heure : afficher le vent, les rafales, les précipitations (mm et risque de pluie), l'humidité, la girouette (direction du vent) | `true` |

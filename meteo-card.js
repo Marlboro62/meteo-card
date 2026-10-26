@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.0.2";
+const CARD_VERSION = "3.0.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -707,9 +707,10 @@ class MeteoCard extends MeteoBase {
     let fc = Array.isArray(data) ? data : Array.isArray(w.attributes?.forecast) ? w.attributes.forecast : null;
     const title = hourly ? "Prochaines heures" : type === "twice_daily" ? "Jour et nuit" : "Prévisions";
     if (fc === null) return `<div class="sec">${title}</div><div class="fc-empty">Chargement des prévisions…</div>`;
-    // un seul type : « days » compte aussi les heures (comportement 1.0) ; plusieurs types : « hours » pour les heures
-    const several = this._types().length > 1;
-    const n = Math.max(1, Math.min(hourly ? 24 : 14, Number(hourly && several ? c.hours : c.days) || (hourly ? 8 : 5)));
+    // heures : « hours » ; seule exception, une ancienne configuration 1.0 (forecast_type: hourly sans forecasts
+    // ni hours) où « days » comptait les heures
+    const legacy = c.forecasts == null && c.forecast_type === "hourly" && c.hours == null;
+    const n = Math.max(1, Math.min(hourly ? 24 : 14, Number(hourly ? (legacy ? c.days : c.hours) : c.days) || (hourly ? 8 : 5)));
     fc = fc.slice(0, n);
     if (!fc.length) return this._types().length > 1 ? "" : `<div class="fc-empty">Prévisions indisponibles pour ${esc(ent.weather)}.</div>`;
     // barre de température : position du min et du max du jour sur l'échelle de la période
