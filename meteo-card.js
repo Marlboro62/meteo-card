@@ -27,7 +27,7 @@
  */
 
 (() => {
-const CARD_VERSION = "2.0.2";
+const CARD_VERSION = "2.0.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -204,13 +204,25 @@ const moonIllum = (date) => {
 const MOON_KEYS = ["new_moon", "waxing_crescent", "first_quarter", "waxing_gibbous", "full_moon", "waning_gibbous", "last_quarter", "waning_crescent"];
 const hm = (d) => (d instanceof Date && !isNaN(d) ? d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—");
 
-/** Dessin d'une lune (SVG) : disque sombre et partie éclairée selon la phase (vue de l'hémisphère nord). */
-const moonSvg = (phase, r, cx = 0, cy = 0) => {
+/** Partie éclairée d'une lune selon la phase (vue de l'hémisphère nord) : "" (nouvelle lune), "full" ou un tracé SVG. */
+const moonLit = (phase, r, cx, cy) => {
   const p = ((phase % 1) + 1) % 1, f = (1 - Math.cos(2 * Math.PI * p)) / 2, rx = Math.abs(1 - 2 * f) * r;
   const waxing = p < 0.5, side = waxing ? 1 : 0, term = (f < 0.5) === waxing ? 0 : 1;
-  const lit = f < 0.02 ? "" : f > 0.98 ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#e9edf3"/>`
-    : `<path d="M${cx} ${cy - r}A${r} ${r} 0 0 ${side} ${cx} ${cy + r}A${rx.toFixed(2)} ${r} 0 0 ${term} ${cx} ${cy - r}Z" fill="#e9edf3"/>`;
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#2b3446" stroke="#55627a" stroke-width=".6"/>${lit}`;
+  return f < 0.02 ? "" : f > 0.98 ? "full" : `M${cx} ${cy - r}A${r} ${r} 0 0 ${side} ${cx} ${cy + r}A${rx.toFixed(2)} ${r} 0 0 ${term} ${cx} ${cy - r}Z`;
+};
+let moonClip = 0;
+/** Dessin d'une lune (SVG). Avec une photo de pleine lune (img), la photo est assombrie sur la partie non éclairée,
+ *  qui est la partie éclairée de la phase opposée. */
+const moonSvg = (phase, r, cx = 0, cy = 0, img = "") => {
+  if (img) {
+    const id = `mc${++moonClip}`, dark = moonLit(phase + 0.5, r, cx, cy);
+    const shade = dark === "" ? "" : dark === "full" ? `<circle cx="${cx}" cy="${cy}" r="${r}" class="m-sh"/>` : `<path d="${dark}" class="m-sh"/>`;
+    return `<clipPath id="${id}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath><image href="${esc(img)}" x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}"
+      clip-path="url(#${id})" preserveAspectRatio="xMidYMid slice"/>${shade}`;
+  }
+  const lit = moonLit(phase, r, cx, cy);
+  const litEl = lit === "" ? "" : lit === "full" ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#e9edf3"/>` : `<path d="${lit}" fill="#e9edf3"/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#2b3446" stroke="#55627a" stroke-width=".6"/>${litEl}`;
 };
 
 
@@ -605,8 +617,9 @@ class MeteoCard extends MeteoBase {
     const pill = vg && c.show_alert !== false
       ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
       : "";
+    // icône de titre fixe, comme les autres cartes (la condition du moment reste sur la grande icône)
     return `<header>
-      <div class="brand">
+      <div class="brand"><ha-icon class="b-ic" icon="${esc(c.icon || "mdi:weather-partly-cloudy")}" style="color:var(--med-blue)"></ha-icon>
         <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
       ${pill}</header>`;
   }
@@ -740,7 +753,7 @@ class MeteoCard extends MeteoBase {
   }
 
   _sky(ent) {
-    const now = new Date();
+    const now = new Date(), c = this._config;
     const south = Number(this._hass?.config?.latitude) < 0;
     const sRaw = String(this._st(ent.season)?.state || "").toLowerCase();
     const season = SEASON[sRaw] || SEASON[seasonOfDate(now, south)];
@@ -759,7 +772,8 @@ class MeteoCard extends MeteoBase {
       ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
         <div class="k-v"><span class="sr">↑ ${hm(st.rise)}</span> <span class="ss">↓ ${hm(st.set)}</span></div><div class="k-l">Lever · coucher</div></div>` : ""}
       ${tile(SEASON[sRaw] ? ent.season : null, season[1], season[2], season[0], "Saison")}
-      ${tile(MOON[mRaw] ? ent.moon : null, moon[1], "#d9e2f2", moon[0], "Lune")}
+      ${c.moon_image ? `<div class="sky-t"${MOON[mRaw] ? ` data-entity="${esc(ent.moon)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
+        <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(MOON[mRaw] ? ent.moon : null, moon[1], "#d9e2f2", moon[0], "Lune")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
     </div>`;
   }
@@ -1080,7 +1094,7 @@ class MeteoAstroCard extends MeteoBase {
   _moonRow([lat, lon], now) {
     const mt = moonTimes(now, lat, lon), mp = position("moon", now, lat, lon), il = moonIllum(now);
     const cell = (l, v) => `<div class="tm"><span>${l}</span><b>${v}</b></div>`;
-    return `<div class="sec">Lune</div><div class="mrow"><button class="mbtn" data-act="moon" aria-label="Phases de la lune"><svg viewBox="-22 -22 44 44">${moonSvg(il.phase, 20)}</svg></button>
+    return `<div class="sec">Lune</div><div class="mrow"><button class="mbtn" data-act="moon" aria-label="Phases de la lune"><svg viewBox="-22 -22 44 44">${moonSvg(il.phase, 20, 0, 0, this._config.moon_image)}</svg></button>
       <div class="tms">${cell("Lever", hm(mt.rise))}${cell("Coucher", hm(mt.set))}${cell("Éclairée", `${fmt(il.fraction * 100)} %`)}${cell("Azimut", `${fmt(mp.az)}°`)}${cell("Élévation", `${fmt(mp.el, 1)}°`)}</div></div>`;
   }
 
@@ -1099,7 +1113,7 @@ class MeteoAstroCard extends MeteoBase {
     const tile = (attr, icon, color, value, label, svg) =>
       `<div class="sky-t" ${attr}>${svg || `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`}<div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
     return `<div class="sky">
-      ${tile(`data-act="moon" role="button" tabindex="0"`, "", "", MOON[mk][0], "Lune", `<svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(il.phase, 20)}</svg>`)}
+      ${tile(`data-act="moon" role="button" tabindex="0"`, "", "", MOON[mk][0], "Lune", `<svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(il.phase, 20, 0, 0, this._config.moon_image)}</svg>`)}
       ${sunI ? tile(`data-entity="sun.sun"`, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
       ${tile(SEASON[sRaw] ? `data-entity="${esc(ent.season)}"` : "", season[1], season[2], season[0], "Saison")}
       ${ZODIAC[zRaw] ? tile(`data-entity="${esc(ent.zodiac)}"`, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
@@ -1117,7 +1131,7 @@ class MeteoAstroCard extends MeteoBase {
       const lx = cx + (R + 46) * Math.cos(a), ly = cy - (R + 40) * Math.sin(a);
       const words = MOON[k][0].split(" ");
       const label = words.length > 1 ? `<tspan x="${f2(lx)}" dy="-.3em">${words[0]}</tspan><tspan x="${f2(lx)}" dy="1.1em">${words.slice(1).join(" ")}</tspan>` : words[0];
-      return `${moonSvg(i / 8, 18, +f2(x), +f2(y))}${i === cur ? `<circle cx="${f2(x)}" cy="${f2(y)}" r="24" class="cur"/>` : ""}
+      return `${moonSvg(i / 8, 18, +f2(x), +f2(y), this._config.moon_image)}${i === cur ? `<circle cx="${f2(x)}" cy="${f2(y)}" r="24" class="cur"/>` : ""}
         <text x="${f2(lx)}" y="${f2(ly)}" class="pl${i === cur ? " on" : ""}">${label}</text>`;
     }).join("");
     const lun = 29.530588853, age = il.phase * lun;
@@ -1132,7 +1146,11 @@ class MeteoAstroCard extends MeteoBase {
     this._dlg.innerHTML = `<div class="d-in" tabindex="-1" autofocus><div class="d-h"><b>Phases de la lune</b><button data-close aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div>
       <svg viewBox="0 0 380 324" class="phases" role="img" aria-label="Phase actuelle : ${esc(MOON[key][0])}">
         <circle cx="${cx}" cy="${cy}" r="${R}" class="orb"/>
-        <circle cx="${cx}" cy="${cy}" r="20" class="earth"/><path d="M${cx - 12} ${cy - 13}c7-3 13 1 11 7s-9 3-9 9-7 4-8-3 1-10 6-13zM${cx + 4} ${cy + 2}c5-2 11 1 10 6s-6 7-10 4-5-8 0-10z" class="land"/>
+        ${this._config.earth_image
+          // photo de la Terre (option earth_image), découpée en disque
+          ? `<clipPath id="earthclip"><circle cx="${cx}" cy="${cy}" r="24"/></clipPath><image href="${esc(this._config.earth_image)}" x="${cx - 24}" y="${cy - 24}" width="48" height="48"
+            clip-path="url(#earthclip)" preserveAspectRatio="xMidYMid slice"/>`
+          : `<circle cx="${cx}" cy="${cy}" r="20" class="earth"/><path d="M${cx - 12} ${cy - 13}c7-3 13 1 11 7s-9 3-9 9-7 4-8-3 1-10 6-13zM${cx + 4} ${cy + 2}c5-2 11 1 10 6s-6 7-10 4-5-8 0-10z" class="land"/>`}
         ${moons}</svg>
       <div class="d-f"><span><b>${esc(MOON[key][0])}</b> · éclairée à ${fmt(il.fraction * 100)} % · ${fmt(age, 1)} jours</span>
         <span>Pleine lune ${dfmt(next(0.5))} · Nouvelle lune ${dfmt(next(0))}</span></div></div>`;
@@ -1564,7 +1582,7 @@ svg .dropl { fill: none; stroke: var(--med-blue); stroke-width: 2; }
   background: linear-gradient(90deg, #5fcf8a 0 25%, #f7c948 25% 50%, #ff8c33 50% 66%, #ee4a4a 66% 91%, #b38cf0 91%); }
 .uv-s span { position: absolute; top: -4px; width: 4px; height: 15px; margin-left: -2px; border-radius: 2px; background: var(--med-text); box-shadow: 0 0 0 2px var(--med-bg); }
 .tabs.wt { padding-top: 10px; }
-.windy.fc { aspect-ratio: 16 / 10; }
+.windy.fc { aspect-ratio: auto; height: 188px; }
 .windy { display: block; width: calc(100% - 24px); margin: 10px 12px 0; aspect-ratio: 4 / 3; border: 1px solid var(--med-line); border-radius: 12px; }
 /* Soleil et lune */
 .astro { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr); gap: 10px; margin: 0 12px; align-items: center; }
@@ -1576,6 +1594,7 @@ svg .hz { stroke: var(--med-line); stroke-width: 1; stroke-dasharray: 3 3; }
 svg .path { fill: none; stroke: #f7c948; stroke-width: 2; opacity: .9; }
 svg .sun { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 40%, #fff); stroke-width: 1.5; filter: drop-shadow(0 0 4px #f7c948); }
 svg .moon { fill: #d9e2f2; stroke: #55627a; stroke-width: 1; }
+svg .m-sh { fill: #05080f; opacity: .82; }
 svg .under { opacity: .45; filter: none; }
 .tms { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 6px; flex: 1; min-width: 0; }
 .tm { text-align: center; min-width: 0; }
@@ -1675,6 +1694,7 @@ const SCHEMA = [
   { name: "forecast_details", selector: { select: { mode: "dropdown", options: [
     { value: "full", label: "Complètes : mm, risque de pluie, humidité, vent, rafales et direction, heure et jour" },
     { value: "compact", label: "Compactes : seulement les valeurs utiles" }] } } },
+  { name: "moon_image", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -1698,6 +1718,7 @@ const LABELS = {
   icons: "Icônes météo",
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
+  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
@@ -1754,6 +1775,8 @@ const ASTRO_SCHEMA = [
   { name: "show_cycles", selector: { boolean: {} } },
   { name: "show_pollens", selector: { boolean: {} } },
   { name: "show_all_pollens", selector: { boolean: {} } },
+  { name: "moon_image", selector: { text: {} } },
+  { name: "earth_image", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -1769,6 +1792,8 @@ const ASTRO_LABELS = {
   show_cycles: "Cycles (lune, soleil, saison, zodiaque)",
   show_pollens: "Pollens",
   show_all_pollens: "Afficher aussi les pollens à « nul »",
+  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
+  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };

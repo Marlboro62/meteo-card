@@ -56,6 +56,21 @@ Les cinq cartes apparaissent ensuite dans la liste des cartes, chacune avec son 
    - Type : **Module JavaScript**
 3. Rechargez la page (Ctrl+F5).
 
+## Intégrations Home Assistant à installer
+
+Les cartes affichent les données d'intégrations Home Assistant : installez celles des cartes que vous utilisez. Chaque partie sans capteur est simplement masquée.
+
+| Intégration | Où la trouver | Pour quelle carte | Ce qu'elle fournit |
+| --- | --- | --- | --- |
+| **Météo-France** | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Météo, Vent et ciel | Prévisions, vigilance du département, pluie dans l'heure, nuages, UV (toute autre entité `weather` fonctionne aussi, sans vigilance ni pluie dans l'heure) |
+| **Atmo France** | HACS : [sebcaps/atmofrance](https://github.com/sebcaps/atmofrance) | Air, pollens et eau | Qualité de l'air (indice Atmo et polluants) et pollens ; demande un compte gratuit sur [admindata.atmo-france.org](https://admindata.atmo-france.org) |
+| **VigiEau** | HACS : [kamaradclimber/vigieau](https://github.com/kamaradclimber/vigieau) | Air, pollens et eau | Vigilance sécheresse par type d'eau et usages autorisés ou interdits |
+| **Blitzortung.org Lightning Detector** | HACS : [mrk-its/homeassistant-blitzortung](https://github.com/mrk-its/homeassistant-blitzortung) | Éclairs | Compteur, distance et direction des éclairs autour de chez vous |
+| **Pollens** ou **Pollen Information** | HACS : [chris60600/pollens-home-assistant](https://github.com/chris60600/pollens-home-assistant), ou Pollen Information | Soleil et lune | Risque d'allergie et niveau par plante |
+| **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
+
+Le soleil, la lune et la carte **Windy** n'ont besoin d'aucune intégration : ils utilisent les coordonnées de Home Assistant.
+
 ## Carte Météo
 
 ```yaml
@@ -78,6 +93,7 @@ type: custom:meteo-card
 | `entity` | Entité météo (`weather.…`) | Météo-France, sinon la première trouvée |
 | `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert }` | — |
 | `title` | Titre (une seule ville) | `Météo` |
+| `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
 | `forecasts` | Liste parmi `hourly`, `daily`, `twice_daily`, affichées l'une sous l'autre | `[daily]` |
 | `hours` | Nombre d'heures (avec plusieurs prévisions) | `8` |
@@ -85,6 +101,7 @@ type: custom:meteo-card
 | `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
 | `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
 | `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
+| `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
@@ -148,6 +165,8 @@ type: custom:meteo-astro-card
 | `pollens` | Capteur principal : `sensor.pollens_xx` (Pollens) ou `sensor.polleninformation_…_allergy_risk` (Pollen Information) | détecté |
 | `pollen_entities` | Liste de capteurs de pollens à afficher à la place | — |
 | `show_all_pollens` | Afficher aussi les pollens à « nul » | `false` |
+| `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
+| `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.png`), à la place de la Terre dessinée (voir [Licence](#licence)) | — |
 | `compass_image` | Image au centre de la boussole | — |
 | `latitude`, `longitude` | Lieu des calculs | coordonnées de Home Assistant |
 | `show_sun`, `show_moon`, `show_cycles`, `show_pollens` | Afficher chaque partie | `true` |
@@ -221,3 +240,9 @@ Si la carte vous est utile : [Buy Me a Coffee](https://buymeacoffee.com/marlboro
 MIT. Inspirée des cartes « [Dashboard météo all inclusive V2](https://forum.hacf.fr/t/dashboard-meteo-all-inclusive-v2-maj-02-08-23/25804) » ([@WarC0zes](https://forum.hacf.fr/u/warc0zes/summary)). Calculs du soleil et de la lune d'après SunCalc (Vladimir Agafonkin, licence BSD-2).
 
 Icônes météo animées et statiques : [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/), licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), dans la version de la [carte Météo-France de HACF](https://github.com/hacf-fr/lovelace-meteofrance-weather-card) (MIT).
+
+Photo de lune pour l'option `moon_image` : la pleine lune de la photo « [Séquence d'éclipse lunaire sur fond de ciel sombre](https://www.pexels.com/fr-fr/photo/sequence-d-eclipse-lunaire-sur-fond-de-ciel-sombre-39361563/) » de **Julia Iarmolenko**, sur Pexels ([licence Pexels](https://www.pexels.com/fr-fr/license/)). Un grand merci à Julia Iarmolenko pour cette image !
+
+Photo de la Terre pour l'option `earth_image` : « [Terre](https://www.pexels.com/fr-fr/photo/terre-30596274/) » de **Zelch Csaba**, sur Pexels ([licence Pexels](https://www.pexels.com/fr-fr/license/)). Un grand merci à Zelch Csaba pour cette image !
+
+Ces photos ne sont pas incluses dans ce dépôt : téléchargez-les sur Pexels (ou utilisez vos propres photos) et copiez-les dans `/config/www/images/`.
