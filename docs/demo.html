@@ -109,6 +109,23 @@ function hassFor() {
   add("sensor.eclairs_du_mois", rainy ? 63 : 41, {});
   // Bolides : même format que l'API Fireball de la NASA (capteur REST), positions et dates tirées au hasard (fictives)
   add("sensor.bolides_nasa", FIREBALLS.length, { fields: ["date", "energy", "impact-e", "lat", "lat-dir", "lon", "lon-dir", "alt", "vel"], data: FIREBALLS, friendly_name: "Bolides NASA" });
+  // NASA FIRMS : feux fictifs (beau temps = été sec, plusieurs feux ; pluie = aucun)
+  const fires = rainy ? [] : [
+    ["a1", 38.2, 152, 64.3, "high", "high", ["VIIRS_NOAA20", "VIIRS_SNPP"], 3.1 * HOUR, "Village-Pinède", 3.2, 4.1, 165, 18],
+    ["a2", 41.7, 158, 12.6, "moderate", "nominal", ["VIIRS_NOAA20"], 3.1 * HOUR, "Bourg-des-Landes", 1.8, 4.6, 120, 60],
+    ["a3", 87.4, 205, 3.9, "low", "nominal", ["MODIS_AQUA"], 9 * HOUR, "Mas-Exemple", 5.5, 2.2, 300, 140],
+    ["a4", 132.9, 120, 148.0, "extreme", "high", ["VIIRS_NOAA21", "VIIRS_SNPP", "MODIS_TERRA"], 14 * HOUR, "Col-du-Maquis", 7.0, 6.3, 300, 175],
+  ];
+  for (const [k, d, br, frp, band, conf, sats, ago, place, pkm, wind, wb, off] of fires) {
+    add(`geo_location.wildfire_hotspot_${k}`, d, { source: "nasa_firms", latitude: 46.6 - d / 111 * Math.cos(br * Math.PI / 180), longitude: 2.4 + d / 76 * Math.sin(br * Math.PI / 180),
+      bearing: br, frp_mw: frp, intensity: band, confidence: conf, satellites: sats, acquired: new Date(Date.now() - ago).toISOString(),
+      place_name: place, place_distance_km: pkm, wind_speed: wind, wind_bearing: wb, wind_direction: "SSE", smoke_offset: off, unit_of_measurement: "km" }, "nasa_firms");
+  }
+  const firms = { hotspot_count: fires.length, nearest_distance: fires[0]?.[1] ?? "unknown", max_frp: rainy ? "unknown" : 148, satellite_observation: new Date(Date.now() + 2.6 * HOUR).toISOString() };
+  for (const [k, v] of Object.entries(firms)) {
+    add(`sensor.feux_exemple_${k}`, v, k === "satellite_observation" ? { satellite: "VIIRS_NOAA21", satellite_name: "NOAA-21" } : {}, "nasa_firms");
+    entities[`sensor.feux_exemple_${k}`].translation_key = k;
+  }
   add("sensor.salon_temperature", 21.4, { friendly_name: "Salon" });
   add("sensor.salon_humidity", 52, {});
   add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
@@ -202,6 +219,7 @@ const cards = {
   astro: document.createElement("meteo-astro-card"),
   air: document.createElement("meteo-air-card"),
   eclairs: document.createElement("meteo-eclairs-card"),
+  feux: document.createElement("meteo-feux-card"),
   seismes: document.createElement("meteo-seismes-card"),
   bolides: document.createElement("meteo-bolides-card"),
 };
@@ -215,6 +233,7 @@ function apply() {
   cards.astro.setConfig({ theme: t, ...PHOTOS() });
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
+  cards.feux.setConfig({ theme: t });
   cards.seismes.setConfig({ theme: t });
   cards.bolides.setConfig({ theme: t });
   const h = hassFor();

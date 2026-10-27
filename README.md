@@ -40,6 +40,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes**, **activité solaire et aurores** (indice Kp, éruptions) et **pollens** |
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
+| **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude) et en liste, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
@@ -70,6 +71,10 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | Mode WarC0zes (`layout: warc0zes`, `halo: true`) | Bolides (carte interactive) | Séismes |
 | --- | --- | --- |
 | ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) | ![Séismes](images/meteo-seismes.png) |
+
+| Feux de forêt |
+| --- |
+| ![Feux de forêt](images/meteo-feux.png) |
 
 *Aperçus avec des villes et des données fictives.*
 
@@ -130,6 +135,7 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | **REST** (intégration officielle, en YAML) | Fichier `packages/…yaml`, voir la carte Bolides | Bolides | Liste des bolides de l'API Fireball de la NASA, publique et sans clé |
 | **NOAA Space Weather** (facultatif) | HACS : [tcarwash/home-assistant_noaa-space-weather](https://github.com/tcarwash/home-assistant_noaa-space-weather) | Soleil et lune | Indice Kp, flux solaire, taches solaires, probabilité d'éruption (sans elle, la carte lit directement les données publiques de la NOAA) |
 | **Aurora** (facultatif) | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Soleil et lune | Probabilité d'aurore à votre position (modèle OVATION de la NOAA) |
+| **NASA FIRMS Wildfire Monitor** | HACS : [bangboomben/ha-nasa-firms](https://github.com/bangboomben/ha-nasa-firms), avec une clé gratuite de la NASA ([MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/)) | Feux de forêt | Feux détectés par les satellites VIIRS et MODIS dans le rayon choisi, avec leur intensité, la ville la plus proche, le vent et la direction de la fumée |
 | **USGS Earthquake Hazards Program** ou **GDACS** (facultatif) | Intégrations officielles | Séismes | Séismes autour de chez vous (sans elles, la carte lit directement les flux publics de l'EMSC et de l'USGS) |
 | **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
 
@@ -313,6 +319,31 @@ Pour le total du mois, créez un compteur **Paramètres › Appareils et service
 | `month_counter` | Éclairs du mois (compteur `utility_meter`) | détecté |
 | `counter_max` | Maximum de la jauge | `100` |
 | `distance_max` | Distance (km) qui place l'éclair au bord de la boussole | `100` |
+| `compass_image` | Image au centre de la boussole | — |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Feux de forêt
+
+```yaml
+type: custom:meteo-feux-card
+```
+
+Il faut l'intégration **NASA FIRMS Wildfire Monitor** (HACS) : elle demande une clé gratuite de la NASA, le lieu à surveiller et le rayon (500 km au plus), puis crée une entité par feu. La carte les trouve toute seule.
+
+- **Boussole** : chaque feu à sa direction, plus loin du centre quand il est loin, plus gros et plus rouge quand il est intense ; au centre, la distance et la direction du plus proche.
+- **Vent au feu le plus proche** : la fumée est-elle poussée vers vous, de côté, ou s'éloigne-t-elle ? Avec la vitesse du vent.
+- **Le plus intense** : sa puissance radiative (MW) et son intensité (faible, modéré, fort, extrême).
+- **Prochain passage** d'un satellite au-dessus de chez vous : la prochaine occasion de voir un nouveau feu.
+- **Feux détectés** : la ville la plus proche du feu, la distance et la direction depuis chez vous, depuis quand, la confiance de la détection, le nombre de satellites et la fumée.
+
+Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou un brûlage agricole sont détectés aussi. L'intégration permet de les ignorer (zones à ignorer, sources de chaleur apprises).
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Feux de forêt` |
+| `radius` | Distance (km) qui place un feu au bord de la boussole | automatique |
+| `max_items` | Nombre de feux listés | `6` |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |

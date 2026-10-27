@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.3.1";
+const CARD_VERSION = "3.4.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1867,6 +1867,94 @@ class MeteoSeismesCard extends MeteoBase {
   }
 }
 
+/* ------------------------------------------------------- carte Feux de forêt */
+
+const FEUX_DEFAULTS = { title: "Feux de forêt", radius: 0, max_items: 6, theme: "v2" };
+/** Intensité d'un feu (puissance radiative, intégration NASA FIRMS) : libellé et couleur de l'intégration. */
+const FIRE_BAND = { extreme: ["Extrême", "#ff0000"], high: ["Fort", "#ff4d00"], moderate: ["Modéré", "#ff7400"], low: ["Faible", "#ffc100"] };
+const FIRE_NONE = ["Inconnue", "#9e9e9e"];
+const FIRE_CONF = { low: "faible", nominal: "normale", high: "élevée" };
+/** Fumée : écart entre le vent et la direction du feu (0 = poussée droit vers vous, 180 = à l'opposé). */
+const smokeOf = (o) => (o === null || o === undefined ? null : o <= 45 ? ["Fumée vers vous", "#ee4a4a"] : o <= 90 ? ["Fumée de côté", "#ff8c33"] : ["Fumée qui s'éloigne de vous", "#5fcf8a"]);
+const SAT_FR = (s) => String(s || "").replace(/_/g, " ").replace(/\bNOAA(\d+)\b/i, "NOAA-$1").replace(/\bSNPP\b/i, "Suomi NPP");
+
+class MeteoFeuxCard extends MeteoBase {
+  static get defaults() {
+    return FEUX_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-feux-card-editor");
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, hass = this._hass, reg = hass.entities || {}, st = hass.states;
+    const ids = Object.keys(st);
+    // feux : entités geo_location de l'intégration NASA FIRMS ; capteurs : nombre, plus proche, puissance, prochain passage
+    const fires = ids.filter((id) => id.startsWith("geo_location.") && (st[id].attributes?.source === "nasa_firms" || reg[id]?.platform === "nasa_firms"));
+    const firms = ids.filter((id) => id.startsWith("sensor.") && reg[id]?.platform === "nasa_firms");
+    const tk = (k, re) => firms.find((id) => reg[id]?.translation_key === k) || firms.find((id) => re.test(id));
+    const s = { count: tk("hotspot_count", /hotspots?$|foyers?$/), near: tk("nearest_distance", /nearest_hotspot$|plus_proche$/), frp: tk("max_frp", /max_fire_radiative_power$|frp$/), pass: tk("satellite_observation", /satellite_observation$|passage/) };
+    const sig = `${c.theme}|${hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|` + [...fires, ...Object.values(s)].map((id) => `${id}=${st[id]?.state}`).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const now = Date.now();
+    const list = fires.map((id) => {
+      const a = st[id].attributes || {};
+      const band = FIRE_BAND[a.intensity] || FIRE_NONE;
+      const t = a.acquired ? new Date(a.acquired) : null;
+      return { id, dist: num(st[id].state), az: num(a.bearing), frp: num(a.frp_mw), band, conf: FIRE_CONF[a.confidence] || null, sats: Array.isArray(a.satellites) ? a.satellites : [],
+        t: t && !isNaN(t) ? t : null, place: a.place_name || null, placeKm: num(a.place_distance_km), wind: num(a.wind_speed), windDir: a.wind_direction, smoke: smokeOf(num(a.smoke_offset)) };
+    }).filter((f) => f.dist !== null).sort((a, b) => a.dist - b.dist);
+    const n = this._num(s.count) ?? list.length;
+    const radius = Number(c.radius) || Math.max(50, Math.ceil(Math.max(0, ...list.map((f) => f.dist)) * 1.1 / 10) * 10);
+    const km = (d) => `${fmt(d, d < 10 ? 1 : 0)} km`;
+    const head = this._head(c.icon || "mdi:fire", n ? "#ff4d00" : "#5fcf8a", c.title || "Feux de forêt",
+      !fires.length && !firms.length ? "" : n ? `${fmt(n)} feu${n > 1 ? "x" : ""} détecté${n > 1 ? "s" : ""} par satellite` : "Aucun feu détecté autour de chez vous");
+    if (!fires.length && !firms.length) {
+      this._card(head + `<div class="empty"><b>Aucune donnée de feux</b><span>Installez l'intégration NASA FIRMS Wildfire Monitor (HACS) avec une clé gratuite de la NASA, puis choisissez le rayon à surveiller.</span></div>`);
+      return;
+    }
+    // prochain passage d'un satellite au-dessus de chez vous (la prochaine occasion de voir un nouveau feu)
+    const pass = this._st(s.pass), passT = pass && !isNaN(Date.parse(pass.state)) ? new Date(pass.state) : null;
+    const passTxt = passT ? `${passT.toDateString() === new Date().toDateString() ? "aujourd'hui" : passT.toLocaleDateString("fr-FR", { weekday: "long" })} à ${hm(passT)}` : null;
+    const nearest = list[0], strongest = [...list].sort((a, b) => (b.frp ?? -1) - (a.frp ?? -1))[0];
+    const dots = list.slice(0, 60).reverse().map((f) => {
+      if (f.az === null) return "";
+      const [x, y] = pt(70, 70, 30 + Math.min(1, f.dist / radius) * 24, f.az);
+      return `<circle cx="${f2(x)}" cy="${f2(y)}" r="${f2(3 + Math.min(5, Math.log10(1 + (f.frp || 0))) * 1.3)}" fill="${f.band[1]}" class="qk${f === nearest ? " last" : ""}"/>`;
+    }).join("");
+    const rose = `<div class="gauge"${nearest ? ` data-entity="${esc(nearest.id)}"` : s.near ? ` data-entity="${esc(s.near)}"` : ""}><svg viewBox="0 0 140 140" role="img" aria-label="Feux autour de chez vous">
+      ${roseSvg(c.compass_image)}${dots}
+      ${nearest ? `<text x="70" y="74" class="big">${km(nearest.dist)}</text><text x="70" y="87" class="sm">${nearest.az !== null ? compass16(nearest.az) : "plus proche"}</text>`
+        : `<text x="70" y="74" class="big" style="fill:#5fcf8a">0</text><text x="70" y="87" class="sm">aucun feu</text>`}</svg>
+      <div class="g-l">${nearest ? `Plus proche${nearest.place ? ` · <b>près de ${esc(nearest.place)}</b>` : ""}` : `Rayon de ${fmt(radius)} km`}</div></div>`;
+    const tile = (id, icon, col, value, lab) => (value === null || value === undefined ? "" : `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${col}"></ha-icon>
+      <div class="k-v">${value}</div><div class="k-l">${lab}</div></div>`);
+    const tiles = `<div class="sky qk-t">
+      ${nearest?.smoke ? tile(nearest.id, "mdi:weather-windy", nearest.smoke[1], `${nearest.smoke[0]}${nearest.wind !== null ? ` · ${fmt(nearest.wind * 3.6)} km/h` : ""}`, "Vent au feu le plus proche") : ""}
+      ${tile(strongest?.id || s.frp, "mdi:heat-wave", strongest ? strongest.band[1] : "#8fa0b8", strongest?.frp !== null && strongest?.frp !== undefined ? `${fmt(strongest.frp, strongest.frp < 10 ? 1 : 0)} MW · ${strongest.band[0]}` : null, "Le plus intense")}
+      ${tile(s.pass, "mdi:satellite-variant", "#1d93e3", passTxt, `Prochain passage${pass?.attributes?.satellite_name || pass?.attributes?.satellite ? ` · ${esc(SAT_FR(pass.attributes.satellite_name || pass.attributes.satellite))}` : ""}`)}
+    </div>`;
+    const row = (f) => `<div class="qk-r" data-entity="${esc(f.id)}"><span class="qk-m" style="background:${f.band[1]}${/^#ff(0000|4d00)$/.test(f.band[1]) ? ";color:#fff" : ""}">${f.frp === null ? "?" : fmt(f.frp, f.frp < 10 ? 1 : 0)}</span>
+      <span class="qk-p"><b>${f.place ? `${f.placeKm !== null ? `${km(f.placeKm)} de ` : "Près de "}${esc(f.place)}` : "Feu détecté"}</b>
+        <small>${km(f.dist)}${f.az !== null ? ` ${compass16(f.az)}` : ""}${f.t ? ` · ${agoTxt(now - f.t)}` : ""}${f.conf ? ` · confiance ${f.conf}` : ""}${f.sats.length > 1 ? ` · ${f.sats.length} satellites` : ""}</small>
+        ${f.smoke ? `<small style="color:${f.smoke[1]}">${f.smoke[0]}${f.windDir ? ` · vent ${esc(String(f.windDir).replace(/W/g, "O"))}` : ""}</small>` : ""}</span>
+      <span class="qk-l">${f.band[0]}</span></div>`;
+    const max = Math.max(1, Number(c.max_items) || 6);
+    const body = head + `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
+      + (list.length ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map(row).join("")}</div>`
+        : `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`)
+      + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`;
+    this._card(body);
+  }
+}
+
 
 /* ---------------------------------------------------------------- bolides */
 
@@ -2722,6 +2810,22 @@ const SEISMES_LABELS = {
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
+const FEUX_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "radius", selector: { number: { min: 0, max: 500, step: 10, mode: "box", unit_of_measurement: "km" } } },
+  { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
+  { name: "compass_image", selector: { text: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const FEUX_LABELS = {
+  title: "Titre (Feux de forêt par défaut)",
+  radius: "Distance au bord de la boussole (0 = automatique)",
+  max_items: "Nombre de feux listés",
+  compass_image: "Image au centre de la boussole",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const BOLIDES_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "entity", selector: { entity: { domain: "sensor" } } },
@@ -2823,6 +2927,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
   define("meteo-seismes-card", MeteoSeismesCard);
   define("meteo-seismes-card-editor", makeEditor(SEISMES_SCHEMA, SEISMES_LABELS, SEISMES_DEFAULTS));
+  define("meteo-feux-card", MeteoFeuxCard);
+  define("meteo-feux-card-editor", makeEditor(FEUX_SCHEMA, FEUX_LABELS, FEUX_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
   define("meteo-bolides-card-editor", makeEditor(BOLIDES_SCHEMA, BOLIDES_LABELS, BOLIDES_DEFAULTS));
   window.customCards = window.customCards || [];
@@ -2833,6 +2939,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
     { type: "meteo-bolides-card", name: "Carte Météo : bolides", description: "Carte du monde interactive des bolides (grosses météorites) détectés par la NASA, avec le plus récent, le plus proche et le plus puissant." },
     { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, étoiles filantes, activité solaire et aurores, cycles et pollens." },
+    { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");
