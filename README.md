@@ -40,7 +40,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes**, **activité solaire et aurores** (indice Kp, éruptions) et **pollens** |
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
-| **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
+| **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude) et en liste, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
@@ -335,6 +335,7 @@ Il faut l'intégration **NASA FIRMS Wildfire Monitor** (HACS) : elle demande une
 - **Vent au feu le plus proche** : la fumée est-elle poussée vers vous, de côté, ou s'éloigne-t-elle ? Avec la vitesse du vent.
 - **Le plus intense** : sa puissance radiative (MW) et son intensité (faible, modéré, fort, extrême).
 - **Prochain passage** d'un satellite au-dessus de chez vous : la prochaine occasion de voir un nouveau feu.
+- **Carte interactive** : les feux sur un fond OpenStreetMap (villes et routes), à leur couleur d'intensité, avec un trait qui montre où part la fumée, votre maison et un bouton plein écran. Un clic sur un feu ouvre sa bulle (lieu, intensité, distance, heure, confiance, satellites, fumée) ; un clic sur un feu de la liste centre la carte dessus.
 - **Feux détectés** : la ville la plus proche du feu, la distance et la direction depuis chez vous, depuis quand, la confiance de la détection, le nombre de satellites et la fumée.
 
 Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou un brûlage agricole sont détectés aussi. L'intégration permet de les ignorer (zones à ignorer, sources de chaleur apprises).
@@ -344,6 +345,9 @@ Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou
 | `title` | Titre | `Feux de forêt` |
 | `radius` | Distance (km) qui place un feu au bord de la boussole | automatique |
 | `max_items` | Nombre de feux listés | `6` |
+| `show_map` | Carte interactive des feux | `true` |
+| `map_height` | Hauteur de la carte (px) | `300` |
+| `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenStreetMap |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |

@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.4.0-beta";
+const CARD_VERSION = "3.4.1-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1869,7 +1869,7 @@ class MeteoSeismesCard extends MeteoBase {
 
 /* ------------------------------------------------------- carte Feux de forêt */
 
-const FEUX_DEFAULTS = { title: "Feux de forêt", radius: 0, max_items: 6, theme: "v2" };
+const FEUX_DEFAULTS = { title: "Feux de forêt", radius: 0, max_items: 6, show_map: true, map_height: 300, theme: "v2" };
 /** Intensité d'un feu (puissance radiative, intégration NASA FIRMS) : libellé et couleur de l'intégration. */
 const FIRE_BAND = { extreme: ["Extrême", "#ff0000"], high: ["Fort", "#ff4d00"], moderate: ["Modéré", "#ff7400"], low: ["Faible", "#ffc100"] };
 const FIRE_NONE = ["Inconnue", "#9e9e9e"];
@@ -1904,11 +1904,13 @@ class MeteoFeuxCard extends MeteoBase {
     if (sig === this._sig) return;
     this._sig = sig;
     const now = Date.now();
+    const home = [num(c.latitude) ?? num(hass.config?.latitude), num(c.longitude) ?? num(hass.config?.longitude)];
+    if (home[0] === null || home[1] === null) home.length = 0;
     const list = fires.map((id) => {
       const a = st[id].attributes || {};
       const band = FIRE_BAND[a.intensity] || FIRE_NONE;
       const t = a.acquired ? new Date(a.acquired) : null;
-      return { id, dist: num(st[id].state), az: num(a.bearing), frp: num(a.frp_mw), band, conf: FIRE_CONF[a.confidence] || null, sats: Array.isArray(a.satellites) ? a.satellites : [],
+      return { id, lat: num(a.latitude), lon: num(a.longitude), windFrom: num(a.wind_bearing), dist: num(st[id].state), az: num(a.bearing), frp: num(a.frp_mw), band, conf: FIRE_CONF[a.confidence] || null, sats: Array.isArray(a.satellites) ? a.satellites : [],
         t: t && !isNaN(t) ? t : null, place: a.place_name || null, placeKm: num(a.place_distance_km), wind: num(a.wind_speed), windDir: a.wind_direction, smoke: smokeOf(num(a.smoke_offset)) };
     }).filter((f) => f.dist !== null).sort((a, b) => a.dist - b.dist);
     const n = this._num(s.count) ?? list.length;
@@ -1918,6 +1920,8 @@ class MeteoFeuxCard extends MeteoBase {
       !fires.length && !firms.length ? "" : n ? `${fmt(n)} feu${n > 1 ? "x" : ""} détecté${n > 1 ? "s" : ""} par satellite` : "Aucun feu détecté autour de chez vous");
     if (!fires.length && !firms.length) {
       this._card(head + `<div class="empty"><b>Aucune donnée de feux</b><span>Installez l'intégration NASA FIRMS Wildfire Monitor (HACS) avec une clé gratuite de la NASA, puis choisissez le rayon à surveiller.</span></div>`);
+      if (this._keep) this._keep.innerHTML = "";
+      this._map = null;
       return;
     }
     // prochain passage d'un satellite au-dessus de chez vous (la prochaine occasion de voir un nouveau feu)
@@ -1941,17 +1945,108 @@ class MeteoFeuxCard extends MeteoBase {
       ${tile(strongest?.id || s.frp, "mdi:heat-wave", strongest ? strongest.band[1] : "#8fa0b8", strongest?.frp !== null && strongest?.frp !== undefined ? `${fmt(strongest.frp, strongest.frp < 10 ? 1 : 0)} MW · ${strongest.band[0]}` : null, "Le plus intense")}
       ${tile(s.pass, "mdi:satellite-variant", "#1d93e3", passTxt, `Prochain passage${pass?.attributes?.satellite_name || pass?.attributes?.satellite ? ` · ${esc(SAT_FR(pass.attributes.satellite_name || pass.attributes.satellite))}` : ""}`)}
     </div>`;
-    const row = (f) => `<div class="qk-r" data-entity="${esc(f.id)}"><span class="qk-m" style="background:${f.band[1]}${/^#ff(0000|4d00)$/.test(f.band[1]) ? ";color:#fff" : ""}">${f.frp === null ? "?" : fmt(f.frp, f.frp < 10 ? 1 : 0)}</span>
+    const mapOn = c.show_map !== false && home.length === 2;
+    const row = (f, i) => `<div class="qk-r" ${mapOn ? `data-act="fly" data-i="${i}" role="button" tabindex="0"` : `data-entity="${esc(f.id)}"`}><span class="qk-m" style="background:${f.band[1]}${/^#ff(0000|4d00)$/.test(f.band[1]) ? ";color:#fff" : ""}">${f.frp === null ? "?" : fmt(f.frp, f.frp < 10 ? 1 : 0)}</span>
       <span class="qk-p"><b>${f.place ? `${f.placeKm !== null ? `${km(f.placeKm)} de ` : "Près de "}${esc(f.place)}` : "Feu détecté"}</b>
         <small>${km(f.dist)}${f.az !== null ? ` ${compass16(f.az)}` : ""}${f.t ? ` · ${agoTxt(now - f.t)}` : ""}${f.conf ? ` · confiance ${f.conf}` : ""}${f.sats.length > 1 ? ` · ${f.sats.length} satellites` : ""}</small>
         ${f.smoke ? `<small style="color:${f.smoke[1]}">${f.smoke[0]}${f.windDir ? ` · vent ${esc(String(f.windDir).replace(/W/g, "O"))}` : ""}</small>` : ""}</span>
       <span class="qk-l">${f.band[0]}</span></div>`;
     const max = Math.max(1, Number(c.max_items) || 6);
     const body = head + `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
-      + (list.length ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map(row).join("")}</div>`
+      + (list.length ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>`
         : `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`)
       + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`;
     this._card(body);
+    if (mapOn) this._mapUpdate(list, home, radius);
+    else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
+  }
+
+  _action(act, el) {
+    if (act === "fly") this._fly(Number(el.dataset.i));
+    else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); }
+  }
+
+  /** Carte interactive des feux (Leaflet, fond OpenStreetMap avec villes et routes), créée une fois dans la zone « keep ». */
+  async _mapUpdate(list, home, radius) {
+    const c = this._config;
+    if (!this._keep) return;
+    if (!this._keep.querySelector(".bm")) {
+      const base = c.leaflet_path || LEAFLET;
+      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><div class="bm" style="height:${Number(c.map_height) || 300}px">
+        <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
+        <div class="bm-leg">${Object.values(FIRE_BAND).map(([l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join("")}<span>trait : direction de la fumée</span></div>`;
+      this._map = null;
+      this._fitted = null;
+    }
+    let L;
+    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
+      const box = this._keep.querySelector(".bm-map");
+      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
+      return;
+    }
+    const el = this._keep.querySelector(".bm-map");
+    if (!el) return;
+    try {
+      const light = /light/.test(themeClass(c.theme, this._hass)) || (c.theme === "ha" && this._hass.themes?.darkMode === false);
+      if (!this._map || this._mapEl !== el) {
+        this._mapEl = el;
+        this._map = L.map(el, { minZoom: 3, zoomSnap: 0.5 }).setView(home, 8);
+        new ResizeObserver(() => this._map?.invalidateSize()).observe(el);
+        this._map.attributionControl.addAttribution('feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>');
+        this._layer = L.layerGroup().addTo(this._map);
+        this._tiles = null;
+      }
+      // fond OpenStreetMap avec villes et routes (assombri par un filtre en thème sombre), ou tiles_url
+      el.classList.toggle("dark", !light && !c.tiles_url);
+      if (!this._tiles) {
+        this._tiles = L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(this._map);
+      }
+      this._layer.clearLayers();
+      this._markers = [];
+      const km = (d) => `${fmt(d, d < 10 ? 1 : 0)} km`;
+      const dt = (d) => d.toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      for (const f of [...list].reverse()) {
+        if (f.lat === null || f.lon === null) continue;
+        const col = f.band[1];
+        // fumée : vers où le vent pousse (le vent vient de wind_bearing), sur 12 km
+        if (f.windFrom !== null) {
+          const to = (f.windFrom + 180) * RAD, d = 12 / 111;
+          L.polyline([[f.lat, f.lon], [f.lat + d * Math.cos(to), f.lon + (d * Math.sin(to)) / Math.cos(f.lat * RAD)]], { color: "#8fa0b8", weight: 2.5, dashArray: "4 4", opacity: 0.9 }).addTo(this._layer);
+        }
+        const m = L.circleMarker([f.lat, f.lon], { radius: 5 + Math.min(6, Math.log10(1 + (f.frp || 0)) * 2.2), color: "#3e1200", weight: 1, fillColor: col, fillOpacity: 0.9 })
+          .bindPopup(`<div class="bp"><b>${f.place ? `${f.placeKm !== null ? `${km(f.placeKm)} de ` : "Près de "}${esc(f.place)}` : "Feu détecté"}</b>
+            <span>Intensité <b>${f.band[0]}</b>${f.frp !== null ? ` · ${fmt(f.frp, f.frp < 10 ? 1 : 0)} MW` : ""}</span>
+            ${f.dist !== null ? `<span>À <b>${km(f.dist)}</b>${f.az !== null ? ` ${compass16(f.az)}` : ""} de chez vous</span>` : ""}
+            ${f.t ? `<span>Détecté ${dt(f.t)}</span>` : ""}${f.conf ? `<span>Confiance <b>${f.conf}</b>${f.sats.length ? ` · ${f.sats.map(SAT_FR).join(", ")}` : ""}</span>` : ""}
+            ${f.smoke ? `<span style="color:${f.smoke[1]}">${f.smoke[0]}${f.wind !== null ? ` · vent ${fmt(f.wind * 3.6)} km/h` : ""}</span>` : ""}</div>`,
+          { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
+        m.addTo(this._layer);
+        this._markers[list.indexOf(f)] = m;
+      }
+      L.circleMarker(home, { radius: 6, color: "#fff", weight: 2, fillColor: "#1d93e3", fillOpacity: 1 }).bindTooltip("Chez vous").addTo(this._layer);
+      if (Number(c.radius)) L.circle(home, { radius: Number(c.radius) * 1000, color: "#1d93e3", weight: 1, dashArray: "6 6", fill: false }).addTo(this._layer);
+      // cadrage : maison et feux, une seule fois par liste de feux (le zoom choisi par l'utilisateur est gardé ensuite)
+      const key = list.map((f) => f.id).join();
+      if (this._fitted !== key) {
+        this._fitted = key;
+        const pts = [home, ...list.filter((f) => f.lat !== null).map((f) => [f.lat, f.lon])];
+        if (pts.length > 1) this._map.fitBounds(pts, { padding: [24, 24], maxZoom: 11 });
+        else this._map.setView(home, 8);
+      }
+    } catch (e) {
+      console.error("Carte Météo (feux) :", e);
+      this._map = null;
+      el.innerHTML = `<div class="empty"><b>Erreur de la carte</b><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  _fly(i) {
+    const m = this._markers?.[i];
+    if (!m || !this._map) return;
+    this._keep?.querySelector(".bm")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    this._map.flyTo(m.getLatLng(), Math.max(this._map.getZoom(), 10), { duration: 0.8 });
+    setTimeout(() => m.openPopup(), 850);
   }
 }
 
@@ -2814,6 +2909,8 @@ const FEUX_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "radius", selector: { number: { min: 0, max: 500, step: 10, mode: "box", unit_of_measurement: "km" } } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
+  { name: "show_map", selector: { boolean: {} } },
+  { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
   { name: "compass_image", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
@@ -2822,6 +2919,8 @@ const FEUX_LABELS = {
   title: "Titre (Feux de forêt par défaut)",
   radius: "Distance au bord de la boussole (0 = automatique)",
   max_items: "Nombre de feux listés",
+  show_map: "Carte interactive des feux",
+  map_height: "Hauteur de la carte",
   compass_image: "Image au centre de la boussole",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
