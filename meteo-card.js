@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.4.2-beta";
+const CARD_VERSION = "3.4.3-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1991,7 +1991,12 @@ class MeteoFeuxCard extends MeteoBase {
       if (!this._map || this._mapEl !== el) {
         this._mapEl = el;
         this._map = L.map(el, { minZoom: 3, zoomSnap: 0.5 }).setView(home, 8);
-        new ResizeObserver(() => this._map?.invalidateSize()).observe(el);
+        // carte créée avant d'avoir sa taille (éditeur, onglet caché) : le cadrage est refait dès qu'elle en a une
+        new ResizeObserver(() => {
+          if (!this._map) return;
+          this._map.invalidateSize();
+          if (el.clientWidth && el.clientHeight && this._view && !this._viewed) { this._viewed = true; this._view(); }
+        }).observe(el);
         this._map.attributionControl.addAttribution('feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>');
         this._layer = L.layerGroup().addTo(this._map);
         this._tiles = null;
@@ -2040,8 +2045,9 @@ class MeteoFeuxCard extends MeteoBase {
       if (this._fitted !== key) {
         this._fitted = key;
         const pts = [home, ...list.filter((f) => f.lat !== null).map((f) => [f.lat, f.lon])];
-        if (pts.length > 1) this._map.fitBounds(pts, { padding: [24, 24], maxZoom: 11 });
-        else this._map.setView(home, 8);
+        this._view = () => (pts.length > 1 ? this._map.fitBounds(pts, { padding: [24, 24], maxZoom: 11 }) : this._map.setView(home, 9));
+        this._viewed = !!(el.clientWidth && el.clientHeight);
+        if (this._viewed) this._view();
       }
     } catch (e) {
       console.error("Carte Météo (feux) :", e);
