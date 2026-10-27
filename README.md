@@ -72,9 +72,9 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- | --- |
 | ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) | ![Séismes](images/meteo-seismes.png) |
 
-| Feux de forêt |
-| --- |
-| ![Feux de forêt](images/meteo-feux.png) |
+| Feux de forêt | Carte interactive des feux (fond flouté) |
+| --- | --- |
+| ![Feux de forêt](images/meteo-feux.png) | ![Carte interactive des feux](images/meteo-feux-carte.png) |
 
 *Aperçus avec des villes et des données fictives.*
 
