@@ -73,15 +73,15 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- | --- |
 | ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) | ![Séismes](images/meteo-seismes.png) |
 
-| Crues et rivières | | |
-| --- | --- | --- |
-| ![Crues et rivières](images/meteo-crues.png) | | |
+| Crues et rivières (démo, crue fictive) | Crues et rivières, mesures réelles (noms et lieux remplacés, carte floutée) |
+| --- | --- |
+| ![Crues et rivières](images/meteo-crues.png) | ![Crues et rivières, mesures réelles](images/meteo-crues-reelle.png) |
 
 | Feux de forêt | Carte interactive des feux (fond flouté) | Carte interactive des séismes |
 | --- | --- | --- |
 | ![Feux de forêt](images/meteo-feux.png) | ![Carte interactive des feux](images/meteo-feux-carte.png) | ![Carte interactive des séismes](images/meteo-seismes-carte.png) |
 
-*Aperçus avec des villes et des données fictives, sauf la carte interactive des feux : capture réelle, fond flouté pour qu'aucun lieu ne soit lisible.*
+*Aperçus avec des villes et des données fictives, sauf la carte interactive des feux et les mesures réelles des rivières : captures réelles, noms remplacés et fond de carte flouté pour qu'aucun lieu ne soit lisible.*
 
 ## Remplacer une vue météo « à rallonge »
 
