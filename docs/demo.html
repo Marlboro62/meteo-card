@@ -126,6 +126,11 @@ function hassFor() {
     add(`sensor.feux_exemple_${k}`, v, k === "satellite_observation" ? { satellite: "VIIRS_NOAA21", satellite_name: "NOAA-21" } : {}, "nasa_firms");
     entities[`sensor.feux_exemple_${k}`].translation_key = k;
   }
+  // EcoWatt (format MyElectricalData) : pluie = hiver tendu, beau temps = production décarbonée
+  const ew = rainy ? [[1, "1111111122211111111222111".slice(0, 24)], [2, "111111112223331112222111"], [1, "111111111111111111111111"]]
+    : [[1, "000000111111000001111111"], [1, "000000011111100001111111"], [1, "000000011111110000111111"]];
+  ew.forEach(([lvl, hs], n) => add(`sensor.myelectricaldata_ecowatt_j${n}`, lvl, { date: new Date(Date.now() + n * DAY).toISOString().slice(0, 10),
+    hourly_values: hs.split("").map(Number), message: n === 1 && rainy ? "Consommation élevée attendue demain matin et en fin de journée : modérez vos usages." : "" }, "mqtt"));
   add("sensor.salon_temperature", 21.4, { friendly_name: "Salon" });
   add("sensor.salon_humidity", 52, {});
   add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
@@ -236,6 +241,7 @@ const cards = {
   astro: document.createElement("meteo-astro-card"),
   air: document.createElement("meteo-air-card"),
   eclairs: document.createElement("meteo-eclairs-card"),
+  ecowatt: document.createElement("meteo-ecowatt-card"),
   crues: document.createElement("meteo-crues-card"),
   feux: document.createElement("meteo-feux-card"),
   seismes: document.createElement("meteo-seismes-card"),
@@ -251,6 +257,7 @@ function apply() {
   cards.astro.setConfig({ theme: t, ...PHOTOS() });
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
+  cards.ecowatt.setConfig({ theme: t });
   cards.crues.setConfig({ theme: t });
   cards.feux.setConfig({ theme: t });
   cards.seismes.setConfig({ theme: t });

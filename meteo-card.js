@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.6.0";
+const CARD_VERSION = "3.7.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2343,6 +2343,122 @@ class MeteoCruesCard extends MeteoBase {
   }
 }
 
+/* ---------------------------------------------------------- carte EcoWatt */
+
+const ECOWATT_DEFAULTS = { title: "EcoWatt", show_map: true, show_home: false, theme: "v2" };
+/** Signal horaire de RTE : 0 production décarbonée, 1 pas d'alerte, 2 système tendu, 3 coupures possibles. */
+const EW_HOUR = [["Production décarbonée", "#2fbf8f"], ["Pas d'alerte", "#5fcf8a"], ["Système électrique tendu", "#ff8c33"], ["Coupures possibles", "#ee4a4a"]];
+const EW_DAY = { 1: ["Pas d'alerte", "#5fcf8a", "mdi:check-circle"], 2: ["Système électrique tendu", "#ff8c33", "mdi:alert"], 3: ["Coupures possibles", "#ee4a4a", "mdi:alert-octagon"] };
+/** Contour simplifié de la France métropolitaine et de la Corse (longitude, latitude). */
+const FRANCE = [[[2.54, 51.09], [3.15, 50.79], [4.23, 49.96], [4.87, 50.15], [5.47, 49.5], [6.36, 49.46], [7.6, 49.08], [8.23, 48.97], [7.6, 48.1], [7.59, 47.58],
+  [6.95, 47.45], [6.1, 46.6], [6.13, 46.14], [6.79, 45.78], [7.04, 45.0], [6.63, 44.37], [7.53, 43.78], [6.6, 43.15], [5.0, 43.35], [4.2, 43.45], [3.1, 43.0],
+  [3.17, 42.43], [1.7, 42.5], [0.0, 42.7], [-1.78, 43.37], [-1.25, 44.66], [-1.16, 46.0], [-2.2, 47.12], [-3.35, 47.7], [-4.4, 47.95], [-4.79, 48.38], [-3.0, 48.83],
+  [-1.6, 48.65], [-1.94, 49.72], [-1.26, 49.7], [0.1, 49.48], [1.4, 50.07], [1.6, 50.9]], [[9.4, 43.0], [9.56, 42.15], [9.2, 41.37], [8.6, 41.9], [8.7, 42.6]]];
+const franceSvg = (fill, home) => {
+  const k = Math.cos(46 * RAD), X = (lon) => (lon + 5.2) * k * 9.2, Y = (lat) => (51.4 - lat) * 9.2;
+  const path = FRANCE.map((ring) => `M${ring.map(([lo, la]) => `${f2(X(lo))} ${f2(Y(la))}`).join("L")}Z`).join("");
+  const dot = home ? `<circle cx="${f2(X(home[1]))}" cy="${f2(Y(home[0]))}" r="3.2" class="ew-home"/>` : "";
+  return `<svg viewBox="0 0 108 96" class="ew-fr" role="img" aria-label="France"><path d="${path}" fill="${fill}"/>${dot}</svg>`;
+};
+
+class MeteoEcowattCard extends MeteoBase {
+  static get defaults() {
+    return ECOWATT_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-ecowatt-card-editor");
+  }
+
+  getCardSize() {
+    return 5;
+  }
+
+  /** Jours EcoWatt : capteurs ecowatt_j0, j1, j2 de MyElectricalData (heure par heure), sinon RTE EcoWatt (HACS) au jour. */
+  _days() {
+    const st = this._hass.states, ids = Object.keys(st);
+    const days = [];
+    for (const n of [0, 1, 2]) {
+      const id = (this._config.entities || [])[n] || ids.find((x) => new RegExp(`^sensor\\..*ecowatt_j${n}$`).test(x));
+      const s = st[id];
+      if (!s) continue;
+      const a = s.attributes || {};
+      let hours = Array.isArray(a.hourly_values) ? a.hourly_values.map(num) : null;
+      if (!hours && a.forecast && typeof a.forecast === "object") {
+        hours = Array(24).fill(null);
+        for (const [k, v] of Object.entries(a.forecast)) { const h = parseInt(k, 10); if (h >= 0 && h < 24) hours[h] = num(v); }
+      }
+      const date = a.date ? new Date(`${a.date}T00:00`) : new Date(Date.now() + n * DAYMS);
+      days.push({ n, id, level: num(s.state), hours, message: a.message || "", date });
+    }
+    // intégration RTE EcoWatt (HACS) : niveau par jour (level_code), sans détail horaire
+    if (!days.length) {
+      for (const id of ids.filter((x) => x.startsWith("sensor.") && /ecowatt/.test(x) && st[x].attributes?.level_code !== undefined && !/hours?|heure|now|maintenant/.test(x))) {
+        const m = /(\d+)_?days?|j(\d)/.exec(id), n = m ? Number(m[1] ?? m[2]) : 0;
+        if (n <= 2 && !days.some((d) => d.n === n)) days.push({ n, id, level: num(st[id].attributes.level_code), hours: null, message: "", date: new Date(Date.now() + n * DAYMS) });
+      }
+      days.sort((a, b) => a.n - b.n);
+    }
+    return days;
+  }
+
+  _action(act, el) {
+    if (act === "day") { this._day = Number(el.dataset.n); this._hour = null; }
+    else if (act === "hour") { this._day = Number(el.dataset.n); this._hour = Number(el.dataset.h); }
+    this._sig = null;
+    this._render();
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, days = this._days();
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${new Date().getHours()}|${this._day}|${this._hour}|` + days.map((d) => `${d.id}=${d.level}:${(d.hours || []).join("")}`).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const now = new Date();
+    const today = days.find((d) => d.n === 0);
+    const head = this._head(c.icon || "mdi:transmission-tower", today ? (EW_DAY[today.level] || EW_DAY[1])[1] : "#1d93e3", c.title || "EcoWatt",
+      today ? `Signal de RTE · aujourd'hui : ${(EW_DAY[today.level] || ["Inconnu"])[0].toLowerCase()}` : "");
+    if (!days.length) {
+      this._card(head + `<div class="empty"><b>Aucun signal EcoWatt</b><span>Activez l'export Home Assistant de MyElectricalData (capteurs ecowatt_j0 à j2), ou installez l'intégration RTE EcoWatt (HACS).</span></div>`);
+      return;
+    }
+    const sel = days.find((d) => d.n === this._day) || today || days[0];
+    const dayName = (d) => (d.n === 0 ? "Aujourd'hui" : d.n === 1 ? "Demain" : d.date.toLocaleDateString("fr-FR", { weekday: "long" }).replace(/^./, (x) => x.toUpperCase()));
+    // frise : une case par heure, l'heure en cours entourée ; clic = détail de l'heure
+    const rows = days.map((d) => {
+      const [lab, col, icon] = EW_DAY[d.level] || ["Inconnu", "#8fa0b8", "mdi:help-circle"];
+      const cells = d.hours ? d.hours.map((v, h) => {
+        const t = EW_HOUR[v] || [null, "var(--med-line)"];
+        const cur = d.n === 0 && h === now.getHours(), on = sel === d && this._hour === h;
+        return `<button class="ew-h${cur ? " now" : ""}${on ? " on" : ""}" style="background:${t[1]}" data-act="hour" data-n="${d.n}" data-h="${h}" title="${h} h – ${h + 1} h : ${esc(t[0] || "pas de valeur")}"></button>`;
+      }).join("") : "";
+      return `<div class="ew-d${sel === d ? " sel" : ""}"><button class="ew-dl" data-act="day" data-n="${d.n}"><ha-icon icon="${icon}" style="color:${col}"></ha-icon>
+        <span><b>${dayName(d)}</b><small>${d.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</small></span><em style="color:${col}">${lab}</em></button>
+        ${cells ? `<div class="ew-hs">${cells}</div>` : ""}</div>`;
+    }).join("");
+    const ticks = days.some((d) => d.hours) ? `<div class="ew-tk"><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>` : "";
+    // détail : heure choisie, sinon heure en cours (aujourd'hui), sinon résumé du jour
+    let detail;
+    if (sel.hours && this._hour !== null && this._hour !== undefined) {
+      const t = EW_HOUR[sel.hours[this._hour]] || ["Pas de valeur", "#8fa0b8"];
+      detail = `${dayName(sel)}, ${this._hour} h – ${this._hour + 1} h : <b style="color:${t[1]}">${t[0]}</b>`;
+    } else if (sel.hours) {
+      const count = (v) => sel.hours.filter((x) => x === v).length;
+      const worst = Math.max(...sel.hours.filter((x) => x !== null));
+      const hot = sel.hours.map((v, h) => (v === worst && worst >= 2 ? h : null)).filter((h) => h !== null);
+      detail = worst >= 2 ? `<b style="color:${EW_HOUR[worst][1]}">${EW_HOUR[worst][0]}</b> de ${hot[0]} h à ${hot[hot.length - 1] + 1} h · réduisez la consommation sur ces heures`
+        : `${count(0) ? `<b style="color:${EW_HOUR[0][1]}">${count(0)} h de production décarbonée</b> · ` : ""}aucune tension sur le réseau`;
+    } else detail = (EW_DAY[sel.level] || ["Inconnu"])[0];
+    const map = c.show_map !== false ? `<div class="ew-map" data-entity="${esc(sel.id)}">${franceSvg((EW_DAY[sel.level] || ["", "#8fa0b8"])[1], c.show_home !== true ? null : [num(this._hass.config?.latitude), num(this._hass.config?.longitude)].every((v) => v !== null) ? [this._hass.config.latitude, this._hass.config.longitude] : null)}
+      <div class="ew-mt"><b>${dayName(sel)}</b><span>${(EW_DAY[sel.level] || ["Inconnu"])[0]}</span><small>Signal national, le même pour toute la France</small></div></div>` : "";
+    const legend = `<div class="bm-leg ew-lg">${EW_HOUR.map(([l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join("")}</div>`;
+    const msg = sel.message && !/^\s*$/.test(sel.message) ? `<div class="fc-empty ew-msg">${esc(sel.message)}</div>` : "";
+    this._card(head + `<div class="ew-top">${map}<div class="ew-dt">${detail}</div></div>` + `<div class="ew-ds">${rows}</div>${ticks}${legend}${msg}`
+      + `<div class="qk-src">Source : RTE EcoWatt${days[0]?.hours ? " (MyElectricalData)" : ""}. Cliquez sur un jour ou une heure.</div>`);
+  }
+}
+
 
 /* ---------------------------------------------------------------- bolides */
 
@@ -2976,6 +3092,25 @@ a.qk-r:hover { border-color: var(--med-blue); }
 .rv-h { display: flex; flex-direction: column; align-items: flex-end; text-align: right; } .rv-h b { font-size: .95rem; }
 .rv-h small { font-size: .7rem; color: var(--med-muted); display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 .rv-h small ha-icon { --mdc-icon-size: 13px; }
+.ew-top { display: flex; gap: 10px; align-items: center; margin: 8px 12px 0; flex-wrap: wrap; }
+.ew-map { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; flex: 1 1 220px; }
+.ew-fr { width: 92px; height: 82px; flex: none; } .ew-fr path { stroke: rgba(0, 0, 0, .35); stroke-width: .6; transition: fill .3s; }
+.ew-home { fill: #1d93e3; stroke: #fff; stroke-width: 1; }
+.ew-mt { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .ew-mt b { font-size: .9rem; } .ew-mt span { font-size: .86rem; font-weight: 600; }
+.ew-mt small { font-size: .68rem; color: var(--med-muted); }
+.ew-dt { flex: 1 1 200px; font-size: .8rem; color: var(--med-muted); padding: 4px 2px; }
+.ew-ds { display: grid; gap: 6px; margin: 10px 12px 0; }
+.ew-d { padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
+.ew-d.sel { border-color: var(--med-blue); }
+.ew-dl { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; }
+.ew-dl ha-icon { --mdc-icon-size: 20px; } .ew-dl span { display: flex; flex-direction: column; flex: 1; } .ew-dl b { font-size: .84rem; }
+.ew-dl small { font-size: .68rem; color: var(--med-muted); } .ew-dl em { font-style: normal; font-size: .76rem; font-weight: 700; text-align: right; }
+.ew-hs { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 8px; }
+.ew-h { all: unset; cursor: pointer; height: 16px; border-radius: 3px; box-sizing: border-box; }
+.ew-h.now { box-shadow: 0 0 0 2px var(--med-text); } .ew-h.on { box-shadow: 0 0 0 2px var(--med-blue); }
+.ew-h:focus-visible { outline: 2px solid var(--med-blue); }
+.ew-tk { display: flex; justify-content: space-between; margin: 3px 24px 0; font-size: .62rem; color: var(--med-muted); }
+.ew-lg { margin: 8px 14px 0; } .ew-msg { margin-top: 8px; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -3259,6 +3394,22 @@ const CRUES_LABELS = {
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
+const ECOWATT_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "entities", selector: { entity: { domain: "sensor", multiple: true } } },
+  { name: "show_map", selector: { boolean: {} } },
+  { name: "show_home", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const ECOWATT_LABELS = {
+  title: "Titre (EcoWatt par défaut)",
+  entities: "Capteurs d'aujourd'hui, demain et après-demain (vide = ecowatt_j0, j1, j2 détectés)",
+  show_map: "Carte de France à la couleur du jour choisi",
+  show_home: "Votre maison sur la carte de France",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const BOLIDES_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "entity", selector: { entity: { domain: "sensor" } } },
@@ -3360,6 +3511,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
   define("meteo-seismes-card", MeteoSeismesCard);
   define("meteo-seismes-card-editor", makeEditor(SEISMES_SCHEMA, SEISMES_LABELS, SEISMES_DEFAULTS));
+  define("meteo-ecowatt-card", MeteoEcowattCard);
+  define("meteo-ecowatt-card-editor", makeEditor(ECOWATT_SCHEMA, ECOWATT_LABELS, ECOWATT_DEFAULTS));
   define("meteo-crues-card", MeteoCruesCard);
   define("meteo-crues-card-editor", makeEditor(CRUES_SCHEMA, CRUES_LABELS, CRUES_DEFAULTS));
   define("meteo-feux-card", MeteoFeuxCard);
@@ -3374,6 +3527,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
     { type: "meteo-bolides-card", name: "Carte Météo : bolides", description: "Carte du monde interactive des bolides (grosses météorites) détectés par la NASA, avec le plus récent, le plus proche et le plus puissant." },
     { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, étoiles filantes, activité solaire et aurores, cycles et pollens." },
+    { type: "meteo-ecowatt-card", name: "Carte Météo : EcoWatt", description: "Signal EcoWatt de RTE (risque de coupures) aujourd'hui, demain et après-demain, heure par heure, avec la France à la couleur du jour." },
     { type: "meteo-crues-card", name: "Carte Météo : crues et rivières", description: "Hauteur et débit des rivières proches avec leur tendance sur 24 h, vigilance crues, carte interactive des stations (Vigicrues, Hub'Eau)." },
     { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
