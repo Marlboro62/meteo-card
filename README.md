@@ -329,7 +329,32 @@ Pour le total du mois, créez un compteur **Paramètres › Appareils et service
 type: custom:meteo-feux-card
 ```
 
-Il faut l'intégration **NASA FIRMS Wildfire Monitor** (HACS) : elle demande une clé gratuite de la NASA, le lieu à surveiller et le rayon (500 km au plus), puis crée une entité par feu. La carte les trouve toute seule.
+Cette carte a besoin de l'intégration **NASA FIRMS Wildfire Monitor** et d'une **clé de la NASA, gratuite et obligatoire** (la carte ne peut pas lire les feux sans elle). L'intégration crée une entité par feu ; la carte les trouve toute seule.
+
+**Installation**
+
+1. **Clé gratuite (MAP_KEY)** : sur [firms.modaps.eosdis.nasa.gov/api/map_key](https://firms.modaps.eosdis.nasa.gov/api/map_key/), cliquez sur **Get MAP_KEY** et saisissez votre adresse e-mail. La clé (32 caractères) arrive par e-mail en quelques minutes. Elle est personnelle : ne la publiez pas ; l'intégration la garde cachée.
+2. **Intégration** : dans HACS, cherchez **NASA FIRMS Wildfire Monitor** ([bangboomben/ha-nasa-firms](https://github.com/bangboomben/ha-nasa-firms)), installez-la, puis redémarrez Home Assistant.
+3. **Configuration** : **Paramètres › Appareils et services › Ajouter une intégration › NASA FIRMS**. Collez la clé, placez le point sur votre maison et choisissez le rayon (500 km au plus).
+4. **Satellites et filtres** (bouton **Configurer** de l'intégration) :
+
+| Réglage | Conseil |
+| --- | --- |
+| VIIRS · NOAA-20 (JPSS-1) | **Coché** |
+| VIIRS · NOAA-21 (JPSS-2) | **Coché** |
+| VIIRS · Suomi NPP | **Décoché** : ce satellite cesse d'envoyer ses données le 2 novembre 2026 (annonce de la NASA) |
+| MODIS · Terra/Aqua | **Coché** |
+| Detection window | **Last 24 hours** pour les feux en cours (7 jours pour en voir davantage) |
+| Minimum confidence | **Nominal** : écarte la plupart des fausses détections (« Any » garde aussi les douteuses) |
+| Minimum fire radiative power | **0** : la carte affiche déjà l'intensité de chaque feu |
+| Fires with a wind reading | **3** : vent et direction de la fumée pour les 3 feux les plus proches |
+| Hide learned persistent heat sources | **Activé** : masque les usines et torchères qui chauffent tous les jours (après deux mois d'apprentissage) |
+
+> Le nom de l'intégration contient les coordonnées de votre maison (« FIRMS latitude/longitude ») : renommez-la avant de publier une capture.
+
+5. Ajoutez la carte « Carte Météo : feux de forêt », ou en YAML `type: custom:meteo-feux-card`.
+
+**Ce qu'elle affiche**
 
 - **Boussole** : chaque feu à sa direction, plus loin du centre quand il est loin, plus gros et plus rouge quand il est intense ; au centre, la distance et la direction du plus proche.
 - **Vent au feu le plus proche** : la fumée est-elle poussée vers vous, de côté, ou s'éloigne-t-elle ? Avec la vitesse du vent.
