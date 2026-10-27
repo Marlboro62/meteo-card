@@ -37,9 +37,10 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | --- | --- | --- |
 | **Météo** | `custom:meteo-card` | La météo du jour, une ou plusieurs villes en onglets : conditions, ressenti, vent, humidité, pression, détails et **vigilance Météo-France**, **prévisions par heure et par jour**, saison, lune et zodiaque |
 | **Vent et ciel** | `custom:meteo-ciel-card` | **Baromètre**, **boussole du vent**, températures de vos capteurs, **pluie du jour**, **indice UV** et carte **Windy** |
-| **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes** et **pollens** |
+| **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes**, **activité solaire et aurores** (indice Kp, éruptions) et **pollens** |
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
+| **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude) et en liste, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
 Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir. Les **icônes météo animées** sont celles de la carte Météo-France de HACF (amCharts).
@@ -66,9 +67,9 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- |
 | ![Soleil et lune avec photos](images/meteo-astro-photos.png) | ![Phases avec photos](images/meteo-phases-photos.png) |
 
-| Mode WarC0zes (`layout: warc0zes`, `halo: true`) | Bolides (carte interactive) |
-| --- | --- |
-| ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) |
+| Mode WarC0zes (`layout: warc0zes`, `halo: true`) | Bolides (carte interactive) | Séismes |
+| --- | --- | --- |
+| ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) | ![Séismes](images/meteo-seismes.png) |
 
 *Aperçus avec des villes et des données fictives.*
 
@@ -127,9 +128,12 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | **Blitzortung.org Lightning Detector** | HACS : [mrk-its/homeassistant-blitzortung](https://github.com/mrk-its/homeassistant-blitzortung) | Éclairs | Compteur, distance et direction des éclairs autour de chez vous |
 | **Pollens** ou **Pollen Information** | HACS : [chris60600/pollens-home-assistant](https://github.com/chris60600/pollens-home-assistant), ou Pollen Information | Soleil et lune | Risque d'allergie et niveau par plante |
 | **REST** (intégration officielle, en YAML) | Fichier `packages/…yaml`, voir la carte Bolides | Bolides | Liste des bolides de l'API Fireball de la NASA, publique et sans clé |
+| **NOAA Space Weather** (facultatif) | HACS : [tcarwash/home-assistant_noaa-space-weather](https://github.com/tcarwash/home-assistant_noaa-space-weather) | Soleil et lune | Indice Kp, flux solaire, taches solaires, probabilité d'éruption (sans elle, la carte lit directement les données publiques de la NOAA) |
+| **Aurora** (facultatif) | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Soleil et lune | Probabilité d'aurore à votre position (modèle OVATION de la NOAA) |
+| **USGS Earthquake Hazards Program** ou **GDACS** (facultatif) | Intégrations officielles | Séismes | Séismes autour de chez vous (sans elles, la carte lit directement les flux publics de l'EMSC et de l'USGS) |
 | **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
 
-Le soleil, la lune et la carte **Windy** n'ont besoin d'aucune intégration : ils utilisent les coordonnées de Home Assistant.
+Le soleil, la lune, les étoiles filantes et la carte **Windy** n'ont besoin d'aucune intégration : ils utilisent les coordonnées de Home Assistant. L'activité solaire et les séismes non plus : sans intégration, le navigateur lit les données publiques de la NOAA, de l'EMSC et de l'USGS.
 
 ## Carte Météo
 
@@ -242,6 +246,7 @@ type: custom:meteo-astro-card
 - **Cycles** : lune, soleil (au-dessus ou sous l'horizon), saison et zodiaque.
 - **Phases de la lune** : un clic sur la lune ouvre une fenêtre avec les huit phases autour de la Terre, la phase du jour entourée, l'âge de la lune et les dates de la prochaine pleine lune et de la prochaine nouvelle lune.
 - **Étoiles filantes** : prochaine grande pluie (Perséides, Géminides, Quadrantides…) avec la nuit du pic, le nombre d'étoiles filantes attendu par heure chez vous, la meilleure heure (radiant le plus haut), la gêne de la lune ce soir-là, et les pluies en cours. Calculé d'après les coordonnées de Home Assistant, sans intégration.
+- **Activité solaire** : **indice Kp** du moment sur une échelle de 0 à 9 (calme, agité, tempête G1 à G5), **prévision sur 3 jours** avec le Kp le plus fort et son heure, probabilité d'**éruption solaire** de classe M et X, flux et taches solaires avec l'intégration NOAA Space Weather, et chances de voir une **aurore depuis chez vous** : probabilité de l'intégration Aurora si elle est installée, sinon le Kp nécessaire à votre latitude (environ 7 dans le nord de la France, 8 à 9 dans le sud). Données de la NOAA, lues toutes les 15 minutes.
 - **Pollens** : niveau du département, barre de risque et une tuile par plante en circulation, avec les intégrations [Pollens](https://github.com/chris60600/pollens-home-assistant) ou Pollen Information (détectées, noms des plantes en français) ou vos propres capteurs.
 
 | Option | Rôle | Défaut |
@@ -255,7 +260,8 @@ type: custom:meteo-astro-card
 | `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.png`), à la place de la Terre dessinée (voir [Licence](#licence)) | — |
 | `compass_image` | Image au centre de la boussole | — |
 | `latitude`, `longitude` | Lieu des calculs | coordonnées de Home Assistant |
-| `show_sun`, `show_moon`, `show_cycles`, `show_meteors`, `show_pollens` | Afficher chaque partie | `true` |
+| `kp_entity`, `aurora_entity` | Capteurs d'indice Kp et de probabilité d'aurore à utiliser à la place de ceux détectés | détectés |
+| `show_sun`, `show_moon`, `show_cycles`, `show_meteors`, `show_space`, `show_pollens` | Afficher chaque partie | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
@@ -307,6 +313,34 @@ Pour le total du mois, créez un compteur **Paramètres › Appareils et service
 | `month_counter` | Éclairs du mois (compteur `utility_meter`) | détecté |
 | `counter_max` | Maximum de la jauge | `100` |
 | `distance_max` | Distance (km) qui place l'éclair au bord de la boussole | `100` |
+| `compass_image` | Image au centre de la boussole | — |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Séismes
+
+```yaml
+type: custom:meteo-seismes-card
+radius: 1000          # km autour de chez vous
+```
+
+- **Boussole** : chaque séisme proche est placé dans sa direction, plus loin du centre quand il est loin et plus gros quand il est fort ; au centre, la magnitude du dernier et depuis quand.
+- **Le plus proche, le plus fort, dans le monde** : trois tuiles avec la distance et la magnitude.
+- **Autour de chez vous** : les derniers séismes du rayon choisi, avec la magnitude en couleur (vert sous 3, jaune, orange, rouge, violet à partir de 6), le lieu, la distance et la direction, depuis quand et la profondeur. Un clic ouvre la fiche du séisme sur le site de l'EMSC ou de l'USGS.
+- **Dans le monde** : les séismes de magnitude 6 et plus de la période.
+
+**Sans intégration**, la carte lit dans le navigateur les flux publics de l'**EMSC** (Centre sismologique euro-méditerranéen, les petits séismes d'Europe) et de l'**USGS** (le monde, magnitude 2,5 et plus), toutes les 10 minutes. **Avec les intégrations** USGS Earthquake Hazards Program ou GDACS, elle affiche leurs entités `geo_location` à la place.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Séismes` |
+| `radius` | Rayon autour de chez vous (km) | `1000` |
+| `min_magnitude` | Magnitude minimale autour de chez vous | `2` |
+| `world_magnitude` | Magnitude minimale dans le monde | `6` |
+| `days` | Période (jours) | `7` |
+| `max_items` | Nombre de séismes listés | `6` |
+| `direct` | Sans intégration, lire les flux EMSC et USGS depuis le navigateur | `true` |
+| `latitude`, `longitude` | Lieu de référence | coordonnées de Home Assistant |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |

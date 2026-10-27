@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.2.2";
+const CARD_VERSION = "3.3.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1141,6 +1141,7 @@ const ASTRO_DEFAULTS = {
   show_moon: true,
   show_cycles: true,
   show_meteors: true,
+  show_space: true, // activité solaire et aurores
   show_pollens: true,
   show_all_pollens: false,
   theme: "v2",
@@ -1214,6 +1215,52 @@ const meteorNight = (m, lat, lon) => {
   return { visible: true, t: best.t, alt: best.alt, rate, phase: il.phase, fraction: il.fraction, moon };
 };
 
+/* ------------------------------------------------ activité solaire (NOAA SWPC) */
+
+/** Données ouvertes du centre de météo spatiale de la NOAA, lues depuis le navigateur si aucun capteur ne les donne. */
+const SWPC = "https://services.swpc.noaa.gov/";
+/** Indice Kp (0 à 9) : niveau de l'échelle NOAA des tempêtes géomagnétiques. */
+const KP_SCALE = [[4, "Calme", "#5fcf8a"], [5, "Agité", "#f7c948"], [6, "Tempête mineure (G1)", "#ff8c33"], [7, "Tempête modérée (G2)", "#ff8c33"],
+  [8, "Forte tempête (G3)", "#ee4a4a"], [9, "Tempête sévère (G4)", "#ee4a4a"], [Infinity, "Tempête extrême (G5)", "#b38cf0"]];
+const kpInfo = (kp) => KP_SCALE.find(([to]) => kp < to);
+/** Kp à partir duquel une aurore peut être vue à l'horizon nord, selon la latitude (environ Kp 7 vers 50° N). */
+const kpNeeded = (lat) => Math.max(1, Math.min(9, Math.round((67 - Math.abs(lat)) / 2.3)));
+/** Produits NOAA : tableau avec une ligne d'en-tête, ou liste d'objets. */
+const swpcRows = (j) => {
+  if (!Array.isArray(j)) return [];
+  if (Array.isArray(j[0])) { const h = j[0].map(String); return j.slice(1).map((r) => Object.fromEntries(h.map((k, i) => [k, r[i]]))); }
+  return j;
+};
+const kpOf = (r) => num(r?.kp_index ?? r?.Kp ?? r?.kp ?? r?.estimated_kp);
+const swpcTime = (t) => { const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(String(t)) ? t : `${String(t).replace(" ", "T")}Z`); return isNaN(d) ? null : d; };
+
+/** Lecture partagée par toutes les cartes de la page, gardée 15 minutes (une seule requête par source). */
+const netCache = {};
+const fetchJson = (url, ttl = 9e5) => {
+  const c = netCache[url];
+  if (c && Date.now() - c.at < ttl) return c.p;
+  const p = fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+  netCache[url] = { at: Date.now(), p };
+  p.catch(() => { netCache[url].at = Date.now() - ttl + 12e4; }); // nouvel essai dans 2 minutes
+  return p;
+};
+const spaceFetch = () => Promise.all([
+  fetchJson(`${SWPC}products/noaa-planetary-k-index.json`).then(swpcRows).catch(() => null),
+  fetchJson(`${SWPC}products/noaa-planetary-k-index-forecast.json`).then(swpcRows).catch(() => null),
+  fetchJson(`${SWPC}json/solar_probabilities.json`).catch(() => null),
+]).then(([kp, fc, prob]) => {
+  const now = Date.now();
+  const last = (kp || []).filter((r) => kpOf(r) !== null).pop();
+  const future = (fc || []).map((r) => ({ t: swpcTime(r.time_tag), kp: kpOf(r), kind: String(r.observed || "") }))
+    .filter((r) => r.t && r.kp !== null && r.t.getTime() > now && r.t.getTime() < now + 3 * DAYMS);
+  const peak = future.reduce((a, b) => (!a || b.kp > a.kp ? b : a), null);
+  const p0 = Array.isArray(prob) ? prob[0] : null;
+  return {
+    kp: last ? kpOf(last) : null, kpAt: last ? swpcTime(last.time_tag) : null, peak,
+    m: num(p0?.m_class_1_day), x: num(p0?.x_class_1_day), ok: !!(last || peak || p0),
+  };
+});
+
 class MeteoAstroCard extends MeteoBase {
   static get defaults() {
     return ASTRO_DEFAULTS;
@@ -1257,7 +1304,13 @@ class MeteoAstroCard extends MeteoBase {
     const ent = detect(this._hass, c);
     const pol = this._pollens();
     const sun = this._st("sun.sun");
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${sun?.state}|` +
+    // activité solaire : lue auprès de la NOAA toutes les 15 minutes, en partage avec les autres cartes
+    if (c.show_space !== false && (!this._spaceAt || Date.now() - this._spaceAt > 9e5) && !this._spaceBusy && typeof fetch === "function") {
+      this._spaceBusy = true;
+      spaceFetch().then((d) => { this._spaceData = d; }).catch(() => { this._spaceData = { ok: false }; })
+        .finally(() => { this._spaceAt = Date.now(); this._spaceBusy = false; this._sig = null; this._render(); });
+    }
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${sun?.state}|${this._spaceAt}|` +
       [ent.moon, ent.season, ent.zodiac, pol.main, pol.risk, ...pol.plants].map((id) => this._st(id)?.state).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1268,6 +1321,7 @@ class MeteoAstroCard extends MeteoBase {
     if (xy && c.show_moon !== false) parts.push(this._moonRow(xy, now));
     if (c.show_cycles !== false) parts.push(`<div class="sec">Cycles</div>${this._cycles(ent, sun, now)}`);
     if (c.show_meteors !== false) parts.push(this._meteors(xy, now));
+    if (c.show_space !== false) parts.push(this._spaceHtml(xy));
     if (c.show_pollens !== false && (pol.main || pol.plants.length)) parts.push(this._pollenHtml(pol));
     const head = this._head("mdi:weather-sunset", "#f7c948", c.title || "Soleil et lune", xy ? "" : "Coordonnées de Home Assistant introuvables");
     this._card(head + parts.join(""));
@@ -1342,6 +1396,49 @@ class MeteoAstroCard extends MeteoBase {
       <div class="mt-t"><span>${esc(next.name)} · ${esc(next.sky)} · <span class="mt-w">${when}</span></span>
         <b>${night(next.peak)}</b><small title="Taux théorique (ZHR) et vitesse des météores">jusqu'à ${fmt(next.zhr)}/h dans un ciel parfait · ${fmt(next.v)} km/s</small>${detail ? `<small>${detail}</small>` : ""}</div>${moon}</div>
       ${chips ? `<div class="wl"><span class="mt-l">En cours</span>${chips}</div>` : ""}`;
+  }
+
+  /** Activité solaire : indice Kp (capteur NOAA Space Weather, sinon NOAA directement), prévision sur 3 jours,
+   *  probabilité d'éruption, flux et taches solaires, et chances de voir une aurore depuis chez vous. */
+  _spaceHtml(xy) {
+    const c = this._config, hass = this._hass, reg = hass.entities || {}, ids = Object.keys(hass.states);
+    const noaa = ids.filter((id) => reg[id]?.platform === "noaa_space_weather");
+    const pick = (re) => noaa.find((id) => re.test(id));
+    const e = { kp: c.kp_entity || pick(/k_index|_kpi/), m: pick(/m_class/), x: pick(/x_class/), sfi: pick(/solar_flux|_sfi/), ssn: pick(/sunspot|_ssn/) };
+    // intégration Aurora de Home Assistant : probabilité d'aurore à votre position (modèle OVATION de la NOAA)
+    const aurora = c.aurora_entity || ids.find((id) => id.startsWith("sensor.") && reg[id]?.platform === "aurora");
+    const d = this._spaceData || {};
+    const kp = this._num(e.kp) ?? d.kp ?? null;
+    if (kp === null && !d.peak) {
+      return this._spaceAt && !e.kp ? "" : `<div class="sec">Activité solaire</div><div class="fc-empty">Chargement des données de la NOAA…</div>`;
+    }
+    const [, label, color] = kpInfo(kp ?? 0);
+    const cells = Array.from({ length: 9 }, (_, i) => `<i style="${kp !== null && kp > i ? `background:${kpInfo(i)[2]}` : ""}"></i>`).join("");
+    const dayFmt = (t) => `${t.toLocaleDateString("fr-FR", { weekday: "long" })} ${hm(t)}`;
+    const peak = d.peak;
+    const fcTxt = peak ? `Prévision 3 jours : <b style="color:${kpInfo(peak.kp)[2]}">Kp ${fmt(peak.kp, peak.kp % 1 ? 1 : 0)}</b> au plus fort, ${dayFmt(peak.t)}${peak.kp >= 5 ? ` · ${kpInfo(peak.kp)[1].toLowerCase()}` : ""}` : "";
+    let aur = "";
+    const av = this._num(aurora);
+    if (av !== null) aur = `<span${aurora ? ` data-entity="${esc(aurora)}"` : ""}>Aurore chez vous : <b style="color:${av >= 50 ? "#b38cf0" : av >= 10 ? "#ff8c33" : "var(--med-text)"}">${fmt(av)} %</b></span>`;
+    else if (xy) {
+      const need = kpNeeded(xy[0]), mx = Math.max(kp ?? 0, peak?.kp ?? 0);
+      const [txt, col] = mx >= need ? ["Aurore possible chez vous", "#b38cf0"] : mx >= need - 1 ? ["Aurore peu probable, à surveiller", "#ff8c33"] : ["Pas d'aurore visible chez vous", "var(--med-text)"];
+      aur = `<span>Aurore : <b style="color:${col}">${txt}</b> <small>(Kp ${need} nécessaire)</small></span>`;
+    }
+    const pct = (v) => (v === null || v === undefined ? null : `${fmt(v)} %`);
+    const tile = (id, icon, col, value, lab) => (value === null ? "" : `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${col}"></ha-icon><div class="k-v">${value}</div><div class="k-l">${lab}</div></div>`);
+    const m = this._num(e.m) ?? d.m ?? null, x = this._num(e.x) ?? d.x ?? null, sfi = this._num(e.sfi), ssn = this._num(e.ssn);
+    const tiles = [
+      tile(e.m, "mdi:sun-wireless-outline", m >= 50 ? "#ff8c33" : "#f7c948", pct(m), "Éruption M"),
+      tile(e.x, "mdi:sun-wireless", x >= 10 ? "#ee4a4a" : "#f7c948", pct(x), "Éruption X"),
+      tile(e.sfi, "mdi:white-balance-sunny", "#f7c948", sfi === null ? null : fmt(sfi), "Flux solaire"),
+      tile(e.ssn, "mdi:circle-slice-8", "#ff8c33", ssn === null ? null : fmt(ssn), "Taches"),
+    ].filter(Boolean).join("");
+    return `<div class="sec">Activité solaire</div><div class="sw"${e.kp ? ` data-entity="${esc(e.kp)}"` : ""}>
+      <div class="sw-k"><b style="color:${color}">Kp ${kp === null ? "—" : fmt(kp, kp % 1 ? 1 : 0)}</b><span>${label}</span></div>
+      <div class="sw-bar" role="img" aria-label="Indice Kp ${kp ?? "inconnu"} sur 9">${cells}</div>
+      ${fcTxt || aur ? `<div class="sw-t">${fcTxt ? `<span>${fcTxt}</span>` : ""}${aur}</div>` : ""}</div>
+      ${tiles ? `<div class="sky">${tiles}</div>` : ""}`;
   }
 
   _cycles(ent, sun, now) {
@@ -1607,6 +1704,139 @@ class MeteoEclairsCard extends MeteoBase {
     const ok = counter || distance || azimuth;
     const body = this._head("mdi:flash", "#f7c948", c.title || "Éclairs", n ? `${fmt(n)} éclair${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}` : "Aucun éclair à proximité") +
       (ok ? `<div class="duo">${rose}${gauge}</div>` : `<div class="empty"><b>Aucun capteur d'éclairs</b><span>Installez l'intégration Blitzortung, ou choisissez les capteurs dans l'éditeur.</span></div>`);
+    this._card(body);
+  }
+}
+
+/* ----------------------------------------------------------- carte Séismes */
+
+const SEISMES_DEFAULTS = { title: "Séismes", radius: 1000, min_magnitude: 2, world_magnitude: 6, days: 7, max_items: 6, direct: true, theme: "v2" };
+const USGS_FEED = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson";
+const EMSC_API = "https://www.seismicportal.eu/fdsnws/event/1/query?format=json&orderby=time&limit=300";
+/** Couleur d'une magnitude : vert sous 3, jaune, orange, rouge, violet à partir de 6. */
+const magColor = (m) => (m < 3 ? "#5fcf8a" : m < 4 ? "#f7c948" : m < 5 ? "#ff8c33" : m < 6 ? "#ee4a4a" : "#b38cf0");
+const magLabel = (m) => (m < 3 ? "Très faible" : m < 4 ? "Faible" : m < 5 ? "Léger" : m < 6 ? "Modéré" : m < 7 ? "Fort" : "Majeur");
+const bearing = (lat1, lon1, lat2, lon2) => {
+  const p1 = lat1 * RAD, p2 = lat2 * RAD, dl = (lon2 - lon1) * RAD;
+  return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / RAD + 360) % 360;
+};
+/** « NORTHERN ITALY » (EMSC) → « Northern Italy ». */
+const titleCase = (s) => (s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s,(/-])(\p{L})/gu, (a, b, c) => b + c.toUpperCase()) : s);
+const agoTxt = (ms) => { const m = Math.round(ms / 6e4); return m < 60 ? `il y a ${Math.max(1, m)} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
+
+class MeteoSeismesCard extends MeteoBase {
+  static get defaults() {
+    return SEISMES_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-seismes-card-editor");
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _home() {
+    const c = this._config, cfg = this._hass?.config || {};
+    const lat = num(c.latitude) ?? num(cfg.latitude), lon = num(c.longitude) ?? num(cfg.longitude);
+    return lat === null || lon === null ? null : [lat, lon];
+  }
+
+  /** Séismes des intégrations Home Assistant : entités geo_location (USGS, GDACS, IGN, GeoNet…) qui donnent une magnitude. */
+  _fromEntities(home) {
+    const out = [];
+    for (const st of Object.values(this._hass.states)) {
+      if (!st.entity_id.startsWith("geo_location.")) continue;
+      const a = st.attributes || {};
+      if (a.source === "gdacs" && !/earthquake|séisme/i.test(String(a.event_type || ""))) continue;
+      const mag = num(a.magnitude) ?? num((/magnitude\s*([\d.]+)/i.exec(String(a.severity || "")) || [])[1]);
+      const lat = num(a.latitude), lon = num(a.longitude);
+      if (mag === null || lat === null || lon === null) continue;
+      const t = new Date(a.time || a.from_date || a.publication_date || st.last_changed);
+      out.push({ id: st.entity_id, mag, lat, lon, t, place: a.place || a.region || a.country || a.friendly_name, depth: num((/depth:?\s*([\d.]+)/i.exec(String(a.severity || "")) || [])[1]),
+        dist: home ? greatCircle(home[0], home[1], lat, lon) : num(st.state), url: a.source === "usgs_earthquakes_feed" && a.external_id ? `https://earthquake.usgs.gov/earthquakes/eventpage/${a.external_id}` : null });
+    }
+    return out;
+  }
+
+  /** Sans intégration : flux public de l'USGS (monde, magnitude 2,5 et plus) et de l'EMSC (Europe, autour de chez vous). */
+  _fetch(home) {
+    if (this._busy || (this._data && Date.now() - this._dataAt < 6e5)) return;
+    this._busy = true;
+    const c = this._config, days = Math.max(1, Number(c.days) || 7);
+    const start = new Date(Date.now() - days * DAYMS).toISOString().slice(0, 19);
+    const emsc = home ? `${EMSC_API}&lat=${home[0].toFixed(2)}&lon=${home[1].toFixed(2)}&maxradius=${((Number(c.radius) || 1000) / 111.2).toFixed(1)}&minmag=${Number(c.min_magnitude) || 0}&start=${start}` : null;
+    Promise.all([
+      fetchJson(USGS_FEED, 6e5).then((j) => (j.features || []).map((f) => ({ mag: num(f.properties?.mag), lat: f.geometry?.coordinates?.[1], lon: f.geometry?.coordinates?.[0],
+        depth: num(f.geometry?.coordinates?.[2]), t: new Date(f.properties?.time), place: f.properties?.place, url: f.properties?.url, src: "USGS" }))).catch(() => null),
+      emsc ? fetchJson(emsc, 6e5).then((j) => (j.features || []).map((f) => ({ mag: num(f.properties?.mag), lat: num(f.properties?.lat), lon: num(f.properties?.lon),
+        depth: num(f.properties?.depth), t: new Date(f.properties?.time), place: titleCase(f.properties?.flynn_region),
+        url: f.properties?.unid ? `https://www.seismicportal.eu/eventdetails.html?unid=${f.properties.unid}` : null, src: "EMSC" }))).catch(() => null) : Promise.resolve([]),
+    ]).then(([usgs, eu]) => {
+      // un même séisme vu par les deux réseaux (moins de 2 min et 50 km d'écart) n'est gardé qu'une fois, version EMSC
+      const list = [...(eu || [])];
+      for (const q of usgs || []) if (!list.some((e) => Math.abs(e.t - q.t) < 12e4 && greatCircle(e.lat, e.lon, q.lat, q.lon) < 50)) list.push(q);
+      this._data = list.filter((q) => q.mag !== null && Number.isFinite(q.lat) && Number.isFinite(q.lon) && !isNaN(q.t));
+      this._failed = !usgs && !eu;
+    }).finally(() => { this._dataAt = Date.now(); this._busy = false; this._sig = null; this._render(); });
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, home = this._home();
+    const ents = this._fromEntities(home);
+    if (!ents.length && c.direct !== false) this._fetch(home);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${this._dataAt}|` + ents.map((q) => `${q.id}${q.mag}`).join(",");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const now = Date.now(), days = Math.max(1, Number(c.days) || 7), radius = Number(c.radius) || 1000;
+    const all = (ents.length ? ents : this._data || []).filter((q) => now - q.t <= days * DAYMS)
+      .map((q) => ({ ...q, dist: home ? greatCircle(home[0], home[1], q.lat, q.lon) : q.dist ?? null, az: home ? bearing(home[0], home[1], q.lat, q.lon) : null }))
+      .sort((a, b) => b.t - a.t);
+    const near = all.filter((q) => q.dist !== null && q.dist <= radius && q.mag >= (Number(c.min_magnitude) || 0));
+    const world = all.filter((q) => q.mag >= (Number(c.world_magnitude) || 6) && !near.includes(q)).sort((a, b) => b.mag - a.mag);
+    const km = (d) => `${fmt(d, d < 10 ? 1 : 0)} km`;
+    const sub = !home ? "Coordonnées de Home Assistant introuvables"
+      : near.length ? `${fmt(near.length)} séisme${near.length > 1 ? "s" : ""} à moins de ${fmt(radius)} km en ${days} jours` : `Aucun séisme à moins de ${fmt(radius)} km en ${days} jours`;
+    let body = this._head(c.icon || "mdi:pulse", "#ff8c33", c.title || "Séismes", sub);
+    if (!all.length) {
+      const loading = !ents.length && c.direct !== false && !this._dataAt;
+      body += loading ? `<div class="empty"><b>Chargement…</b></div>`
+        : `<div class="empty"><b>${this._failed ? "Données des séismes inaccessibles" : "Aucun séisme récent"}</b><span>${this._failed
+          ? "Le navigateur n'a pas pu lire les flux USGS et EMSC. Ajoutez l'intégration USGS Earthquake Hazards Program ou GDACS."
+          : "Aucun séisme connu sur la période."}</span></div>`;
+      this._card(body);
+      return;
+    }
+    const last = near[0], close = [...near].sort((a, b) => a.dist - b.dist)[0], big = [...near].sort((a, b) => b.mag - a.mag)[0];
+    // boussole : chaque séisme proche à sa direction, plus loin du centre quand il est loin, plus gros quand il est fort
+    const dots = near.slice(0, 40).reverse().map((q) => {
+      // le centre est gardé pour la magnitude du dernier séisme
+      const [x, y] = pt(70, 70, 30 + Math.min(1, q.dist / radius) * 24, q.az);
+      return `<circle cx="${f2(x)}" cy="${f2(y)}" r="${f2(2 + Math.max(0, q.mag - 1.5) * 1.6)}" fill="${magColor(q.mag)}" class="qk${q === last ? " last" : ""}"/>`;
+    }).join("");
+    const rose = `<div class="gauge"${last?.id ? ` data-entity="${esc(last.id)}"` : ""}><svg viewBox="0 0 140 140" role="img" aria-label="Séismes autour de chez vous">
+      ${roseSvg(c.compass_image)}${dots}
+      ${last ? `<text x="70" y="74" class="big">M ${fmt(last.mag, 1)}</text><text x="70" y="87" class="sm">${agoTxt(now - last.t)}</text>` : `<text x="70" y="78" class="sm">rien à proximité</text>`}</svg>
+      <div class="g-l">${last ? `Dernier · <b>${km(last.dist)} ${compass16(last.az)}</b>` : `Rayon de ${fmt(radius)} km`}</div></div>`;
+    const tile = (q, icon, label, value) => (q ? `<div class="sky-t"${q.id ? ` data-entity="${esc(q.id)}"` : ""}><ha-icon icon="${icon}" style="color:${magColor(q.mag)}"></ha-icon>
+      <div class="k-v">${value}</div><div class="k-l">${label}</div></div>` : "");
+    const tiles = `<div class="sky qk-t">${tile(close, "mdi:home-map-marker", "Le plus proche", close ? `${km(close.dist)} · M ${fmt(close.mag, 1)}` : "")}
+      ${tile(big, "mdi:chart-bell-curve", "Le plus fort", big ? `M ${fmt(big.mag, 1)} · ${km(big.dist)}` : "")}
+      ${tile(world[0], "mdi:earth", "Dans le monde", world[0] ? `M ${fmt(world[0].mag, 1)}` : "")}</div>`;
+    const row = (q) => {
+      const attrs = q.url ? `href="${esc(q.url)}" target="_blank" rel="noopener noreferrer"` : "";
+      const tag = q.url ? "a" : "div";
+      return `<${tag} class="qk-r" ${attrs}${!q.url && q.id ? ` data-entity="${esc(q.id)}"` : ""}><span class="qk-m" style="background:${magColor(q.mag)}">${fmt(q.mag, 1)}</span>
+        <span class="qk-p"><b>${esc(q.place || "Lieu inconnu")}</b><small>${q.dist !== null ? `${km(q.dist)}${q.az !== null ? ` ${compass16(q.az)}` : ""} · ` : ""}${agoTxt(now - q.t)}${q.depth !== null && q.depth !== undefined ? ` · ${fmt(q.depth)} km de profondeur` : ""}</small></span>
+        <span class="qk-l">${magLabel(q.mag)}</span></${tag}>`;
+    };
+    const max = Math.max(1, Number(c.max_items) || 6);
+    body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
+      + (near.length ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
+      + (world.length ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
+      + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`;
     this._card(body);
   }
 }
@@ -2207,6 +2437,28 @@ ha-card.neon .k-l { font-size: .74rem; }
 ha-card.neon .sky-t ha-icon { --mdc-icon-size: 28px; }
 svg .bolt circle { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 40%, #000); stroke-width: 1; filter: drop-shadow(0 0 4px #f7c948); }
 svg .bolt path { fill: #1a2434; }
+.sw { margin: 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); display: grid; gap: 8px; }
+.sw[data-entity] { cursor: pointer; }
+.sw-k { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sw-k b { font-size: 1.3rem; } .sw-k span { font-size: .82rem; color: var(--med-muted); }
+.sw-bar { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
+.sw-bar i { height: 9px; border-radius: 3px; background: var(--med-line); }
+.sw-t { display: grid; gap: 3px; font-size: .78rem; color: var(--med-muted); }
+.sw-t b { font-weight: 700; } .sw-t small { font-size: .72rem; }
+.qk { stroke: rgba(0, 0, 0, .35); stroke-width: .6; opacity: .85; }
+.qk.last { stroke: var(--med-text); stroke-width: 1.4; opacity: 1; }
+.qk-side { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.qk-t { margin: 0; grid-template-columns: 1fr; }
+.qk-l-w { display: grid; gap: 6px; margin: 0 12px; }
+.qk-r { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line);
+  color: inherit; text-decoration: none; cursor: pointer; min-width: 0; }
+a.qk-r:hover { border-color: var(--med-blue); }
+.qk-m { flex: none; min-width: 38px; text-align: center; padding: 4px 6px; border-radius: 8px; font-weight: 800; font-size: .86rem; color: #1a2434; }
+.qk-p { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.qk-p b { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qk-p small { font-size: .72rem; color: var(--med-muted); }
+.qk-l { flex: none; font-size: .7rem; color: var(--med-muted); }
+.qk-src { margin: 8px 18px 0; font-size: .68rem; color: var(--med-muted); text-align: right; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -2357,6 +2609,7 @@ const ASTRO_SCHEMA = [
   { name: "show_moon", selector: { boolean: {} } },
   { name: "show_cycles", selector: { boolean: {} } },
   { name: "show_meteors", selector: { boolean: {} } },
+  { name: "show_space", selector: { boolean: {} } },
   { name: "show_pollens", selector: { boolean: {} } },
   { name: "show_all_pollens", selector: { boolean: {} } },
   { name: "moon_image", selector: { text: {} } },
@@ -2375,6 +2628,7 @@ const ASTRO_LABELS = {
   show_moon: "Lune (lever, coucher, éclairement)",
   show_cycles: "Cycles (lune, soleil, saison, zodiaque)",
   show_meteors: "Étoiles filantes (prochaine pluie, pic, lune)",
+  show_space: "Activité solaire et aurores (NOAA)",
   show_pollens: "Pollens",
   show_all_pollens: "Afficher aussi les pollens à « nul »",
   moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
@@ -2418,6 +2672,30 @@ const ECLAIRS_SCHEMA = [
   THEME_SELECT,
   TEXT_SIZE,
 ];
+const SEISMES_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "radius", selector: { number: { min: 50, max: 5000, step: 50, mode: "box", unit_of_measurement: "km" } } },
+  { name: "min_magnitude", selector: { number: { min: 0, max: 6, step: 0.5, mode: "box" } } },
+  { name: "world_magnitude", selector: { number: { min: 4, max: 9, step: 0.5, mode: "box" } } },
+  { name: "days", selector: { number: { min: 1, max: 30, mode: "box", unit_of_measurement: "j" } } },
+  { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
+  { name: "direct", selector: { boolean: {} } },
+  { name: "compass_image", selector: { text: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const SEISMES_LABELS = {
+  title: "Titre (Séismes par défaut)",
+  radius: "Rayon autour de chez vous",
+  min_magnitude: "Magnitude minimale autour de chez vous",
+  world_magnitude: "Magnitude minimale dans le monde",
+  days: "Période",
+  max_items: "Nombre de séismes listés",
+  direct: "Sans intégration, lire les flux EMSC et USGS depuis le navigateur",
+  compass_image: "Image au centre de la boussole",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const BOLIDES_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "entity", selector: { entity: { domain: "sensor" } } },
@@ -2517,6 +2795,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-air-card-editor", makeEditor(AIR_SCHEMA, AIR_LABELS, AIR_DEFAULTS));
   define("meteo-eclairs-card", MeteoEclairsCard);
   define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
+  define("meteo-seismes-card", MeteoSeismesCard);
+  define("meteo-seismes-card-editor", makeEditor(SEISMES_SCHEMA, SEISMES_LABELS, SEISMES_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
   define("meteo-bolides-card-editor", makeEditor(BOLIDES_SCHEMA, BOLIDES_LABELS, BOLIDES_DEFAULTS));
   window.customCards = window.customCards || [];
@@ -2526,7 +2806,8 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-air-card", name: "Carte Météo : air, pollens et eau", description: "Qualité de l'air et polluants (Atmo France), pollens, vigilance sécheresse (VigiEau)." },
     { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
     { type: "meteo-bolides-card", name: "Carte Météo : bolides", description: "Carte du monde interactive des bolides (grosses météorites) détectés par la NASA, avec le plus récent, le plus proche et le plus puissant." },
-    { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, cycles et pollens." },
+    { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, étoiles filantes, activité solaire et aurores, cycles et pollens." },
+    { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");
 }

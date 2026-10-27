@@ -174,12 +174,35 @@ const FIREBALLS = (() => {
   }
   return out.sort((a, b) => (a[0] < b[0] ? 1 : -1));
 })();
+// Flux publics simulés (NOAA, USGS, EMSC) : la démo ne contacte aucun service
+const QUAKES = (() => {
+  // séismes inventés autour du centre de la France et dans le monde
+  const near = [[45.9, 6.6, 3.1, 0.2, "Alpes françaises", 8], [43.1, -0.4, 2.6, 0.9, "Pyrénées", 11], [44.3, 7.1, 2.2, 1.6, "Alpes-Maritimes", 6],
+    [47.6, 7.5, 3.4, 2.8, "Suisse", 14], [41.9, 13.4, 4.2, 3.4, "Italie centrale", 10], [45.2, 1.9, 2.1, 4.2, "Massif central", 5], [48.4, -4.6, 2.4, 5.6, "Bretagne", 9]];
+  const world = [[-21.6, -174.8, 6.4, 1.2, "Îles Tonga", 35], [38.3, 142.4, 6.1, 4.1, "Japon, côte de Honshu", 40]];
+  return [...near, ...world].map(([lat, lon, mag, d, place, depth], i) => ({ type: "Feature", id: `demo${i}`,
+    properties: { mag, place, time: Date.now() - d * DAY, url: "" }, geometry: { type: "Point", coordinates: [lon, lat, depth] } }));
+})();
+const KP_NOW = () => (scen === "soleil" ? 6.33 : 2.67);
+const realFetch = window.fetch.bind(window);
+window.fetch = (url, ...rest) => {
+  const u = String(url), json = (j) => Promise.resolve(new Response(JSON.stringify(j), { headers: { "content-type": "application/json" } }));
+  const tag = (ms) => new Date(Date.now() + ms).toISOString().slice(0, 19).replace("T", " ");
+  if (u.includes("noaa-planetary-k-index-forecast")) return json([["time_tag", "kp", "observed", "noaa_scale"],
+    ...Array.from({ length: 24 }, (_, i) => [tag(i * 3 * HOUR - 6 * HOUR), (KP_NOW() + Math.sin(i / 2.5) * 1.6).toFixed(2), i < 2 ? "observed" : "predicted", null])]);
+  if (u.includes("noaa-planetary-k-index")) return json([["time_tag", "Kp", "a_running", "station_count"], [tag(-3 * HOUR), "2.33", "9", "8"], [tag(-HOUR), String(KP_NOW()), "12", "8"]]);
+  if (u.includes("solar_probabilities")) return json([{ date: tag(0).slice(0, 10), m_class_1_day: scen === "soleil" ? 55 : 15, x_class_1_day: scen === "soleil" ? 15 : 1 }]);
+  if (u.includes("earthquake.usgs.gov")) return json({ type: "FeatureCollection", features: QUAKES });
+  if (u.includes("seismicportal.eu")) return json({ type: "FeatureCollection", features: [] });
+  return realFetch(url, ...rest);
+};
 const cards = {
   meteo: document.createElement("meteo-card"),
   ciel: document.createElement("meteo-ciel-card"),
   astro: document.createElement("meteo-astro-card"),
   air: document.createElement("meteo-air-card"),
   eclairs: document.createElement("meteo-eclairs-card"),
+  seismes: document.createElement("meteo-seismes-card"),
   bolides: document.createElement("meteo-bolides-card"),
 };
 Object.values(cards).forEach((c) => host.appendChild(c));
@@ -192,6 +215,7 @@ function apply() {
   cards.astro.setConfig({ theme: t, ...PHOTOS() });
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
+  cards.seismes.setConfig({ theme: t });
   cards.bolides.setConfig({ theme: t });
   const h = hassFor();
   Object.values(cards).forEach((c) => { c.hass = h; });
