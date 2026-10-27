@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.2.0-beta";
+const CARD_VERSION = "3.2.1-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -724,13 +724,16 @@ class MeteoCard extends MeteoBase {
     const active = [];
     for (const [k, st] of sts) {
       const kind = EC_KINDS[k];
-      const fromAction = Array.isArray(res?.[k]) ? res[k] : null;
+      // réponse de l'action si elle a des alertes de ce type ; sinon les attributs du capteur (titre, heure)
+      const fromAction = Array.isArray(res?.[k]) && res[k].length ? res[k] : null;
       const items = fromAction || Object.keys(st.attributes || {}).filter((a) => /^alert_\d+$/.test(a))
         .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)))
         .map((a) => ({ title: st.attributes[a], date: st.attributes[`alert_time_${a.slice(6)}`] }));
+      // compteur sans titre (attributs absents) : une ligne par alerte, avec le nom du type
+      for (let i = items.length; i < (num(st.state) || 0); i++) items.push({});
       for (const it of items) {
         const lv = EC_COLOUR[String(it.alert_colour_level || "").toLowerCase()];
-        active.push({ name: it.title || kind.label, kind: k, label: kind.label, icon: kind.icon, info: lv === undefined && kind.level === 0,
+        active.push({ name: it.title || `${kind.label} en vigueur`, kind: k, label: kind.label, icon: kind.icon, info: lv === undefined && kind.level === 0,
           level: lv ?? kind.level, since: it.date, until: it.expiry_time, entity: ec[k] });
       }
     }
