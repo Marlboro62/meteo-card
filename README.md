@@ -1,3 +1,18 @@
+<p style="font-size: 16px; margin-top: 20px;">
+  ☕ Si cette carte vous est utile, vous pouvez soutenir le projet :
+</p>
+
+<a href="https://www.buymeacoffee.com/Marlboro62"
+   target="_blank"
+   rel="noopener noreferrer"
+   aria-label="Soutenir le projet sur Buy Me a Coffee">
+  <img
+    src="https://img.buymeacoffee.com/button-api/?text=Offrir%20un%20caf%C3%A9&emoji=%E2%98%95&slug=Marlboro62&button_colour=FF5F5F&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00"
+    alt="Offrir un café sur Buy Me a Coffee"
+    style="height: 45px; width: auto;"
+  />
+</a>
+
 # Carte Météo
 
 Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichier :
