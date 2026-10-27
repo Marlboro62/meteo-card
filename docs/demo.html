@@ -113,10 +113,24 @@ function hassFor() {
   add("sensor.salon_humidity", 52, {});
   add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
   add("sensor.jardin_humidity", s.attrs.humidity - 4, {});
+  // Environnement Canada (lieu fictif) : météo et 5 capteurs d'alertes sur le même appareil, noms en français
+  add("weather.ville_erable", rainy ? "windy" : "sunny", { temperature: rainy ? 4.2 : 16.8, humidity: 76, pressure: 1001, wind_speed: rainy ? 54 : 12, wind_gust_speed: rainy ? 90 : 20, wind_bearing: 270, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Érable" });
+  entities["weather.ville_erable"] = { platform: "environment_canada", device_id: "dev_ec" };
+  const ec = EC_ALERTS();
+  for (const [k, fr] of [["warnings", "alertes"], ["watches", "veilles"], ["advisories", "avis"], ["statements", "bulletins"], ["endings", "terminaisons"]]) {
+    const id = `sensor.ville_erable_${fr}`, list = ec[k];
+    const attrs = { location: "Ville-Érable", station: "Station-Exemple" };
+    list.forEach((a, i) => { attrs[`alert_${i + 1}`] = a.title; attrs[`alert_time_${i + 1}`] = a.date; });
+    add(id, list.length, list.length ? attrs : {});
+    entities[id] = { platform: "environment_canada", device_id: "dev_ec", translation_key: k };
+  }
   return {
     themes: { darkMode: !document.body.classList.contains("light") },
     config: { latitude: 46.6, longitude: 2.4 }, // centre de la France, fictif
     states, entities,
+    // action environment_canada.get_alerts (réponse avec la couleur et l'heure de fin)
+    callWS: async (m) => m.type === "config/entity_registry/get" ? { entity_id: m.entity_id, config_entry_id: "entree_exemple" }
+      : m.type === "call_service" && m.service === "get_alerts" ? { context: {}, response: EC_ALERTS() } : null,
     connection: { subscribeMessage(cb, msg) {
       const send = () => {
         const sc = SCEN[scen], mount = msg.entity_id === "weather.station_montagne";
@@ -134,6 +148,18 @@ function hassFor() {
   };
 }
 const host = document.getElementById("host");
+// alertes Environnement Canada fictives (même format que l'action environment_canada.get_alerts)
+function EC_ALERTS() {
+  const t = (h) => new Date(Math.floor(Date.now() / HOUR) * HOUR + h * HOUR).toISOString();
+  if (scen !== "pluie") return { warnings: [], watches: [], advisories: [], statements: [], endings: [{ title: "Avertissement de vent terminé", date: t(-30) }] };
+  return {
+    warnings: [{ title: "Avertissement de vent en vigueur", date: t(-2), alert_colour_level: "orange", expiry_time: t(9) }],
+    watches: [{ title: "Veille d'orages violents en vigueur", date: t(-1), alert_colour_level: "yellow", expiry_time: t(5) }],
+    advisories: [],
+    statements: [{ title: "Bulletin météorologique spécial en vigueur", date: t(-5) }],
+    endings: [],
+  };
+}
 // bolides fictifs (générateur pseudo-aléatoire fixe : la démo affiche toujours les mêmes)
 const FIREBALLS = (() => {
   let seed = 7;
@@ -159,7 +185,7 @@ const cards = {
 Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
   const t = theme;
-  cards.meteo.setConfig({ theme: t, entities: [{ entity: "weather.ville_exemple", name: "Ville-Exemple" }, { entity: "weather.station_montagne", name: "Station-Montagne" }],
+  cards.meteo.setConfig({ theme: t, entities: [{ entity: "weather.ville_exemple", name: "Ville-Exemple" }, { entity: "weather.station_montagne", name: "Station-Montagne" }, { entity: "weather.ville_erable", name: "Ville-Érable (Canada)" }],
     forecasts: ["hourly", "daily"], hours: 8, days: 7, ...(photos ? { moon_image: PHOTOS().moon_image } : {}) });
   cards.ciel.setConfig({ theme: t, windy, temperatures: [{ name: "Salon", entity: "sensor.salon_temperature", humidity: "sensor.salon_humidity" },
     { name: "Jardin", entity: "sensor.jardin_temperature", humidity: "sensor.jardin_humidity", icon: "mdi:tree-outline" }] });

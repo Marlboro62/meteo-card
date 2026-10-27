@@ -90,6 +90,7 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | Intégration | Où la trouver | Pour quelle carte | Ce qu'elle fournit |
 | --- | --- | --- | --- |
 | **Météo-France** | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Météo, Vent et ciel | Prévisions, vigilance du département, pluie dans l'heure, nuages, UV (toute autre entité `weather` fonctionne aussi, sans vigilance ni pluie dans l'heure) |
+| **Environnement Canada** | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Météo | Météo et **alertes** du lieu (avertissements, veilles, avis, bulletins) |
 | **Atmo France** | HACS : [sebcaps/atmofrance](https://github.com/sebcaps/atmofrance) | Air, pollens et eau | Qualité de l'air (indice Atmo et polluants) et pollens ; demande un compte gratuit sur [admindata.atmo-france.org](https://admindata.atmo-france.org) |
 | **VigiEau** | HACS : [kamaradclimber/vigieau](https://github.com/kamaradclimber/vigieau) | Air, pollens et eau | Vigilance sécheresse par type d'eau et usages autorisés ou interdits |
 | **Blitzortung.org Lightning Detector** | HACS : [mrk-its/homeassistant-blitzortung](https://github.com/mrk-its/homeassistant-blitzortung) | Éclairs | Compteur, distance et direction des éclairs autour de chez vous |
@@ -112,6 +113,7 @@ type: custom:meteo-card
 - **Détails Météo-France** : nuages, risque de pluie, de gel, de neige, indice UV et heure de la prochaine pluie, lus dans les capteurs Météo-France de la ville.
 - **Pluie dans l'heure** (Météo-France) : une barre par tranche de 5 à 10 minutes, « Pas de pluie dans l'heure » ou « Pluie faible à 17:30 ».
 - **Vigilance Météo-France** : chaque phénomène actif avec son icône et sa couleur.
+- **Alertes Environnement Canada** (Canada) : une ligne par alerte en cours, avec son type (avertissement, veille, avis, bulletin), son titre et son heure de fin, et une pastille « Alertes » dans l'en-tête. Voir [Alertes Environnement Canada](#alertes-environnement-canada).
 - **Prévisions** par heure, par jour ou jour et nuit, **l'une sous l'autre** si vous le souhaitez, avec les **mêmes lignes pour les heures et les jours** : température, minimale, pluie en mm (0 mm compris), risque de pluie, humidité, vent, **rafales en rouge** et direction. Seules les lignes que votre intégration fournit sont affichées.
 - **Soleil, saison, lune, zodiaque** : soleil au-dessus ou sous l'horizon, heures de lever et de coucher, saison, phase de lune et signe.
 - **Plusieurs villes** : des onglets en haut de la carte ; la carte retient l'onglet choisi.
@@ -119,10 +121,12 @@ type: custom:meteo-card
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `entity` | Entité météo (`weather.…`) | Météo-France, sinon la première trouvée |
-| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert }` | — |
+| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts }` | — |
 | `title` | Titre (une seule ville) | `Météo` |
 | `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
+| `ec_alerts` | Capteurs d'alertes Environnement Canada (liste), aussi par ville dans `entities` ; `"-"` pour ne pas les afficher | détectés |
+| `ec_entry` | Identifiant de l'entrée Environnement Canada, si la carte ne le retrouve pas seule | détecté |
 | `forecasts` | Liste parmi `hourly`, `daily`, `twice_daily`, affichées l'une sous l'autre | `[daily]` |
 | `hours` | Nombre d'heures des prévisions par heure | `8` |
 | `days` | Nombre de jours | `5` |
@@ -138,6 +142,24 @@ type: custom:meteo-card
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
 | `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
+
+### Alertes Environnement Canada
+
+L'intégration **Environnement Canada** crée 5 capteurs par lieu (par exemple, en français, `sensor.ville_alertes`, `_veilles`, `_avis`, `_bulletins` et `_terminaisons`). Leur état est le nombre d'alertes en cours, leurs attributs le titre et l'heure de chacune.
+
+- **Détection** : la carte prend les capteurs du même lieu que l'entité météo de la ville. Pour la première ville, s'il n'y a pas de vigilance Météo-France, elle prend ceux du premier lieu trouvé. Vous pouvez aussi les indiquer avec `ec_alerts`.
+- **Couleur** : quand une alerte apparaît, la carte appelle une fois l'action `environment_canada.get_alerts` pour connaître sa **couleur réelle** (jaune, orange, rouge) et son **heure de fin**. Si l'action n'est pas disponible, la couleur vient du type : avertissement en orange, veille et avis en jaune, bulletin en bleu (information).
+- Les **terminaisons** (alertes levées) ne sont pas affichées. Sans alerte, la carte indique « Aucune alerte en cours ».
+
+```yaml
+type: custom:meteo-card
+entity: weather.ville                 # entité de l'intégration Environnement Canada
+ec_alerts:                            # facultatif : détectés
+  - sensor.ville_alertes
+  - sensor.ville_veilles
+  - sensor.ville_avis
+  - sensor.ville_bulletins
+```
 
 > L'ancienne option `forecast_type` (une seule prévision) reste acceptée. Avec plusieurs villes, la vigilance détectée va à la première ; indiquez `alert` pour les autres.
 >

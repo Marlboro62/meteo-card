@@ -17,6 +17,7 @@
  *   type: custom:meteo-card
  *   entity: weather.ma_ville          (facultatif : la première entité weather, Météo-France en priorité)
  *   alert: sensor.xx_weather_alert    (facultatif : vigilance Météo-France détectée)
+ *   ec_alerts: [sensor.ville_alertes, …]  (facultatif : alertes Environnement Canada détectées)
  *   entities: [weather.a, weather.b]  (facultatif : plusieurs villes en onglets)
  *   forecasts: [hourly, daily]        (facultatif : plusieurs prévisions l'une sous l'autre)
  *
@@ -27,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.0.4";
+const CARD_VERSION = "3.2.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -95,6 +96,42 @@ const phenoIcon = (name) => (PHENO_ICON.find(([re]) => re.test(name)) || [, "mdi
 const levelOf = (v) => LEVELS[String(v ?? "").trim().toLowerCase()];
 /** Un capteur de vigilance porte un niveau (Vert, Jaune…) dans son état ou ses attributs. */
 const isAlert = (st) => !!st && (levelOf(st.state) !== undefined || Object.values(st.attributes || {}).some((v) => levelOf(v) !== undefined));
+
+/** Alertes Environnement Canada : 5 capteurs par lieu (état = nombre d'alertes, attributs alert_N = titre,
+ *  alert_time_N = date). La couleur réelle vient de l'action environment_canada.get_alerts ; à défaut, le
+ *  niveau est déduit du type. Les terminaisons (alertes levées) ne sont pas affichées. */
+const EC_KINDS = {
+  warnings: { label: "Avertissement", level: 2, icon: "mdi:alert", re: /_(alertes|avertissements|warnings)$/ },
+  watches: { label: "Veille", level: 1, icon: "mdi:eye-outline", re: /_(veilles|watches)$/ },
+  advisories: { label: "Avis", level: 1, icon: "mdi:information-outline", re: /_(avis|advisories)$/ },
+  statements: { label: "Bulletin", level: 0, icon: "mdi:bullhorn-outline", re: /_(bulletins|statements)$/ },
+  endings: { label: "Terminaison", level: 0, icon: "mdi:check-circle-outline", re: /_(terminaisons|endings)$/ },
+};
+const EC_SHOWN = ["warnings", "watches", "advisories", "statements"];
+const EC_COLOUR = { yellow: 1, jaune: 1, orange: 2, red: 3, rouge: 3 };
+const INFO_COLOR = "#7cc4f5";
+const ecKind = (hass, id) => {
+  const tk = hass?.entities?.[id]?.translation_key;
+  return EC_KINDS[tk] ? tk : Object.keys(EC_KINDS).find((k) => EC_KINDS[k].re.test(id));
+};
+/** Capteurs d'alertes Environnement Canada d'une ville, par type ({ warnings: id, … }), ou null. */
+const ecSensorsOf = (hass, weather, given, fallback) => {
+  const reg = hass?.entities || {};
+  let ids;
+  if (given === "-") return null;
+  if (given) ids = (Array.isArray(given) ? given : [given]).filter((id) => hass?.states?.[id]);
+  else {
+    const all = Object.keys(hass?.states || {}).filter((id) => id.startsWith("sensor.") && reg[id]?.platform === "environment_canada" && ecKind(hass, id));
+    if (!all.length) return null;
+    const dev = reg[weather]?.device_id;
+    ids = dev ? all.filter((id) => reg[id]?.device_id === dev) : [];
+    // pas sur le même appareil que la ville : le premier lieu trouvé (première ville seulement)
+    if (!ids.length && fallback) ids = all.filter((id) => reg[id]?.device_id === reg[all[0]]?.device_id);
+  }
+  const out = {};
+  for (const id of ids) { const k = ecKind(hass, id); if (k && !out[k]) out[k] = id; }
+  return Object.keys(out).length ? out : null;
+};
 
 /** Saison, lune, zodiaque : libellé et icône. */
 const SEASON = {
@@ -525,6 +562,10 @@ class MeteoCard extends MeteoBase {
     // la première ville profite de la détection automatique (vigilance, saison, lune…)
     const ent = detect(this._hass, { ...c, ...(city.entity ? { entity: city.entity } : {}), ...(city.alert ? { alert: city.alert } : ti > 0 ? { alert: "-" } : {}) });
     if (ent.alert === "-") ent.alert = null;
+    // alertes Environnement Canada : indiquées, ou détectées quand il n'y a pas de vigilance Météo-France
+    const ecGiven = city.ec_alerts || (ti === 0 ? c.ec_alerts : null);
+    ent.ec = ecGiven || !ent.alert ? ecSensorsOf(this._hass, ent.weather, ecGiven, ti === 0) : null;
+    if (ent.ec) this._ecFetch(ent.ec);
     const w0 = this._st(ent.weather);
     const feat = num(w0?.attributes?.supported_features);
     // WeatherEntityFeature : 1 par jour, 2 par heure, 4 jour et nuit
@@ -535,7 +576,8 @@ class MeteoCard extends MeteoBase {
     const al = this._st(ent.alert);
     const rel = related(this._hass, ent.weather);
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${w?.last_updated}|${al?.last_updated}|` +
-      [ent.season, ent.moon, ent.zodiac, ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}`;
+      [ent.season, ent.moon, ent.zodiac, ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
+      `|${Object.values(ent.ec || {}).map((id) => this._st(id)?.last_updated).join(",")}|${this._ecRes?.sig || ""}`;
     if (sig === this._sig) return;
     this._sig = sig;
 
@@ -562,10 +604,8 @@ class MeteoCard extends MeteoBase {
     const [label, icon, color] = condOf(w.state);
     const t = num(a.temperature);
     const today = this._today();
-    const vg = this._vigilance(al);
-    const pill = vg && c.show_alert !== false
-      ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
-      : "";
+    const vg = this._vg(al, ent);
+    const pill = vg && c.show_alert !== false ? this._pill(vg) : "";
     return `<header class="nh"><div class="nh-m" data-entity="${esc(ent.weather)}">
       ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
       <div class="nh-n"><div class="title">${esc(city.name || c.title || "Météo")}</div><div class="sub">${esc(label)}</div></div>
@@ -637,7 +677,73 @@ class MeteoCard extends MeteoBase {
       .filter((p) => p.level !== undefined)
       .sort((a, b) => b.level - a.level);
     const max = Math.max(levelOf(al.state) ?? 0, ...list.map((p) => p.level), 0);
-    return { max, active: list.filter((p) => p.level > 0) };
+    return { max, active: list.filter((p) => p.level > 0), entity: al.entity_id };
+  }
+
+  /** Vigilance affichée : Environnement Canada si la ville en a, sinon Météo-France. */
+  _vg(al, ent) {
+    return ent?.ec ? this._ecVigilance(ent.ec) : this._vigilance(al);
+  }
+
+  /** Signature des compteurs d'alertes Environnement Canada (change quand une alerte apparaît ou disparaît). */
+  _ecSig(ec) {
+    return Object.entries(ec).map(([k, id]) => `${id}:${this._st(id)?.state}`).join("|");
+  }
+
+  /** Couleur réelle des alertes : action environment_canada.get_alerts, appelée seulement quand un compteur
+   *  change. En cas d'échec (droits, version de Home Assistant), le niveau reste déduit du type. */
+  _ecFetch(ec) {
+    const sig = this._ecSig(ec);
+    const total = EC_SHOWN.reduce((n, k) => n + (num(this._st(ec[k])?.state) || 0), 0);
+    if (!total || sig === this._ecAsked || typeof this._hass?.callWS !== "function") return;
+    this._ecAsked = sig;
+    (async () => {
+      let res = null;
+      try {
+        let entry = this._config.ec_entry;
+        if (!entry) entry = (await this._hass.callWS({ type: "config/entity_registry/get", entity_id: Object.values(ec)[0] }))?.config_entry_id;
+        if (entry) {
+          const r = await this._hass.callWS({ type: "call_service", domain: "environment_canada", service: "get_alerts",
+            service_data: { config_entry_id: entry }, return_response: true });
+          res = r?.response ?? null;
+          // réponse éventuellement rangée par lieu : { <entrée>: { warnings: [...] } }
+          if (res && !EC_SHOWN.some((k) => k in res)) res = Object.values(res).find((v) => v && typeof v === "object" && EC_SHOWN.some((k) => k in v)) || null;
+        }
+      } catch (e) { res = null; }
+      this._ecRes = { sig, data: res };
+      this._sig = null;
+      this._render();
+    })();
+  }
+
+  /** Alertes Environnement Canada : niveau (0 à 3), alertes en cours (titre, type, heure, fin). */
+  _ecVigilance(ec) {
+    const sts = EC_SHOWN.map((k) => [k, this._st(ec[k])]).filter(([, st]) => st);
+    if (!sts.length || sts.every(([, st]) => st.state === "unavailable" || st.state === "unknown")) return null;
+    const res = this._ecRes?.sig === this._ecSig(ec) ? this._ecRes.data : null;
+    const active = [];
+    for (const [k, st] of sts) {
+      const kind = EC_KINDS[k];
+      const fromAction = Array.isArray(res?.[k]) ? res[k] : null;
+      const items = fromAction || Object.keys(st.attributes || {}).filter((a) => /^alert_\d+$/.test(a))
+        .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)))
+        .map((a) => ({ title: st.attributes[a], date: st.attributes[`alert_time_${a.slice(6)}`] }));
+      for (const it of items) {
+        const lv = EC_COLOUR[String(it.alert_colour_level || "").toLowerCase()];
+        active.push({ name: it.title || kind.label, kind: k, label: kind.label, icon: kind.icon, info: lv === undefined && kind.level === 0,
+          level: lv ?? kind.level, since: it.date, until: it.expiry_time, entity: ec[k] });
+      }
+    }
+    active.sort((a, b) => b.level - a.level || Number(a.info) - Number(b.info));
+    const max = active.reduce((m, p) => Math.max(m, p.level), 0);
+    return { ec: true, max, info: active.length > 0 && active.every((p) => p.info), active, entity: (active[0] || {}).entity || Object.values(ec)[0] };
+  }
+
+  /** Pastille de l'en-tête : vigilance Météo-France ou alertes Environnement Canada. */
+  _pill(vg) {
+    const color = vg.info ? INFO_COLOR : LEVEL_COLOR[vg.max];
+    const value = !vg.ec ? LEVEL_LABEL[vg.max] : vg.active.length ? String(vg.active.length) : "Aucune";
+    return `<div class="pill" data-entity="${esc(vg.entity)}"><span class="dot" style="background:${color}"></span><span class="pill-l">${vg.ec ? "Alertes" : "Vigilance"}</span><span class="pill-v">${value}</span></div>`;
   }
 
   _header(w, al, ent, city = {}) {
@@ -645,10 +751,8 @@ class MeteoCard extends MeteoBase {
     const [label] = condOf(w.state);
     const title = city.name || c.title || "Météo";
     const sub = label;
-    const vg = this._vigilance(al);
-    const pill = vg && c.show_alert !== false
-      ? `<div class="pill" data-entity="${esc(ent.alert)}"><span class="dot" style="background:${LEVEL_COLOR[vg.max]}"></span><span class="pill-l">Vigilance</span><span class="pill-v">${LEVEL_LABEL[vg.max]}</span></div>`
-      : "";
+    const vg = this._vg(al, ent);
+    const pill = vg && c.show_alert !== false ? this._pill(vg) : "";
     // icône de titre fixe, comme les autres cartes (la condition du moment reste sur la grande icône)
     return `<header>
       <div class="brand"><ha-icon class="b-ic" icon="${esc(c.icon || "mdi:weather-partly-cloudy")}" style="color:var(--med-blue)"></ha-icon>
@@ -690,14 +794,35 @@ class MeteoCard extends MeteoBase {
   }
 
   _alerts(al, ent) {
-    const vg = this._vigilance(al);
+    const vg = this._vg(al, ent);
     if (!vg) return "";
+    if (vg.ec) return this._ecAlerts(vg);
     if (!vg.active.length) {
       return `<div class="vig ok" data-entity="${esc(ent.alert)}"><ha-icon icon="mdi:shield-check-outline"></ha-icon><span>Pas de vigilance particulière</span></div>`;
     }
     return `<div class="vig" data-entity="${esc(ent.alert)}" style="--vc:${LEVEL_COLOR[vg.max]}">
       <div class="v-h"><ha-icon icon="mdi:alert-outline"></ha-icon><span>Vigilance ${LEVEL_LABEL[vg.max].toLowerCase()}</span></div>
       <div class="v-l">${vg.active.map((p) => `<span class="v-p" style="--pc:${LEVEL_COLOR[p.level]}"><ha-icon icon="${phenoIcon(p.name)}"></ha-icon>${esc(p.name)}<b>${LEVEL_LABEL[p.level]}</b></span>`).join("")}</div>
+    </div>`;
+  }
+
+  /** Bloc des alertes Environnement Canada : une ligne par alerte (type, titre, heure de début et de fin). */
+  _ecAlerts(vg) {
+    if (!vg.active.length) {
+      return `<div class="vig ok" data-entity="${esc(vg.entity)}"><ha-icon icon="mdi:shield-check-outline"></ha-icon><span>Aucune alerte en cours</span></div>`;
+    }
+    const col = (p) => (p.info ? INFO_COLOR : LEVEL_COLOR[p.level]);
+    const when = (p) => {
+      const d = (v) => { const x = v ? new Date(v) : null; return x && !isNaN(x) ? x : null; };
+      const until = d(p.until), since = d(p.since);
+      const day = (x) => (x.toDateString() === new Date().toDateString() ? hm(x) : `${x.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} ${hm(x)}`);
+      return until ? `jusqu'à ${day(until)}` : since ? `depuis ${day(since)}` : "";
+    };
+    const head = vg.info ? "Bulletin météo" : vg.active.length > 1 ? `${vg.active.length} alertes météo` : "Alerte météo";
+    return `<div class="vig" data-entity="${esc(vg.entity)}" style="--vc:${vg.info ? INFO_COLOR : LEVEL_COLOR[vg.max]}">
+      <div class="v-h"><ha-icon icon="mdi:alert-outline"></ha-icon><span>${head}</span></div>
+      <div class="v-rows">${vg.active.map((p) => `<div class="v-r" data-entity="${esc(p.entity)}" style="--pc:${col(p)}"><ha-icon icon="${p.icon}"></ha-icon>
+        <div class="v-t"><span>${esc(p.name)}</span><small><b>${esc(p.label)}</b>${when(p) ? ` · ${esc(when(p))}` : ""}</small></div></div>`).join("")}</div>
     </div>`;
   }
 
@@ -1783,6 +1908,15 @@ ha-card { display: block; padding-bottom: 14px; }
 .v-p ha-icon { --mdc-icon-size: 15px; color: var(--pc); }
 .v-p b { color: var(--pc); font-weight: 700; }
 ha-card.light .v-h, ha-card.light .v-p b { filter: brightness(.8); }
+.v-rows { display: grid; gap: 6px; margin-top: 7px; }
+.v-r { display: flex; align-items: flex-start; gap: 8px; padding: 6px 9px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--pc) 45%, transparent); background: color-mix(in srgb, var(--pc) 8%, transparent); }
+.v-r ha-icon { --mdc-icon-size: 17px; color: var(--pc); margin-top: 1px; }
+.v-t { display: grid; gap: 1px; min-width: 0; }
+.v-t span { font-weight: 600; }
+.v-t small { font-size: .74rem; color: var(--med-muted); }
+.v-t small b { color: var(--pc); font-weight: 700; }
+ha-card.light .v-t small b { filter: brightness(.8); }
 .sec { margin: 14px 18px 6px; font-size: .82rem; color: var(--med-muted); }
 .fc { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(48px, 1fr); gap: 6px; margin: 0 12px; padding-bottom: 2px; cursor: pointer; overflow-x: auto; scrollbar-width: thin; }
 .fc-d { text-align: center; padding: 8px 2px 7px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
@@ -2097,9 +2231,11 @@ const SCHEMA = [
     entity: { label: "Entité météo", required: true, selector: { entity: { domain: "weather" } } },
     name: { label: "Nom de l'onglet (facultatif)", selector: { text: {} } },
     alert: { label: "Vigilance (facultatif, capteur de vigilance Météo-France ou équivalent)", selector: { entity: { domain: "sensor" } } },
+    ec_alerts: { label: "Alertes Environnement Canada (facultatif, détectées)", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
   } } } },
   { name: "title", selector: { text: {} } },
   { name: "alert", selector: { entity: { domain: "sensor", integration: "meteo_france" } } },
+  { name: "ec_alerts", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
   { name: "forecasts", selector: { select: { multiple: true, mode: "list", options: [
     { value: "hourly", label: "Par heure" }, { value: "daily", label: "Par jour" }, { value: "twice_daily", label: "Jour et nuit" }] } } },
   { name: "days", selector: { number: { min: 1, max: 14, step: 1, mode: "box" } } },
@@ -2142,6 +2278,7 @@ const LABELS = {
   entities: "Plusieurs villes en onglets (facultatif, remplace l'entité ci-dessus)",
   title: "Titre (Météo par défaut)",
   alert: "Vigilance Météo-France (vide = détectée)",
+  ec_alerts: "Alertes Environnement Canada (vide = détectées quand il n'y a pas de vigilance Météo-France)",
   forecasts: "Prévisions affichées (vide = par jour)",
   days: "Nombre de jours affichés",
   hours: "Nombre d'heures affichées",
@@ -2153,7 +2290,7 @@ const LABELS = {
   show_stats: "Ressenti, vent, humidité et pression",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
   show_rain_hour: "Pluie dans l'heure (Météo-France)",
-  show_alert: "Vigilance",
+  show_alert: "Vigilance (Météo-France) ou alertes (Environnement Canada)",
   show_forecast: "Prévisions",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
   layout: "Présentation",
