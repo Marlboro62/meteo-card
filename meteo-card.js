@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.4.3-beta";
+const CARD_VERSION = "3.4.4-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1997,6 +1997,11 @@ class MeteoFeuxCard extends MeteoBase {
           this._map.invalidateSize();
           if (el.clientWidth && el.clientHeight && this._view && !this._viewed) { this._viewed = true; this._view(); }
         }).observe(el);
+        // plein écran (entrée et sortie) : la carte reprend sa taille puis le cadrage maison et feux
+        if (!this._fsHook) {
+          this._fsHook = () => setTimeout(() => { if (!this._map) return; this._map.invalidateSize(); this._view?.(); }, 250);
+          document.addEventListener("fullscreenchange", this._fsHook);
+        }
         this._map.attributionControl.addAttribution('feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>');
         this._layer = L.layerGroup().addTo(this._map);
         this._tiles = null;
