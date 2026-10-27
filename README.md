@@ -335,7 +335,7 @@ Il faut l'intégration **NASA FIRMS Wildfire Monitor** (HACS) : elle demande une
 - **Vent au feu le plus proche** : la fumée est-elle poussée vers vous, de côté, ou s'éloigne-t-elle ? Avec la vitesse du vent.
 - **Le plus intense** : sa puissance radiative (MW) et son intensité (faible, modéré, fort, extrême).
 - **Prochain passage** d'un satellite au-dessus de chez vous : la prochaine occasion de voir un nouveau feu.
-- **Carte interactive** : les feux sur un fond OpenStreetMap (villes et routes), à leur couleur d'intensité, avec un trait qui montre où part la fumée, votre maison et un bouton plein écran. Un clic sur un feu ouvre sa bulle (lieu, intensité, distance, heure, confiance, satellites, fumée) ; un clic sur un feu de la liste centre la carte dessus.
+- **Carte interactive** : les feux sur un fond OpenFreeMap (villes, routes et noms, clair ou sombre selon le thème), à leur couleur d'intensité, avec un trait qui montre où part la fumée, votre maison et un bouton plein écran. Un clic sur un feu ouvre sa bulle (lieu, intensité, distance, heure, confiance, satellites, fumée) ; un clic sur un feu de la liste centre la carte dessus.
 - **Feux détectés** : la ville la plus proche du feu, la distance et la direction depuis chez vous, depuis quand, la confiance de la détection, le nombre de satellites et la fumée.
 
 Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou un brûlage agricole sont détectés aussi. L'intégration permet de les ignorer (zones à ignorer, sources de chaleur apprises).
@@ -347,7 +347,7 @@ Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou
 | `max_items` | Nombre de feux listés | `6` |
 | `show_map` | Carte interactive des feux | `true` |
 | `map_height` | Hauteur de la carte (px) | `300` |
-| `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenStreetMap |
+| `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |

@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.4.1-beta";
+const CARD_VERSION = "3.4.2-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1972,7 +1972,7 @@ class MeteoFeuxCard extends MeteoBase {
     if (!this._keep) return;
     if (!this._keep.querySelector(".bm")) {
       const base = c.leaflet_path || LEAFLET;
-      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><div class="bm" style="height:${Number(c.map_height) || 300}px">
+      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${Number(c.map_height) || 300}px">
         <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
         <div class="bm-leg">${Object.values(FIRE_BAND).map(([l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join("")}<span>trait : direction de la fumée</span></div>`;
       this._map = null;
@@ -1995,12 +1995,21 @@ class MeteoFeuxCard extends MeteoBase {
         this._map.attributionControl.addAttribution('feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>');
         this._layer = L.layerGroup().addTo(this._map);
         this._tiles = null;
+        this._tilesKey = null;
       }
-      // fond OpenStreetMap avec villes et routes (assombri par un filtre en thème sombre), ou tiles_url
-      el.classList.toggle("dark", !light && !c.tiles_url);
-      if (!this._tiles) {
-        this._tiles = L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17,
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(this._map);
+      // fond vectoriel OpenFreeMap (villes, routes, noms ; gratuit et sans clé), clair ou sombre selon le thème ;
+      // sans WebGL2 : images OpenStreetMap assombries ; tiles_url pour un autre fournisseur
+      const vector = !c.tiles_url && (await loadVector());
+      const tkey = vector ? `ofm|${light}` : c.tiles_url || "raster";
+      el.classList.toggle("dark", !vector && !light && !c.tiles_url);
+      if (this._tilesKey !== tkey) {
+        this._tiles?.remove();
+        const osm = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+        this._tiles = vector
+          ? L.maplibreGL({ style: `${OFM}${light ? "liberty" : "dark"}`, attribution: `<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> ${osm}` })
+          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: osm });
+        this._tiles.addTo(this._map);
+        this._tilesKey = tkey;
       }
       this._layer.clearLayers();
       this._markers = [];
@@ -2060,6 +2069,8 @@ const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/";
 const MAPLIBRE_LEAFLET = "https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
 // fonds vectoriels officiels d'OpenStreetMap (Shortbread), ceux de Home Assistant depuis que CARTO exige une clé
 const OSM_VECTOR = "https://vector.openstreetmap.org/shortbread_v1/tilejson.json";
+// styles vectoriels complets d'OpenFreeMap (villes, routes, noms), gratuits et sans clé : carte des feux
+const OFM = "https://tiles.openfreemap.org/styles/";
 const scripts = {};
 /** Script classique chargé une seule fois (délai de 20 s : sans réponse, la carte affiche un message au lieu de rester vide). */
 const loadScript = (src, ready) => (scripts[src] = scripts[src] || new Promise((resolve, reject) => {
