@@ -40,6 +40,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Soleil et lune** | `custom:meteo-astro-card` | **Course du soleil** (boussole, aube, lever, midi, coucher, crépuscule, durée du jour), **lune** (lever, coucher, éclairement, fenêtre des phases), cycles, **étoiles filantes**, **activité solaire et aurores** (indice Kp, éruptions) et **pollens** |
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
+| **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude), en liste et sur une **carte interactive**, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
@@ -71,6 +72,10 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | Mode WarC0zes (`layout: warc0zes`, `halo: true`) | Bolides (carte interactive) | Séismes |
 | --- | --- | --- |
 | ![Mode WarC0zes](images/meteo-warc0zes.png) | ![Bolides](images/meteo-bolides.png) | ![Séismes](images/meteo-seismes.png) |
+
+| Crues et rivières | | |
+| --- | --- | --- |
+| ![Crues et rivières](images/meteo-crues.png) | | |
 
 | Feux de forêt | Carte interactive des feux (fond flouté) | Carte interactive des séismes |
 | --- | --- | --- |
@@ -135,6 +140,7 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | **REST** (intégration officielle, en YAML) | Fichier `packages/…yaml`, voir la carte Bolides | Bolides | Liste des bolides de l'API Fireball de la NASA, publique et sans clé |
 | **NOAA Space Weather** (facultatif) | HACS : [tcarwash/home-assistant_noaa-space-weather](https://github.com/tcarwash/home-assistant_noaa-space-weather) | Soleil et lune | Indice Kp, flux solaire, taches solaires, probabilité d'éruption (sans elle, la carte lit directement les données publiques de la NOAA) |
 | **Aurora** (facultatif) | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Soleil et lune | Probabilité d'aurore à votre position (modèle OVATION de la NOAA) |
+| **Vigicrues** (facultatif) | HACS : [julcollas/hass-vigicrues](https://github.com/julcollas/hass-vigicrues) | Crues et rivières | Hauteur et débit des stations que vous choisissez (sans elle, la carte lit directement Hub'Eau, le service public des données sur l'eau) |
 | **NASA FIRMS Wildfire Monitor** | HACS : [bangboomben/ha-nasa-firms](https://github.com/bangboomben/ha-nasa-firms), avec une clé gratuite de la NASA ([MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/)) | Feux de forêt | Feux détectés par les satellites VIIRS et MODIS dans le rayon choisi, avec leur intensité, la ville la plus proche, le vent et la direction de la fumée |
 | **USGS Earthquake Hazards Program** ou **GDACS** (facultatif) | Intégrations officielles | Séismes | Séismes autour de chez vous (sans elles, la carte lit directement les flux publics de l'EMSC et de l'USGS) |
 | **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
@@ -320,6 +326,30 @@ Pour le total du mois, créez un compteur **Paramètres › Appareils et service
 | `counter_max` | Maximum de la jauge | `100` |
 | `distance_max` | Distance (km) qui place l'éclair au bord de la boussole | `100` |
 | `compass_image` | Image au centre de la boussole | — |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Crues et rivières
+
+```yaml
+type: custom:meteo-crues-card
+radius: 25          # stations à moins de 25 km de chez vous
+```
+
+**Rien à installer** : la carte trouve les stations Vigicrues autour de chez vous et lit leurs mesures sur **Hub'Eau** (service public des données sur l'eau, sans clé), toutes les 30 minutes. Avec l'intégration **Vigicrues** (HACS), elle affiche plutôt les stations que vous y avez choisies, avec leur historique dans Home Assistant.
+
+- **Vigilance crues** du département (Météo-France, alimentée par Vigicrues) et **pluie-inondation**, si l'intégration Météo-France est installée.
+- **Stations de mesure** : la rivière et le lieu, la distance et la direction, la **hauteur d'eau** avec une **courbe des dernières 24 h** et sa variation (« +62 cm en 24 h »), et le **débit**. Couleur de la tendance : rouge en forte hausse (50 cm ou plus en 24 h), orange en hausse, vert stable, bleu en baisse.
+- **Carte interactive** : les stations à la couleur de leur tendance, votre maison et le plein écran. Un clic sur une station ouvre sa bulle (hauteur, variation, débit, heure de la mesure, lien vers la station sur Vigicrues) ; un clic sur une station de la liste centre la carte dessus.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Crues et rivières` |
+| `radius` | Stations à moins de (km) | `25` |
+| `stations` | Stations à suivre, par leur code Vigicrues (ex. `F700000103, F704000101`) | les plus proches |
+| `max_items` | Nombre de stations affichées | `6` |
+| `direct` | Sans intégration, lire Hub'Eau depuis le navigateur | `true` |
+| `show_map`, `map_height`, `tiles_url` | Carte interactive : affichage, hauteur (px), autre fond | `true`, `300`, OpenFreeMap |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 

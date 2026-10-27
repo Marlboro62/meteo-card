@@ -49,7 +49,7 @@ const mk = (conds, base) => conds.map((c, i) => ({ datetime: new Date(Date.now()
   temperature: base[i][0], templow: base[i][1], precipitation_probability: base[i][2], precipitation: base[i][3] }));
 const SCEN = {
   pluie: { state: "rainy", attrs: { temperature: 13.6, apparent_temperature: 11.2, humidity: 90, pressure: 996.4, wind_speed: 32.4, wind_gust_speed: 64.8, wind_bearing: 250 },
-    alert: { state: "Jaune", attrs: { "Vent violent": "Jaune", "Pluie-inondation": "Jaune", "Orages": "Vert", "Inondation": "Vert", "Neige-verglas": "Vert" } },
+    alert: { state: "Jaune", attrs: { "Vent violent": "Jaune", "Pluie-inondation": "Jaune", "Orages": "Vert", "Inondation": "Jaune", "Neige-verglas": "Vert" } },
     mf: { cloud_cover: 90, rain_chance: 80, freeze_chance: 0, snow_chance: 0, uv: 1, daily_precipitation: 12.4 },
     pollen: { state: "faible", risk: 1, plants: { "Graminées": "faible", "Urticacées": "faible", "Ambroisies": "nul", "Chêne": "nul" } },
     fc: mk(["rainy", "pouring", "cloudy", "partlycloudy", "sunny", "partlycloudy", "rainy"], [[15, 9, 90, 8.2], [14, 8, 100, 15.1], [16, 8, 30, 0.4], [17, 7, 10, 0], [18, 6, 0, 0], [17, 8, 20, 0], [14, 9, 70, 3.2]]) },
@@ -200,6 +200,13 @@ const QUAKES = (() => {
   return [...near, ...world].map(([lat, lon, mag, d, place, depth], i) => ({ type: "Feature", id: `demo${i}`,
     properties: { mag, place, time: Date.now() - d * DAY, url: "" }, geometry: { type: "Point", coordinates: [lon, lat, depth] } }));
 })();
+const RIVERS = [
+  // code, station, cours d'eau, latitude, longitude, hauteur (m), variation sur 24 h en crue (m), débit (m³/s)
+  ["X000000001", "La Rivière-Exemple à Ville-Exemple", "La Rivière-Exemple", 46.64, 2.36, 1.82, 0.62, 48],
+  ["X000000002", "Le Ruisseau-Vert à Bourg-du-Pont", "Le Ruisseau-Vert", 46.53, 2.51, 0.74, 0.18, 6.2],
+  ["X000000003", "La Grande-Eau à Moulin-Neuf", "La Grande-Eau", 46.71, 2.22, 2.41, 0.04, 112],
+  ["X000000004", "La Petite-Source à Les Saules", "La Petite-Source", 46.47, 2.31, 0.38, -0.12, 1.4],
+];
 const KP_NOW = () => (scen === "soleil" ? 6.33 : 2.67);
 const realFetch = window.fetch.bind(window);
 window.fetch = (url, ...rest) => {
@@ -211,6 +218,16 @@ window.fetch = (url, ...rest) => {
   if (u.includes("solar_probabilities")) return json([{ date: tag(0).slice(0, 10), m_class_1_day: scen === "soleil" ? 55 : 15, x_class_1_day: scen === "soleil" ? 15 : 1 }]);
   if (u.includes("earthquake.usgs.gov")) return json({ type: "FeatureCollection", features: QUAKES });
   if (u.includes("seismicportal.eu")) return json({ type: "FeatureCollection", features: [] });
+  // Hub'Eau : stations et mesures fictives (rivières inventées) ; pluie = crue en cours, beau temps = étiage
+  if (u.includes("hydrometrie/referentiel/stations")) return json({ data: RIVERS.map((r) => ({ code_station: r[0], libelle_station: r[1], libelle_cours_eau: r[2], latitude_station: r[3], longitude_station: r[4] })) });
+  if (u.includes("hydrometrie/observations_tr")) {
+    const g = /grandeur_hydro=(\w)/.exec(u)[1], out = [];
+    for (const [code, , , , , h0, rise, q0] of RIVERS) for (let i = 0; i <= 48; i++) {
+      const k = i / 48, rr = scen === "pluie" ? rise : -rise / 6, h = h0 + rr * (k * k) + Math.sin(i / 5) * 0.01;
+      out.push({ code_station: code, date_obs: new Date(Date.now() - DAY + i * 30 * 60e3).toISOString(), resultat_obs: g === "H" ? Math.round(h * 1000) : Math.round(q0 * (1 + rr) * 1000) });
+    }
+    return json({ data: out });
+  }
   return realFetch(url, ...rest);
 };
 const cards = {
@@ -219,6 +236,7 @@ const cards = {
   astro: document.createElement("meteo-astro-card"),
   air: document.createElement("meteo-air-card"),
   eclairs: document.createElement("meteo-eclairs-card"),
+  crues: document.createElement("meteo-crues-card"),
   feux: document.createElement("meteo-feux-card"),
   seismes: document.createElement("meteo-seismes-card"),
   bolides: document.createElement("meteo-bolides-card"),
@@ -233,6 +251,7 @@ function apply() {
   cards.astro.setConfig({ theme: t, ...PHOTOS() });
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
+  cards.crues.setConfig({ theme: t });
   cards.feux.setConfig({ theme: t });
   cards.seismes.setConfig({ theme: t });
   cards.bolides.setConfig({ theme: t });

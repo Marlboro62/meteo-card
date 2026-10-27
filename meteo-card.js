@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.5.0";
+const CARD_VERSION = "3.6.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2145,6 +2145,204 @@ class MeteoFeuxCard extends MeteoBase {
 
 }
 
+/* ------------------------------------------------------------ carte Crues */
+
+const CRUES_DEFAULTS = { title: "Crues et rivières", radius: 25, max_items: 6, direct: true, show_map: true, map_height: 300, theme: "v2" };
+/** API publique Hub'Eau (hydrométrie en temps réel, mêmes stations que Vigicrues), sans clé. */
+const HUBEAU = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/";
+/** Tendance de la hauteur d'eau sur 24 h (mètres) : libellé, couleur, icône. */
+const riverTrend = (d) => (d === null ? ["Hauteur", "#8fa0b8", "mdi:waves"] : d >= 0.5 ? ["Forte hausse", "#ee4a4a", "mdi:arrow-up-bold"]
+  : d >= 0.1 ? ["En hausse", "#ff8c33", "mdi:arrow-top-right"] : d <= -0.1 ? ["En baisse", "#1d93e3", "mdi:arrow-bottom-right"] : ["Stable", "#5fcf8a", "mdi:arrow-right"]);
+/** « La Seine à Paris » → { river: « La Seine », place: « Paris » }. */
+const stationParts = (name) => {
+  const m = /^(.*?)\s+(?:à|au|aux|a)\s+(.+)$/i.exec(String(name || "").trim());
+  return m ? { river: m[1], place: m[2] } : { river: null, place: String(name || "").trim() };
+};
+/** Petite courbe de la hauteur sur 24 h. */
+const sparkSvg = (pts, col) => {
+  if (!pts || pts.length < 2) return "";
+  const t0 = pts[0][0], t1 = pts[pts.length - 1][0], vs = pts.map((p) => p[1]);
+  const lo = Math.min(...vs), hi = Math.max(...vs), span = Math.max(hi - lo, 0.02);
+  const d = pts.map(([t, v], i) => `${i ? "L" : "M"}${f2(((t - t0) / Math.max(1, t1 - t0)) * 100)} ${f2(26 - ((v - lo) / span) * 22)}`).join("");
+  return `<svg viewBox="0 0 100 28" class="rv-sp" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" stroke="${col}"/></svg>`;
+};
+
+class MeteoCruesCard extends MeteoBase {
+  static get defaults() {
+    return CRUES_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-crues-card-editor");
+  }
+
+  getCardSize() {
+    return 6;
+  }
+
+  _home() {
+    const c = this._config, cfg = this._hass?.config || {};
+    const lat = num(c.latitude) ?? num(cfg.latitude), lon = num(c.longitude) ?? num(cfg.longitude);
+    return lat === null || lon === null ? null : [lat, lon];
+  }
+
+  /** Stations de l'intégration Vigicrues : capteurs de hauteur (height) et de débit (waterflowrate) regroupés par station. */
+  _fromEntities() {
+    const hass = this._hass, reg = hass.entities || {}, out = {};
+    for (const [id, st] of Object.entries(hass.states)) {
+      if (!id.startsWith("sensor.") || reg[id]?.platform !== "vigicrues") continue;
+      const a = st.attributes || {}, code = a.station_id || id;
+      const s = (out[code] ||= { code, lat: num(a.latitude), lon: num(a.longitude), ents: {} });
+      const kind = a.type === "Q" || reg[id]?.translation_key === "waterflowrate" || /debit|flow|_q$/.test(id) ? "q" : "h";
+      s.ents[kind] = id;
+      if (kind === "h") {
+        const dev = hass.devices?.[reg[id]?.device_id];
+        s.name = String(dev?.name_by_user || dev?.name || a.friendly_name || code).replace(/\s*-\s*[A-Z]\d{6,}\s*$/, "").replace(/^Vigicrues\s+/i, "");
+      }
+    }
+    return Object.values(out).map((s) => ({ ...s, h: this._num(s.ents.h), q: this._num(s.ents.q), at: this._st(s.ents.h)?.last_changed ? new Date(this._st(s.ents.h).last_changed) : null, ...stationParts(s.name) }));
+  }
+
+  /** Hauteurs des dernières 24 h des capteurs de l'intégration (historique de Home Assistant), une fois par heure. */
+  _histEntities(list) {
+    const ids = list.map((s) => s.ents.h).filter(Boolean);
+    const key = ids.join(",");
+    if (!ids.length || !this._hass.callApi || (this._hKey === key && Date.now() - this._hAt < 36e5) || this._hBusy) return;
+    this._hBusy = true;
+    const from = new Date(Date.now() - DAYMS).toISOString();
+    this._hass.callApi("GET", `history/period/${from}?filter_entity_id=${key}&minimal_response&no_attributes`).then((res) => {
+      const out = {};
+      for (const ser of res || []) {
+        const id = ser?.[0]?.entity_id;
+        if (id) out[id] = ser.map((p) => [Date.parse(p.last_changed), Number(p.state)]).filter(([t, v]) => Number.isFinite(t) && Number.isFinite(v));
+      }
+      this._hist = out;
+    }).catch(() => {}).finally(() => { this._hKey = key; this._hAt = Date.now(); this._hBusy = false; this._sig = null; this._render(); });
+  }
+
+  /** Sans intégration : stations Hub'Eau autour de chez vous, puis hauteurs et débits des dernières 24 h (toutes les 30 min). */
+  _fetch(home) {
+    if (this._busy || (this._data && Date.now() - this._dataAt < 18e5)) return;
+    this._busy = true;
+    const c = this._config, r = Math.max(1, Number(c.radius) || 25);
+    const dLat = r / 111.2, dLon = r / (111.2 * Math.cos(home[0] * RAD));
+    const bbox = [home[1] - dLon, home[0] - dLat, home[1] + dLon, home[0] + dLat].map((v) => v.toFixed(4)).join(",");
+    const forced = (Array.isArray(c.stations) ? c.stations : c.stations ? String(c.stations).split(/[,\s]+/) : []).map((x) => String(x).replace(/^.*\//, "")).filter(Boolean);
+    const stUrl = `${HUBEAU}referentiel/stations?format=json&en_service=true&size=200&fields=code_station,libelle_station,libelle_cours_eau,latitude_station,longitude_station&`
+      + (forced.length ? `code_station=${forced.join(",")}` : `bbox=${bbox}`);
+    const since = new Date(Date.now() - DAYMS).toISOString().slice(0, 19);
+    fetchJson(stUrl, 36e5).then((j) => {
+      let st = (j.data || []).map((x) => ({ code: x.code_station, name: x.libelle_station, riverName: x.libelle_cours_eau, lat: num(x.latitude_station), lon: num(x.longitude_station) }))
+        .filter((x) => x.lat !== null && x.lon !== null);
+      st = st.map((x) => ({ ...x, dist: greatCircle(home[0], home[1], x.lat, x.lon) })).filter((x) => forced.length || x.dist <= r).sort((a, b) => a.dist - b.dist).slice(0, 30);
+      if (!st.length) return [];
+      const obs = (g) => fetchJson(`${HUBEAU}observations_tr?format=json&size=20000&grandeur_hydro=${g}&date_debut_obs=${since}&fields=code_station,date_obs,resultat_obs&sort=asc&code_entite=${st.map((x) => x.code).join(",")}`, 18e5)
+        .then((o) => o.data || []).catch(() => []);
+      return Promise.all([obs("H"), obs("Q")]).then(([H, Q]) => st.map((x) => {
+        const hs = H.filter((o) => o.code_station === x.code).map((o) => [Date.parse(o.date_obs), Number(o.resultat_obs) / 1000]).filter(([t, v]) => Number.isFinite(t) && Number.isFinite(v));
+        const qs = Q.filter((o) => o.code_station === x.code);
+        const lastQ = qs.length ? Number(qs[qs.length - 1].resultat_obs) / 1000 : null;
+        return { ...x, h: hs.length ? hs[hs.length - 1][1] : null, q: Number.isFinite(lastQ) ? lastQ : null, at: hs.length ? new Date(hs[hs.length - 1][0]) : null, series: hs, ...stationParts(x.name), river: x.riverName || stationParts(x.name).river };
+      }).filter((x) => x.h !== null || x.q !== null));
+    }).then((list) => { this._data = list; this._failed = false; })
+      .catch(() => { this._data = []; this._failed = true; })
+      .finally(() => { this._dataAt = Date.now(); this._busy = false; this._sig = null; this._render(); });
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, home = this._home();
+    const ents = this._fromEntities();
+    if (ents.length) this._histEntities(ents);
+    else if (c.direct !== false && home) this._fetch(home);
+    const al = detect(this._hass, c).alert, ast = this._st(al);
+    const vigi = (k) => { const v = ast?.attributes?.[k]; const l = levelOf(v); return l === undefined ? null : l; };
+    const crue = vigi("Inondation"), rain = vigi("Pluie-inondation");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${this._dataAt}|${this._hAt}|${crue}|${rain}|` + ents.map((s) => `${s.h}/${s.q}`).join(",");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const now = Date.now();
+    let list = (ents.length ? ents.map((s) => ({ ...s, series: (this._hist?.[s.ents.h] || []).concat(s.h !== null && s.at ? [[s.at.getTime(), s.h]] : []) })) : this._data || [])
+      .map((s) => {
+        const ser = (s.series || []).filter(([t]) => now - t <= DAYMS + 36e5).sort((a, b) => a[0] - b[0]);
+        const d24 = ser.length > 1 ? ser[ser.length - 1][1] - ser[0][1] : null;
+        return { ...s, series: ser, d24, trend: riverTrend(d24), dist: home && s.lat !== null ? greatCircle(home[0], home[1], s.lat, s.lon) : s.dist ?? null, az: home && s.lat !== null ? bearing(home[0], home[1], s.lat, s.lon) : null };
+      })
+      .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
+    const max = Math.max(1, Number(c.max_items) || 6);
+    list = list.slice(0, max);
+    const rising = list.filter((s) => s.d24 !== null && s.d24 >= 0.1).length;
+    const sub = !list.length ? "" : rising ? `${rising} station${rising > 1 ? "s" : ""} en hausse sur 24 h` : `${list.length} station${list.length > 1 ? "s" : ""} suivie${list.length > 1 ? "s" : ""} · niveaux stables`;
+    let body = this._head(c.icon || "mdi:home-flood", crue >= 2 ? LEVEL_COLOR[crue] : "#1d93e3", c.title || "Crues et rivières", sub);
+    // vigilance crues du département (Météo-France, alimentée par Vigicrues), et pluie-inondation
+    if (crue !== null || rain !== null) {
+      const chip = (lv, label) => (lv === null ? "" : `<div class="rv-v" data-entity="${esc(al)}" style="--vc:${LEVEL_COLOR[lv]}"><ha-icon icon="${label === "Crues" ? "mdi:home-flood" : "mdi:weather-pouring"}"></ha-icon>
+        <span>${label === "Crues" ? "Vigilance crues" : "Pluie-inondation"}</span><b>${LEVEL_LABEL[lv]}</b></div>`);
+      body += `<div class="rv-vs">${chip(crue, "Crues")}${chip(rain, "Pluie")}</div>`;
+    }
+    if (!list.length) {
+      const loading = !ents.length && c.direct !== false && home && !this._dataAt;
+      body += loading ? `<div class="empty"><b>Chargement…</b></div>` : `<div class="empty"><b>${this._failed ? "Données des rivières inaccessibles" : "Aucune station de mesure à proximité"}</b><span>${this._failed
+        ? "Le navigateur n'a pas pu lire Hub'Eau. Installez l'intégration Vigicrues (HACS) et choisissez vos stations."
+        : `Aucune station Vigicrues à moins de ${fmt(Number(c.radius) || 25)} km. Agrandissez le rayon, ou indiquez vos stations (option stations, ou intégration Vigicrues).`}</span></div>`;
+      this._card(body);
+      if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
+      return;
+    }
+    const mapOn = c.show_map !== false && !!home;
+    const m = (v) => `${fmt(v, Math.abs(v) < 10 ? 2 : 1)} m`;
+    const cm = (v) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${fmt(Math.abs(v * 100))} cm`;
+    const row = (s, i) => `<div class="rv-r" ${mapOn && s.lat !== null ? `data-act="fly" data-i="${i}" role="button" tabindex="0"` : s.ents?.h ? `data-entity="${esc(s.ents.h)}"` : ""}>
+      <div class="rv-n"><b>${esc(s.river || s.place)}</b><small>${esc(s.river ? s.place : "")}${s.dist !== null ? `${s.river ? " · " : ""}${fmt(s.dist, s.dist < 10 ? 1 : 0)} km${s.az !== null ? ` ${compass16(s.az)}` : ""}` : ""}</small></div>
+      ${sparkSvg(s.series, s.trend[1])}
+      <div class="rv-h"><b>${s.h === null ? "—" : m(s.h)}</b><small style="color:${s.trend[1]}"><ha-icon icon="${s.trend[2]}"></ha-icon>${s.d24 === null ? s.trend[0] : `${cm(s.d24)} en 24 h`}</small>
+        ${s.q !== null ? `<small>${fmt(s.q, s.q < 10 ? 2 : s.q < 100 ? 1 : 0)} m³/s</small>` : ""}</div></div>`;
+    body += `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>
+      <div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`;
+    this._card(body);
+    if (mapOn) this._mapUpdate(list, home);
+    else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
+  }
+
+  _action(act, el) {
+    if (act === "fly") this._fly(Number(el.dataset.i));
+    else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); }
+  }
+
+  /** Carte interactive des stations, à la couleur de leur tendance sur 24 h. */
+  async _mapUpdate(list, home) {
+    const c = this._config;
+    const legend = ["Forte hausse", "En hausse", "Stable", "En baisse"].map((l) => { const t = [0.6, 0.2, 0, -0.2].map(riverTrend).find(([x]) => x === l); return `<span><i style="background:${t[1]}"></i>${l}</span>`; }).join("") + "<span>sur 24 h</span>";
+    const L = await this._localMap(home, legend, 'rivières : <a href="https://www.vigicrues.gouv.fr/">Vigicrues</a>, <a href="https://hubeau.eaufrance.fr/">Hub\'Eau</a>', Number(c.map_height) || 300);
+    if (!L) return;
+    try {
+      this._layer.clearLayers();
+      this._markers = [];
+      this._flyZoom = 12;
+      const dt = (d) => d.toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      list.forEach((s, i) => {
+        if (s.lat === null || s.lon === null) return;
+        const mk = L.circleMarker([s.lat, s.lon], { radius: 8, color: "#ffffff", weight: 1.5, fillColor: s.trend[1], fillOpacity: 0.95 })
+          .bindPopup(`<div class="bp"><b>${esc(s.river || s.place)}${s.river ? ` à ${esc(s.place)}` : ""}</b>
+            ${s.h !== null ? `<span>Hauteur <b>${fmt(s.h, 2)} m</b>${s.d24 !== null ? ` · ${s.d24 > 0 ? "+" : s.d24 < 0 ? "−" : "±"}${fmt(Math.abs(s.d24 * 100))} cm en 24 h` : ""}</span>` : ""}
+            ${s.q !== null ? `<span>Débit <b>${fmt(s.q, s.q < 10 ? 2 : 1)} m³/s</b></span>` : ""}
+            <span style="color:${s.trend[1]}">${s.trend[0]}</span>${s.at ? `<span>Mesure ${dt(s.at)}</span>` : ""}
+            ${s.dist !== null ? `<span>À <b>${fmt(s.dist, s.dist < 10 ? 1 : 0)} km</b>${s.az !== null ? ` ${compass16(s.az)}` : ""} de chez vous</span>` : ""}
+            ${s.code ? `<a href="https://www.vigicrues.gouv.fr/station/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer">Station sur Vigicrues</a>` : ""}</div>`,
+          { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
+        mk.addTo(this._layer);
+        this._markers[i] = mk;
+      });
+      L.circleMarker(home, { radius: 6, color: "#fff", weight: 2, fillColor: "#1d93e3", fillOpacity: 1 }).bindTooltip("Chez vous").addTo(this._layer);
+      this._localFit(list.map((s) => s.code).join(), [home, ...list.filter((s) => s.lat !== null).map((s) => [s.lat, s.lon])], home, 11);
+    } catch (e) {
+      console.error("Carte Météo (crues) :", e);
+      this._map = null;
+      if (this._mapEl) this._mapEl.innerHTML = `<div class="empty"><b>Erreur de la carte</b><span>${esc(e.message)}</span></div>`;
+    }
+  }
+}
+
 
 /* ---------------------------------------------------------------- bolides */
 
@@ -2766,6 +2964,18 @@ a.qk-r:hover { border-color: var(--med-blue); }
 .qk-p small { font-size: .72rem; color: var(--med-muted); }
 .qk-l { flex: none; font-size: .7rem; color: var(--med-muted); }
 .qk-src { margin: 8px 18px 0; font-size: .68rem; color: var(--med-muted); text-align: right; }
+.rv-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 12px 0; }
+.rv-v { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; cursor: pointer; font-size: .8rem;
+  background: color-mix(in srgb, var(--vc) 14%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--vc) 55%, transparent); }
+.rv-v ha-icon { --mdc-icon-size: 20px; color: var(--vc); } .rv-v span { flex: 1; color: var(--med-muted); } .rv-v b { color: var(--vc); }
+.rv-r { display: grid; grid-template-columns: minmax(0, 1fr) 76px auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px;
+  background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; }
+.rv-n { display: flex; flex-direction: column; min-width: 0; } .rv-n b { font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv-n small { font-size: .72rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv-sp { width: 76px; height: 28px; } .rv-sp path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.rv-h { display: flex; flex-direction: column; align-items: flex-end; text-align: right; } .rv-h b { font-size: .95rem; }
+.rv-h small { font-size: .7rem; color: var(--med-muted); display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.rv-h small ha-icon { --mdc-icon-size: 13px; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -3027,6 +3237,28 @@ const FEUX_LABELS = {
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
+const CRUES_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "radius", selector: { number: { min: 1, max: 200, mode: "box", unit_of_measurement: "km" } } },
+  { name: "stations", selector: { text: {} } },
+  { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
+  { name: "direct", selector: { boolean: {} } },
+  { name: "show_map", selector: { boolean: {} } },
+  { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const CRUES_LABELS = {
+  title: "Titre (Crues et rivières par défaut)",
+  radius: "Stations à moins de",
+  stations: "Stations à suivre (codes Vigicrues séparés par des virgules, vide = les plus proches)",
+  max_items: "Nombre de stations affichées",
+  direct: "Sans intégration, lire Hub'Eau depuis le navigateur",
+  show_map: "Carte interactive des stations",
+  map_height: "Hauteur de la carte",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const BOLIDES_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "entity", selector: { entity: { domain: "sensor" } } },
@@ -3128,6 +3360,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-eclairs-card-editor", makeEditor(ECLAIRS_SCHEMA, ECLAIRS_LABELS, ECLAIRS_DEFAULTS));
   define("meteo-seismes-card", MeteoSeismesCard);
   define("meteo-seismes-card-editor", makeEditor(SEISMES_SCHEMA, SEISMES_LABELS, SEISMES_DEFAULTS));
+  define("meteo-crues-card", MeteoCruesCard);
+  define("meteo-crues-card-editor", makeEditor(CRUES_SCHEMA, CRUES_LABELS, CRUES_DEFAULTS));
   define("meteo-feux-card", MeteoFeuxCard);
   define("meteo-feux-card-editor", makeEditor(FEUX_SCHEMA, FEUX_LABELS, FEUX_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
@@ -3140,6 +3374,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-eclairs-card", name: "Carte Météo : éclairs", description: "Direction et distance du dernier éclair, compteur d'éclairs (Blitzortung)." },
     { type: "meteo-bolides-card", name: "Carte Météo : bolides", description: "Carte du monde interactive des bolides (grosses météorites) détectés par la NASA, avec le plus récent, le plus proche et le plus puissant." },
     { type: "meteo-astro-card", name: "Carte Météo : soleil et lune", description: "Course du soleil, lever et coucher du soleil et de la lune, phases de la lune, étoiles filantes, activité solaire et aurores, cycles et pollens." },
+    { type: "meteo-crues-card", name: "Carte Météo : crues et rivières", description: "Hauteur et débit des rivières proches avec leur tendance sur 24 h, vigilance crues, carte interactive des stations (Vigicrues, Hub'Eau)." },
     { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
