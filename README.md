@@ -41,7 +41,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
-| **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude) et en liste, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
+| **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude), en liste et sur une **carte interactive**, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
 Elles fonctionnent avec **toute entité météo** (Météo-France, Met.no, OpenWeatherMap…) et trouvent leurs entités toutes seules. Le soleil et la lune sont **calculés d'après les coordonnées de Home Assistant** : aucun capteur ni image à fournir. Les **icônes météo animées** sont celles de la carte Météo-France de HACF (amCharts).
@@ -388,6 +388,7 @@ radius: 1000          # km autour de chez vous
 - **Le plus proche, le plus fort, dans le monde** : trois tuiles avec la distance et la magnitude.
 - **Autour de chez vous** : les derniers séismes du rayon choisi, avec la magnitude en couleur (vert sous 3, jaune, orange, rouge, violet à partir de 6), le lieu, la distance et la direction, depuis quand et la profondeur. Un clic ouvre la fiche du séisme sur le site de l'EMSC ou de l'USGS.
 - **Dans le monde** : les séismes de magnitude 6 et plus de la période.
+- **Carte interactive** : tous les séismes de la période sur un fond OpenFreeMap (villes, routes et noms, clair ou sombre selon le thème), à la couleur et à la taille de leur magnitude (cerclés de blanc s'ils datent de moins de 24 h), avec votre maison, le rayon surveillé et un bouton plein écran. Un clic sur un séisme ouvre sa bulle (magnitude, lieu, distance, heure, profondeur, lien vers sa fiche EMSC ou USGS) ; un clic sur un séisme de la liste centre la carte dessus. En dézoomant, on voit aussi les forts séismes du monde.
 
 **Sans intégration**, la carte lit dans le navigateur les flux publics de l'**EMSC** (Centre sismologique euro-méditerranéen, les petits séismes d'Europe) et de l'**USGS** (le monde, magnitude 2,5 et plus), toutes les 10 minutes. **Avec les intégrations** USGS Earthquake Hazards Program ou GDACS, elle affiche leurs entités `geo_location` à la place.
 
@@ -400,6 +401,9 @@ radius: 1000          # km autour de chez vous
 | `days` | Période (jours) | `7` |
 | `max_items` | Nombre de séismes listés | `6` |
 | `direct` | Sans intégration, lire les flux EMSC et USGS depuis le navigateur | `true` |
+| `show_map` | Carte interactive des séismes | `true` |
+| `map_height` | Hauteur de la carte (px) | `300` |
+| `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `latitude`, `longitude` | Lieu de référence | coordonnées de Home Assistant |
 | `compass_image` | Image au centre de la boussole | — |
 | `theme` | Couleurs de la carte | `v2` |

@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.4.4";
+const CARD_VERSION = "3.5.0-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -501,6 +501,90 @@ class MeteoBase extends HTMLElement {
     const zoom = Math.min(160, Math.max(80, Number(this._config.text_size) || 100));
     this._hc.style.zoom = zoom === 100 ? "" : String(zoom / 100);
     this._main.innerHTML = body;
+  }
+
+  /**
+   * Carte locale interactive (feux, séismes) dans la zone « keep » : Leaflet, fond vectoriel OpenFreeMap clair ou sombre
+   * (villes, routes, noms ; gratuit et sans clé), sinon images OpenStreetMap, ou tiles_url. Renvoie Leaflet (L), ou rien
+   * si la carte n'a pas pu être créée (message affiché à sa place). this._layer reçoit les marqueurs.
+   */
+  async _localMap(home, legend, source, height) {
+    const c = this._config;
+    if (!this._keep) return null;
+    if (!this._keep.querySelector(".bm")) {
+      const base = c.leaflet_path || LEAFLET;
+      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${height}px">
+        <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
+        <div class="bm-leg">${legend}</div>`;
+      this._map = null;
+      this._fitted = null;
+    }
+    let L;
+    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
+      const box = this._keep.querySelector(".bm-map");
+      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
+      return null;
+    }
+    const el = this._keep.querySelector(".bm-map");
+    if (!el) return null;
+    try {
+      const light = /light/.test(themeClass(c.theme, this._hass)) || (c.theme === "ha" && this._hass.themes?.darkMode === false);
+      if (!this._map || this._mapEl !== el) {
+        this._mapEl = el;
+        this._map = L.map(el, { minZoom: 2, zoomSnap: 0.5, worldCopyJump: true }).setView(home, 8);
+        // carte créée avant d'avoir sa taille (éditeur, onglet caché) : le cadrage est refait dès qu'elle en a une
+        new ResizeObserver(() => {
+          if (!this._map) return;
+          this._map.invalidateSize();
+          if (el.clientWidth && el.clientHeight && this._view && !this._viewed) { this._viewed = true; this._view(); }
+        }).observe(el);
+        // plein écran (entrée et sortie) : la carte reprend sa taille puis son cadrage
+        if (!this._fsHook) {
+          this._fsHook = () => setTimeout(() => { if (!this._map) return; this._map.invalidateSize(); this._view?.(); }, 250);
+          document.addEventListener("fullscreenchange", this._fsHook);
+        }
+        this._map.attributionControl.addAttribution(source);
+        this._layer = L.layerGroup().addTo(this._map);
+        this._tiles = null;
+        this._tilesKey = null;
+      }
+      const vector = !c.tiles_url && (await loadVector());
+      const tkey = vector ? `ofm|${light}` : c.tiles_url || "raster";
+      el.classList.toggle("dark", !vector && !light && !c.tiles_url);
+      if (this._tilesKey !== tkey) {
+        this._tiles?.remove();
+        const osm = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+        this._tiles = vector
+          ? L.maplibreGL({ style: `${OFM}${light ? "liberty" : "dark"}`, attribution: `<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> ${osm}` })
+          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: osm });
+        this._tiles.addTo(this._map);
+        this._tilesKey = tkey;
+      }
+      return L;
+    } catch (e) {
+      console.error("Carte Météo (carte) :", e);
+      this._map = null;
+      el.innerHTML = `<div class="empty"><b>Erreur de la carte</b><span>${esc(e.message)}</span></div>`;
+      return null;
+    }
+  }
+
+  /** Cadrage de la carte locale : une seule fois par liste (le zoom choisi par l'utilisateur est gardé ensuite). */
+  _localFit(key, pts, home, zoom = 9) {
+    if (this._fitted === key) return;
+    this._fitted = key;
+    this._view = () => (pts.length > 1 ? this._map.fitBounds(pts, { padding: [24, 24], maxZoom: 11 }) : this._map.setView(home, zoom));
+    this._viewed = !!(this._mapEl?.clientWidth && this._mapEl?.clientHeight);
+    if (this._viewed) this._view();
+  }
+
+  /** Clic sur un élément de liste : la carte va au marqueur et ouvre sa bulle. */
+  _fly(i) {
+    const m = this._markers?.[i];
+    if (!m || !this._map) return;
+    this._keep?.querySelector(".bm")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    this._map.flyTo(m.getLatLng(), Math.max(this._map.getZoom(), this._flyZoom || 10), { duration: 0.8 });
+    setTimeout(() => m.openPopup(), 850);
   }
 
   _head(icon, color, title, sub, right = "") {
@@ -1710,7 +1794,7 @@ class MeteoEclairsCard extends MeteoBase {
 
 /* ----------------------------------------------------------- carte Séismes */
 
-const SEISMES_DEFAULTS = { title: "Séismes", radius: 1000, min_magnitude: 2, world_magnitude: 6, days: 7, max_items: 6, direct: true, theme: "v2" };
+const SEISMES_DEFAULTS = { title: "Séismes", radius: 1000, min_magnitude: 2, world_magnitude: 6, days: 7, max_items: 6, direct: true, show_map: true, map_height: 300, theme: "v2" };
 const USGS_FEED = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson";
 const EMSC_API = "https://www.seismicportal.eu/fdsnws/event/1/query?format=json&orderby=time&limit=300";
 /** Couleur d'une magnitude : vert sous 3, jaune, orange, rouge, violet à partir de 6. */
@@ -1851,10 +1935,14 @@ class MeteoSeismesCard extends MeteoBase {
     const tiles = `<div class="sky qk-t">${tile(close, "mdi:home-map-marker", "Le plus proche", close ? `${km(close.dist)} · M ${fmt(close.mag, 1)}` : "")}
       ${tile(big, "mdi:chart-bell-curve", "Le plus fort", big ? `M ${fmt(big.mag, 1)} · ${km(big.dist)}` : "")}
       ${tile(world[0], "mdi:earth", "Dans le monde", world[0] ? `M ${fmt(world[0].mag, 1)}` : "")}</div>`;
+    const mapOn = c.show_map !== false && !!home;
+    const shown = [...near.slice(0, Math.max(1, Number(c.max_items) || 6)), ...world.slice(0, 3)];
     const row = (q) => {
-      const attrs = q.url ? `href="${esc(q.url)}" target="_blank" rel="noopener noreferrer"` : "";
-      const tag = q.url ? "a" : "div";
-      return `<${tag} class="qk-r" ${attrs}${!q.url && q.id ? ` data-entity="${esc(q.id)}"` : ""}><span class="qk-m" style="background:${magColor(q.mag)}">${fmt(q.mag, 1)}</span>
+      // avec la carte, un clic centre la carte sur le séisme (la fiche s'ouvre depuis sa bulle) ; sinon il ouvre la fiche
+      const fly = mapOn && Number.isFinite(q.lat);
+      const attrs = fly ? `data-act="fly" data-i="${shown.indexOf(q)}" role="button" tabindex="0"` : q.url ? `href="${esc(q.url)}" target="_blank" rel="noopener noreferrer"` : "";
+      const tag = !fly && q.url ? "a" : "div";
+      return `<${tag} class="qk-r" ${attrs}${!fly && !q.url && q.id ? ` data-entity="${esc(q.id)}"` : ""}><span class="qk-m" style="background:${magColor(q.mag)}">${fmt(q.mag, 1)}</span>
         <span class="qk-p"><b>${esc(placeFr(q.place) || "Lieu inconnu")}</b><small>${q.dist !== null ? `${km(q.dist)}${q.az !== null ? ` ${compass16(q.az)}` : ""} · ` : ""}${agoTxt(now - q.t)}${q.depth ? ` · ${fmt(q.depth)} km de profondeur` : ""}</small></span>
         <span class="qk-l">${magLabel(q.mag)}</span></${tag}>`;
     };
@@ -1864,6 +1952,54 @@ class MeteoSeismesCard extends MeteoBase {
       + (world.length ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
       + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`;
     this._card(body);
+    if (mapOn) this._mapUpdate(shown, near, home, radius);
+    else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
+  }
+
+  _action(act, el) {
+    if (act === "fly") this._fly(Number(el.dataset.i));
+    else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); }
+  }
+
+  /** Carte interactive : séismes proches et forts séismes du monde, à la couleur et à la taille de leur magnitude. */
+  async _mapUpdate(shown, near, home, radius) {
+    const c = this._config;
+    const legend = [[2, "moins de 3"], [3.5, "3 à 4"], [4.5, "4 à 5"], [5.5, "5 à 6"], [6.5, "6 et plus"]].map(([m, l]) => `<span><i style="background:${magColor(m)}"></i>${l}</span>`).join("") + "<span>taille : magnitude</span>";
+    const L = await this._localMap(home, legend, 'séismes : <a href="https://www.emsc-csem.org/">EMSC</a>, <a href="https://earthquake.usgs.gov/">USGS</a>', Number(c.map_height) || 300);
+    if (!L) return;
+    try {
+      this._layer.clearLayers();
+      this._markers = [];
+      this._flyZoom = 7;
+      const now = Date.now();
+      const km = (d) => `${fmt(d, d < 10 ? 1 : 0)} km`;
+      const dt = (d) => d.toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      // tous les séismes proches de la période, plus les forts du monde ; les plus récents au-dessus
+      const all = [...near, ...shown.filter((q) => !near.includes(q))];
+      for (const q of [...all].reverse()) {
+        if (!Number.isFinite(q.lat) || !Number.isFinite(q.lon)) continue;
+        const col = magColor(q.mag), fresh = now - q.t < DAYMS;
+        const m = L.circleMarker([q.lat, q.lon], { radius: 3 + Math.max(0, q.mag - 1.5) * 2.2, color: fresh ? "#ffffff" : "#1a2434", weight: fresh ? 1.6 : 1, fillColor: col, fillOpacity: 0.85 })
+          .bindPopup(`<div class="bp"><b>Magnitude ${fmt(q.mag, 1)} · ${esc(magLabel(q.mag))}</b>
+            <span>${esc(placeFr(q.place) || "Lieu inconnu")}</span>
+            ${q.dist !== null ? `<span>À <b>${km(q.dist)}</b>${q.az !== null ? ` ${compass16(q.az)}` : ""} de chez vous</span>` : ""}
+            <span>${dt(q.t)} · ${agoTxt(now - q.t)}</span>${q.depth ? `<span>Profondeur <b>${fmt(q.depth)} km</b></span>` : ""}
+            ${q.url ? `<a href="${esc(q.url)}" target="_blank" rel="noopener noreferrer">Fiche du séisme (${esc(q.src || "réseau")})</a>` : ""}</div>`,
+          { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
+        m.addTo(this._layer);
+        const i = shown.indexOf(q);
+        if (i >= 0) this._markers[i] = m;
+      }
+      L.circleMarker(home, { radius: 6, color: "#fff", weight: 2, fillColor: "#1d93e3", fillOpacity: 1 }).bindTooltip("Chez vous").addTo(this._layer);
+      L.circle(home, { radius: radius * 1000, color: "#1d93e3", weight: 1, dashArray: "6 6", fill: false, interactive: false }).addTo(this._layer);
+      // cadrage : le rayon surveillé autour de chez vous (les séismes lointains restent à portée du zoom arrière)
+      const dLat = radius / 111.2, dLon = radius / (111.2 * Math.cos(home[0] * RAD));
+      this._localFit(`${radius}|${home}`, [[home[0] - dLat, home[1] - dLon], [home[0] + dLat, home[1] + dLon]], home, 5);
+    } catch (e) {
+      console.error("Carte Météo (séismes) :", e);
+      this._map = null;
+      if (this._mapEl) this._mapEl.innerHTML = `<div class="empty"><b>Erreur de la carte</b><span>${esc(e.message)}</span></div>`;
+    }
   }
 }
 
@@ -1969,58 +2105,11 @@ class MeteoFeuxCard extends MeteoBase {
   /** Carte interactive des feux (Leaflet, fond OpenStreetMap avec villes et routes), créée une fois dans la zone « keep ». */
   async _mapUpdate(list, home, radius) {
     const c = this._config;
-    if (!this._keep) return;
-    if (!this._keep.querySelector(".bm")) {
-      const base = c.leaflet_path || LEAFLET;
-      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${Number(c.map_height) || 300}px">
-        <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
-        <div class="bm-leg">${Object.values(FIRE_BAND).map(([l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join("")}<span>trait : direction de la fumée</span></div>`;
-      this._map = null;
-      this._fitted = null;
-    }
-    let L;
-    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
-      const box = this._keep.querySelector(".bm-map");
-      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
-      return;
-    }
-    const el = this._keep.querySelector(".bm-map");
-    if (!el) return;
+    const legend = `${Object.values(FIRE_BAND).map(([l, col]) => `<span><i style="background:${col}"></i>${l}</span>`).join("")}<span>trait : direction de la fumée</span>`;
+    const L = await this._localMap(home, legend, 'feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>', Number(c.map_height) || 300);
+    if (!L) return;
+    const el = this._mapEl;
     try {
-      const light = /light/.test(themeClass(c.theme, this._hass)) || (c.theme === "ha" && this._hass.themes?.darkMode === false);
-      if (!this._map || this._mapEl !== el) {
-        this._mapEl = el;
-        this._map = L.map(el, { minZoom: 3, zoomSnap: 0.5 }).setView(home, 8);
-        // carte créée avant d'avoir sa taille (éditeur, onglet caché) : le cadrage est refait dès qu'elle en a une
-        new ResizeObserver(() => {
-          if (!this._map) return;
-          this._map.invalidateSize();
-          if (el.clientWidth && el.clientHeight && this._view && !this._viewed) { this._viewed = true; this._view(); }
-        }).observe(el);
-        // plein écran (entrée et sortie) : la carte reprend sa taille puis le cadrage maison et feux
-        if (!this._fsHook) {
-          this._fsHook = () => setTimeout(() => { if (!this._map) return; this._map.invalidateSize(); this._view?.(); }, 250);
-          document.addEventListener("fullscreenchange", this._fsHook);
-        }
-        this._map.attributionControl.addAttribution('feux : <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>');
-        this._layer = L.layerGroup().addTo(this._map);
-        this._tiles = null;
-        this._tilesKey = null;
-      }
-      // fond vectoriel OpenFreeMap (villes, routes, noms ; gratuit et sans clé), clair ou sombre selon le thème ;
-      // sans WebGL2 : images OpenStreetMap assombries ; tiles_url pour un autre fournisseur
-      const vector = !c.tiles_url && (await loadVector());
-      const tkey = vector ? `ofm|${light}` : c.tiles_url || "raster";
-      el.classList.toggle("dark", !vector && !light && !c.tiles_url);
-      if (this._tilesKey !== tkey) {
-        this._tiles?.remove();
-        const osm = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-        this._tiles = vector
-          ? L.maplibreGL({ style: `${OFM}${light ? "liberty" : "dark"}`, attribution: `<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> ${osm}` })
-          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: osm });
-        this._tiles.addTo(this._map);
-        this._tilesKey = tkey;
-      }
       this._layer.clearLayers();
       this._markers = [];
       const km = (d) => `${fmt(d, d < 10 ? 1 : 0)} km`;
@@ -2045,15 +2134,8 @@ class MeteoFeuxCard extends MeteoBase {
       }
       L.circleMarker(home, { radius: 6, color: "#fff", weight: 2, fillColor: "#1d93e3", fillOpacity: 1 }).bindTooltip("Chez vous").addTo(this._layer);
       if (Number(c.radius)) L.circle(home, { radius: Number(c.radius) * 1000, color: "#1d93e3", weight: 1, dashArray: "6 6", fill: false }).addTo(this._layer);
-      // cadrage : maison et feux, une seule fois par liste de feux (le zoom choisi par l'utilisateur est gardé ensuite)
-      const key = list.map((f) => f.id).join();
-      if (this._fitted !== key) {
-        this._fitted = key;
-        const pts = [home, ...list.filter((f) => f.lat !== null).map((f) => [f.lat, f.lon])];
-        this._view = () => (pts.length > 1 ? this._map.fitBounds(pts, { padding: [24, 24], maxZoom: 11 }) : this._map.setView(home, 9));
-        this._viewed = !!(el.clientWidth && el.clientHeight);
-        if (this._viewed) this._view();
-      }
+      // cadrage : maison et feux
+      this._localFit(list.map((f) => f.id).join(), [home, ...list.filter((f) => f.lat !== null).map((f) => [f.lat, f.lon])], home);
     } catch (e) {
       console.error("Carte Météo (feux) :", e);
       this._map = null;
@@ -2061,13 +2143,6 @@ class MeteoFeuxCard extends MeteoBase {
     }
   }
 
-  _fly(i) {
-    const m = this._markers?.[i];
-    if (!m || !this._map) return;
-    this._keep?.querySelector(".bm")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-    this._map.flyTo(m.getLatLng(), Math.max(this._map.getZoom(), 10), { duration: 0.8 });
-    setTimeout(() => m.openPopup(), 850);
-  }
 }
 
 
@@ -2617,6 +2692,7 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bp > b { font-size: 13px; margin-bottom: 3px; }
 .bp span { color: var(--med-muted); }
 .bp span b { color: var(--med-text); }
+.bp a { color: var(--med-blue); margin-top: 4px; }
 .bm .leaflet-control-attribution { background: color-mix(in srgb, var(--med-bg) 80%, transparent); color: var(--med-muted); font-size: 9px; }
 .bm .leaflet-control-attribution a { color: var(--med-blue); }
 .bm .leaflet-bar a { background: var(--med-bg); color: var(--med-text); border-color: var(--med-line); }
@@ -2911,6 +2987,8 @@ const SEISMES_SCHEMA = [
   { name: "days", selector: { number: { min: 1, max: 30, mode: "box", unit_of_measurement: "j" } } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "direct", selector: { boolean: {} } },
+  { name: "show_map", selector: { boolean: {} } },
+  { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
   { name: "compass_image", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
@@ -2923,6 +3001,8 @@ const SEISMES_LABELS = {
   days: "Période",
   max_items: "Nombre de séismes listés",
   direct: "Sans intégration, lire les flux EMSC et USGS depuis le navigateur",
+  show_map: "Carte interactive des séismes",
+  map_height: "Hauteur de la carte",
   compass_image: "Image au centre de la boussole",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
