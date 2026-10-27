@@ -76,7 +76,7 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 | --- | --- |
 | ![Feux de forêt](images/meteo-feux.png) | ![Carte interactive des feux](images/meteo-feux-carte.png) |
 
-*Aperçus avec des villes et des données fictives.*
+*Aperçus avec des villes et des données fictives, sauf la carte interactive des feux : capture réelle, fond flouté pour qu'aucun lieu ne soit lisible.*
 
 ## Remplacer une vue météo « à rallonge »
 
