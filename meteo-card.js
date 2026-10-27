@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.3.0-beta";
+const CARD_VERSION = "3.3.1-beta";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1722,6 +1722,32 @@ const bearing = (lat1, lon1, lat2, lon2) => {
 };
 /** « NORTHERN ITALY » (EMSC) → « Northern Italy ». */
 const titleCase = (s) => (s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s,(/-])(\p{L})/gu, (a, b, c) => b + c.toUpperCase()) : s);
+/** Régions et pays en français (noms anglais des réseaux EMSC et USGS). */
+const PLACE_FR = [
+  [/^northern italy$/i, "Italie du Nord"], [/^central italy$/i, "Italie centrale"], [/^southern italy$/i, "Italie du Sud"], [/^sicily, italy$/i, "Sicile, Italie"],
+  [/^adriatic sea$/i, "Mer Adriatique"], [/^tyrrhenian sea$/i, "Mer Tyrrhénienne"], [/^ionian sea$/i, "Mer Ionienne"], [/^western mediterranean sea$/i, "Méditerranée occidentale"],
+  [/^central mediterranean sea$/i, "Méditerranée centrale"], [/^eastern mediterranean sea$/i, "Méditerranée orientale"], [/^pyrenees$/i, "Pyrénées"],
+  [/^switzerland$/i, "Suisse"], [/^germany$/i, "Allemagne"], [/^spain$/i, "Espagne"], [/^portugal$/i, "Portugal"], [/^belgium$/i, "Belgique"], [/^netherlands$/i, "Pays-Bas"],
+  [/^austria$/i, "Autriche"], [/^slovenia$/i, "Slovénie"], [/^croatia$/i, "Croatie"], [/^greece$/i, "Grèce"], [/^southern greece$/i, "Grèce du Sud"], [/^albania$/i, "Albanie"],
+  [/^united kingdom$/i, "Royaume-Uni"], [/^great britain$/i, "Grande-Bretagne"], [/^ireland$/i, "Irlande"], [/^northern algeria$/i, "Algérie du Nord"], [/^morocco$/i, "Maroc"],
+  [/^strait of gibraltar$/i, "Détroit de Gibraltar"], [/^bay of biscay$/i, "Golfe de Gascogne"], [/^english channel$/i, "Manche"], [/^north sea$/i, "Mer du Nord"],
+  [/^corsica, france$/i, "Corse"], [/^czech republic$/i, "Tchéquie"], [/^poland$/i, "Pologne"], [/^romania$/i, "Roumanie"], [/^bosnia and herzegovina$/i, "Bosnie-Herzégovine"],
+  [/^turkey$|^western turkey$|^eastern turkey$|^central turkey$/i, "Turquie"], [/^iceland$/i, "Islande"], [/^norway$/i, "Norvège"],
+];
+const COUNTRY_FR = { China: "Chine", Japan: "Japon", "Japan region": "Japon", Indonesia: "Indonésie", Philippines: "Philippines", Chile: "Chili", Peru: "Pérou", Mexico: "Mexique",
+  Turkey: "Turquie", Türkiye: "Turquie", Greece: "Grèce", Italy: "Italie", Spain: "Espagne", Iran: "Iran", Afghanistan: "Afghanistan", Pakistan: "Pakistan", India: "Inde",
+  "New Zealand": "Nouvelle-Zélande", "Papua New Guinea": "Papouasie-Nouvelle-Guinée", Vanuatu: "Vanuatu", Tonga: "Tonga", Fiji: "Fidji", Alaska: "Alaska", California: "Californie",
+  Russia: "Russie", Taiwan: "Taïwan", Ecuador: "Équateur", Colombia: "Colombie", Argentina: "Argentine", "Solomon Islands": "Îles Salomon", Algeria: "Algérie", Morocco: "Maroc" };
+const DIR_FR = { W: "O", WNW: "ONO", WSW: "OSO", NW: "NO", SW: "SO", NNW: "NNO", SSW: "SSO" };
+/** « 191 km ENE of Nagqu, China » → « 191 km ENE de Nagqu, Chine » ; « Northern Italy » → « Italie du Nord ». */
+const placeFr = (p) => {
+  let s = String(p || "").trim();
+  const hit = PLACE_FR.find(([re]) => re.test(s));
+  if (hit) return hit[1];
+  s = s.replace(/^(\d+(?:\.\d+)?) km ([NSEW]{1,3}) of /, (m, d, dir) => `${d} km ${DIR_FR[dir] || dir} de `);
+  s = s.replace(/,\s*([^,]+)$/, (m, c) => `, ${COUNTRY_FR[c.trim()] || c.trim()}`);
+  return s.replace(/\bregion\b/i, "région");
+};
 const agoTxt = (ms) => { const m = Math.round(ms / 6e4); return m < 60 ? `il y a ${Math.max(1, m)} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
 
 class MeteoSeismesCard extends MeteoBase {
@@ -1829,7 +1855,7 @@ class MeteoSeismesCard extends MeteoBase {
       const attrs = q.url ? `href="${esc(q.url)}" target="_blank" rel="noopener noreferrer"` : "";
       const tag = q.url ? "a" : "div";
       return `<${tag} class="qk-r" ${attrs}${!q.url && q.id ? ` data-entity="${esc(q.id)}"` : ""}><span class="qk-m" style="background:${magColor(q.mag)}">${fmt(q.mag, 1)}</span>
-        <span class="qk-p"><b>${esc(q.place || "Lieu inconnu")}</b><small>${q.dist !== null ? `${km(q.dist)}${q.az !== null ? ` ${compass16(q.az)}` : ""} · ` : ""}${agoTxt(now - q.t)}${q.depth !== null && q.depth !== undefined ? ` · ${fmt(q.depth)} km de profondeur` : ""}</small></span>
+        <span class="qk-p"><b>${esc(placeFr(q.place) || "Lieu inconnu")}</b><small>${q.dist !== null ? `${km(q.dist)}${q.az !== null ? ` ${compass16(q.az)}` : ""} · ` : ""}${agoTxt(now - q.t)}${q.depth ? ` · ${fmt(q.depth)} km de profondeur` : ""}</small></span>
         <span class="qk-l">${magLabel(q.mag)}</span></${tag}>`;
     };
     const max = Math.max(1, Number(c.max_items) || 6);
