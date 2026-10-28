@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.8.0";
+const CARD_VERSION = "3.8.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2854,7 +2854,7 @@ svg.wi.anim .wind path { stroke-dasharray: 60; animation: wi-wind 2.5s ease-in-o
 .f-mm small, .f-w small, .f-gb small { font-size: .58rem; opacity: .8; }
 .f-pp { font-size: .66rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; white-space: nowrap; }
 .f-pp ha-icon { --mdc-icon-size: 11px; margin: 0; }
-.fc-d.full .f-w { white-space: nowrap; font-size: .68rem; color: var(--med-text); }
+.fc-d.full .f-w { white-space: nowrap; font-size: .68rem; color: var(--med-text); gap: .25em; }
 .f-gb { margin-top: 2px; }
 .f-gb span { display: inline-block; padding: 0 4px; border-radius: 4px; background: var(--t-red); color: #fff; font-size: .66rem; font-weight: 700; white-space: nowrap; }
 .f-dir { margin-top: 3px; min-height: 18px; }
@@ -3050,6 +3050,7 @@ ha-card.neon .f-hi, ha-card.neon .fc-d.full .f-hi { font-size: 1.15rem; }
 ha-card.neon .f-lo { font-size: .92rem; }
 ha-card.neon :is(.f-mm, .f-pp, .f-hu, .fc-d.full .f-w) { font-size: 14px; }
 ha-card.neon :is(.f-mm, .f-w, .f-gb) small { font-size: 12px; }
+ha-card.neon .f-gb span { font-size: 14px; }
 ha-card.neon :is(.f-hu, .f-pp) ha-icon { --mdc-icon-size: 16px; }
 ha-card.neon .rh-h { font-size: .86rem; }
 ha-card.neon .rh-h b { font-size: .95rem; }
