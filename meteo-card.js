@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.8.1";
+const CARD_VERSION = "3.8.2-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -660,7 +660,7 @@ class MeteoCard extends MeteoBase {
     const al = this._st(ent.alert);
     const rel = related(this._hass, ent.weather);
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${w?.last_updated}|${al?.last_updated}|` +
-      [ent.season, ent.moon, ent.zodiac, ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
+      [ent.season, ent.moon, ent.zodiac, city.rain_rate || (ti === 0 ? c.rain_rate : null), ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
       `|${Object.values(ent.ec || {}).map((id) => this._st(id)?.last_updated).join(",")}|${this._ecRes?.sig || ""}`;
     if (sig === this._sig) return;
     this._sig = sig;
@@ -674,7 +674,7 @@ class MeteoCard extends MeteoBase {
     if (!w) {
       body = `<div class="empty"><b>Aucune entité météo</b><span>Ajoutez une intégration météo (Météo-France, Met.no…) ou choisissez l'entité dans l'éditeur de la carte.</span></div>`;
     } else {
-      body = (neon ? this._neonHead(w, al, ent, city) : this._header(w, al, ent, city)) + this._now(w, ent, neon) + (c.show_details !== false ? this._details(w, rel) : "") +
+      body = (neon ? this._neonHead(w, al, ent, city) : this._header(w, al, ent, city)) + this._now(w, ent, neon) + (c.show_details !== false ? this._details(w, rel, city.rain_rate || (ti === 0 ? c.rain_rate : null)) : "") +
         (c.show_rain_hour !== false ? this._rainHour(rainHourOf(this._hass, ent.weather, city.rain_hour || (ti === 0 ? c.rain_hour : null))) : "") +
         (c.show_alert !== false ? this._alerts(al, ent) : "") +
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
@@ -729,7 +729,7 @@ class MeteoCard extends MeteoBase {
   }
 
   /** Détails Météo-France : nuages, risque de pluie, de gel, de neige, indice UV, pluie dans l'heure. */
-  _details(w, rel) {
+  _details(w, rel, rate) {
     const a = w.attributes || {};
     const pct = (id) => { const v = this._num(id); return v === null ? null : `${fmt(v)} %`; };
     const uv = this._num(rel.uv) ?? num(a.uv_index);
@@ -741,6 +741,10 @@ class MeteoCard extends MeteoBase {
       [rel.snow, "mdi:weather-snowy", "Neige", pct(rel.snow)],
       [rel.uv, "mdi:sun-wireless-outline", "UV", uv === null ? null : fmt(uv)],
     ].filter((x) => x[3] !== null);
+    // intensité de pluie mesurée par une station (mm/h), choisie avec rain_rate
+    const rr = this._num(rate);
+    if (rr !== null) items.push([rate, "mdi:weather-pouring", "Intensité",
+      `${fmt(rr, rr > 0 && rr < 10 ? 1 : 0)} ${this._st(rate).attributes?.unit_of_measurement || "mm/h"}`]);
     // l'heure de la prochaine pluie est déjà dans la barre « pluie dans l'heure » quand elle est affichée
     const hourBar = this._config.show_rain_hour !== false && this._st(rainHourOf(this._hass, w.entity_id, this._config.rain_hour))?.attributes?.["1_hour_forecast"];
     const nr = hourBar ? null : this._st(rel.next_rain);
@@ -3140,6 +3144,7 @@ const SCHEMA = [
     name: { label: "Nom de l'onglet (facultatif)", selector: { text: {} } },
     alert: { label: "Vigilance (facultatif, capteur de vigilance Météo-France ou équivalent)", selector: { entity: { domain: "sensor" } } },
     ec_alerts: { label: "Alertes Environnement Canada (facultatif, détectées)", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
+    rain_rate: { label: "Intensité de pluie mesurée, en mm/h (facultatif, station météo)", selector: { entity: { domain: "sensor" } } },
   } } } },
   { name: "title", selector: { text: {} } },
   { name: "alert", selector: { entity: { domain: "sensor", integration: "meteo_france" } } },
@@ -3163,6 +3168,7 @@ const SCHEMA = [
   { name: "show_stats", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_rain_hour", selector: { boolean: {} } },
+  { name: "rain_rate", selector: { entity: { domain: "sensor" } } },
   { name: "show_alert", selector: { boolean: {} } },
   { name: "show_forecast", selector: { boolean: {} } },
   { name: "show_sky", selector: { boolean: {} } },
@@ -3198,6 +3204,7 @@ const LABELS = {
   show_stats: "Ressenti, vent, humidité et pression",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
   show_rain_hour: "Pluie dans l'heure (Météo-France)",
+  rain_rate: "Intensité de pluie mesurée, en mm/h (station météo, première ville)",
   show_alert: "Vigilance (Météo-France) ou alertes (Environnement Canada)",
   show_forecast: "Prévisions",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",

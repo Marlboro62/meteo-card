@@ -188,6 +188,7 @@ type: custom:meteo-card
 | `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
+| `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
 | `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
