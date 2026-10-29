@@ -28,12 +28,15 @@ for entry in filter(None, (e.strip() for e in log.split("\x1e"))):
     line = f"* {'**' + scope + ':** ' if scope else ''}{desc} ([{sha[:7]}]({url}/commit/{sha}))"
     if issues:
         line += ", closes " + ", ".join(f"[#{n}]({url}/issues/{n})" for n in issues)
-    items[kind].append(line)
+    items[kind].append((line, bool(re.match(r"version stable\b", desc, re.I))))
 
+# commits de promotion (« version stable … ») : gardés seulement s'ils sont seuls, sinon doublons des bêtas
+real = any(not promo for kind in items for _, promo in items[kind])
 out = []
 for kind, title in SECTIONS:
-    if items[kind]:
-        out += [f"### {title}", "", *items[kind], ""]
+    lines = [line for line, promo in items[kind] if not (real and promo)]
+    if lines:
+        out += [f"### {title}", "", *lines, ""]
 if not out:
     out = ["Maintenance (documentation, intégration continue).", ""]
 if prev:
