@@ -61,6 +61,8 @@ jobs:
       VERSION: ${{ needs.controle.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historique et tags complets pour les notes de release
       - name: Supprimer l'ancienne release (lancement manuel)
         if: github.event_name == 'workflow_dispatch' && inputs.refaire_release
         run: |
@@ -73,6 +75,12 @@ jobs:
             echo "La release v$VERSION existe déjà : rien à publier."
             echo "existe=oui" >> "$GITHUB_OUTPUT"
           fi
+      - name: Notes de release (Features, Bug Fixes, issues fermées)
+        if: steps.existe.outputs.existe != 'oui'
+        run: |
+          prev=$(git describe --tags --abbrev=0 --exclude "v$VERSION" HEAD 2>/dev/null || true)
+          python3 .github/scripts/release-notes.py "$prev" "v$VERSION" > release-notes.md
+          cat release-notes.md
       - name: Créer le tag et la release
         if: steps.existe.outputs.existe != 'oui'
         uses: softprops/action-gh-release@v2
@@ -80,5 +88,5 @@ jobs:
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: Carte Météo ${{ env.VERSION }}
-          generate_release_notes: true
+          body_path: release-notes.md
           prerelease: ${{ contains(env.VERSION, '-') }}
