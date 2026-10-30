@@ -56,31 +56,31 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 
 | Météo, deux villes en onglets | Vent et ciel | Soleil et lune |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-sombre.png" alt="Météo"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-ciel.png" alt="Vent et ciel"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-astro.png" alt="Soleil et lune"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-sombre.png" alt="Météo" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-ciel.png" alt="Vent et ciel" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-astro.png" alt="Soleil et lune" width="300"> |
 
 | Air, pollens et eau | Éclairs | Phases de la lune (clic sur la lune) |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-air.png" alt="Air, pollens et eau"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-eclairs.png" alt="Éclairs"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-phases.png" alt="Phases de la lune"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-air.png" alt="Air, pollens et eau" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-eclairs.png" alt="Éclairs" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-phases.png" alt="Phases de la lune" width="300"> |
 
 | Version claire | Téléphone |
 | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-clair.png" alt="Clair"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-telephone.png" alt="Téléphone"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-clair.png" alt="Clair" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-telephone.png" alt="Téléphone" width="300"> |
 
 | Soleil et lune avec les photos de la lune | Phases de la lune avec les photos de la lune et de la Terre |
 | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-astro-photos.png" alt="Soleil et lune avec photos"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-phases-photos.png" alt="Phases avec photos"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-astro-photos.png" alt="Soleil et lune avec photos" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-phases-photos.png" alt="Phases avec photos" width="300"> |
 
 | Mode WarC0zes (`layout: warc0zes`, `halo: true`) | Bolides (carte interactive) | Séismes |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-warc0zes.png" alt="Mode WarC0zes"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-bolides.png" alt="Bolides"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-seismes.png" alt="Séismes"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-warc0zes.png" alt="Mode WarC0zes" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-bolides.png" alt="Bolides" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-seismes.png" alt="Séismes" width="300"> |
 
 | Crues et rivières (démo, crue fictive) | Crues et rivières, mesures réelles (noms et lieux remplacés, carte floutée) | EcoWatt (démo, journée tendue fictive) |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-crues.png" alt="Crues et rivières"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-crues-reelle.png" alt="Crues et rivières, mesures réelles"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-ecowatt.png" alt="EcoWatt"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-crues.png" alt="Crues et rivières" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-crues-reelle.png" alt="Crues et rivières, mesures réelles" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-ecowatt.png" alt="EcoWatt" width="300"> |
 
 | Feux de forêt | Carte interactive des feux (fond flouté) | Carte interactive des séismes |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-feux.png" alt="Feux de forêt"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-feux-carte.png" alt="Carte interactive des feux"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-seismes-carte.png" alt="Carte interactive des séismes"> |
+| <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-feux.png" alt="Feux de forêt" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-feux-carte.png" alt="Carte interactive des feux" width="300"> | <img src="https://raw.githubusercontent.com/Marlboro62/meteo-card/main/images/meteo-seismes-carte.png" alt="Carte interactive des séismes" width="300"> |
 
 *Aperçus avec des villes et des données fictives, sauf la carte interactive des feux et les mesures réelles des rivières : captures réelles, noms remplacés et fond de carte flouté pour qu'aucun lieu ne soit lisible.*
 
