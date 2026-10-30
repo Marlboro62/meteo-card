@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.8.4";
+const CARD_VERSION = "3.9.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -846,7 +846,7 @@ class MeteoCard extends MeteoBase {
     const pill = vg && c.show_alert !== false ? this._pill(vg) : "";
     // icône de titre fixe, comme les autres cartes (la condition du moment reste sur la grande icône)
     return `<header>
-      <div class="brand"><ha-icon class="b-ic" icon="${esc(c.icon || "mdi:weather-partly-cloudy")}" style="color:var(--med-blue)"></ha-icon>
+      <div class="brand"><ha-icon class="b-ic" icon="${esc(c.icon || "mdi:weather-partly-cloudy")}" style="color:var(--med-accent, var(--med-blue))"></ha-icon>
         <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div></div>
       ${pill}</header>`;
   }
@@ -1116,7 +1116,7 @@ class MeteoCielCard extends MeteoBase {
       const low = [c.show_rain !== false && rain !== null ? this._rain(rain, c.rain || rel.precip) : "",
         c.show_uv !== false && uv !== null ? this._uv(uv, c.uv || rel.uv || ent.weather) : ""].filter(Boolean);
       const [, icon, color] = condOf(w?.state);
-      const body = this._head(c.icon || "mdi:weather-windy", c.icon ? "var(--med-blue)" : color, c.title || "Vent et ciel", w ? condOf(w.state)[0] : "") +
+      const body = this._head(c.icon || "mdi:weather-windy", c.icon ? "var(--med-accent, var(--med-blue))" : color, c.title || "Vent et ciel", w ? condOf(w.state)[0] : "") +
         (top.length ? `<div class="duo">${top.join("")}</div>` : "") +
         (c.show_temperatures !== false && temps.length ? this._temps(temps) : "") +
         (low.length ? `<div class="duo">${low.join("")}</div>` : "") +
@@ -2720,6 +2720,8 @@ ha-card.th-ha {
   --med-line: var(--divider-color, rgba(127, 127, 127, .25));
   --med-text: var(--primary-text-color, #1f2937);
   --med-muted: var(--secondary-text-color, #6b7280);
+  /* accent (icônes, sélections, boussole, flèches du vent) : couleur principale du thème ; la pluie et le froid restent bleus */
+  --med-accent: var(--primary-color, #1d93e3);
   border-radius: var(--ha-card-border-radius, 12px);
   border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, #e0e0e0));
 }
@@ -2748,7 +2750,7 @@ ha-card { display: block; padding-bottom: 14px; }
 .stat { padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
 .s-h { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--med-muted); }
 .s-h ha-icon { --mdc-icon-size: 15px; }
-.s-h .arrow { margin-left: auto; color: var(--med-blue); --mdc-icon-size: 16px; }
+.s-h .arrow { margin-left: auto; color: var(--med-accent, var(--med-blue)); --mdc-icon-size: 16px; }
 .s-v { font-size: 1.15rem; font-weight: 700; margin-top: 3px; white-space: nowrap; }
 .s-v small { font-size: .72rem; font-weight: 500; color: var(--med-muted); }
 .s-n { font-size: .68rem; color: var(--med-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2809,12 +2811,12 @@ ha-icon.rot { display: inline-block; }
 .tab { flex: 1 1 0; min-width: max-content; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px;
   border-radius: 10px; border: 1px solid var(--med-line); background: transparent; color: var(--med-muted); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
 .tab ha-icon { --mdc-icon-size: 17px; }
-.tab.on { background: var(--med-surface); color: var(--med-text); border-color: color-mix(in srgb, var(--med-blue) 60%, var(--med-line)); box-shadow: inset 0 -2px 0 var(--med-blue); }
-.tab:focus-visible, .mbtn:focus-visible, .sky-t:focus-visible { outline: 2px solid var(--med-blue); outline-offset: 2px; }
+.tab.on { background: var(--med-surface); color: var(--med-text); border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 60%, var(--med-line)); box-shadow: inset 0 -2px 0 var(--med-accent, var(--med-blue)); }
+.tab:focus-visible, .mbtn:focus-visible, .sky-t:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); outline-offset: 2px; }
 .det { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 12px 0; }
 .d-i { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 4px 7px; border-radius: 999px; font-size: .76rem; color: var(--med-muted);
   background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; }
-.d-i ha-icon { --mdc-icon-size: 15px; color: var(--med-blue); }
+.d-i ha-icon { --mdc-icon-size: 15px; color: var(--med-accent, var(--med-blue)); }
 .d-i b { color: var(--med-text); font-weight: 700; }
 svg.wi { flex: none; overflow: visible; }
 img.wi-img { flex: none; display: block; object-fit: contain; }
@@ -2862,12 +2864,12 @@ svg.wi.anim .wind path { stroke-dasharray: 60; animation: wi-wind 2.5s ease-in-o
 .f-gb { margin-top: 2px; }
 .f-gb span { display: inline-block; padding: 0 4px; border-radius: 4px; background: var(--t-red); color: #fff; font-size: .66rem; font-weight: 700; white-space: nowrap; }
 .f-dir { margin-top: 3px; min-height: 18px; }
-.f-dir ha-icon { --mdc-icon-size: 18px; margin: 0; color: var(--med-blue); }
+.f-dir ha-icon { --mdc-icon-size: 18px; margin: 0; color: var(--med-accent, var(--med-blue)); }
 .f-hu { font-size: .64rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; }
 .f-hu ha-icon { --mdc-icon-size: 11px; margin: 0; color: var(--med-blue); }
 .k-v .sr { color: var(--med-up); } .k-v .ss { color: var(--med-blue); }
 .f-w { font-size: .66rem; color: var(--med-muted); display: flex; align-items: center; justify-content: center; gap: 1px; }
-.f-w ha-icon { --mdc-icon-size: 11px; margin: 0; color: var(--med-blue); }
+.f-w ha-icon { --mdc-icon-size: 11px; margin: 0; color: var(--med-accent, var(--med-blue)); }
 /* Vent et ciel */
 .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .gauge { padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; text-align: center; }
@@ -2883,16 +2885,16 @@ svg .ndl { stroke: var(--med-text); stroke-width: 2.5; stroke-linecap: round; }
 svg .hub { fill: var(--med-text); }
 svg .big { font-size: 19px; font-weight: 700; fill: var(--med-text); text-anchor: middle; }
 svg .sm { font-size: 8.5px; fill: var(--med-muted); text-anchor: middle; }
-svg .ring { fill: color-mix(in srgb, var(--med-text) 5%, transparent); stroke: var(--med-blue); stroke-width: 2; }
+svg .ring { fill: color-mix(in srgb, var(--med-text) 5%, transparent); stroke: var(--med-accent, var(--med-blue)); stroke-width: 2; }
 svg .tk { stroke: var(--med-muted); stroke-width: 1; opacity: .7; }
 svg .cn { font-size: 10px; font-weight: 700; fill: var(--med-muted); text-anchor: middle; }
-svg .cn.n { fill: var(--med-blue); }
+svg .cn.n { fill: var(--med-accent, var(--med-blue)); }
 svg .dir { font-size: 11px; font-weight: 700; fill: var(--med-muted); text-anchor: middle; letter-spacing: .5px; }
 svg .uvt { font-size: 10px; font-weight: 700; text-anchor: middle; }
 svg .arw { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 50%, #000); stroke-width: .6; }
 .temps { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .tp { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; }
-.tp > ha-icon { --mdc-icon-size: 20px; color: var(--med-blue); flex: none; }
+.tp > ha-icon { --mdc-icon-size: 20px; color: var(--med-accent, var(--med-blue)); flex: none; }
 .tp-c { flex: 1; min-width: 0; }
 .tp-c > div { display: flex; align-items: baseline; gap: 8px; }
 .tp-n { display: block; font-size: .74rem; color: var(--med-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2900,7 +2902,7 @@ svg .arw { fill: #f7c948; stroke: color-mix(in srgb, #f7c948 50%, #000); stroke-
 .tp-tr { --mdc-icon-size: 15px; align-self: center; }
 .tp-tr.up { color: var(--med-up); } .tp-tr.down { color: var(--med-blue); }
 .tp-h { display: inline-flex; align-items: center; font-size: .74rem; color: var(--med-muted); }
-.tp-h ha-icon { --mdc-icon-size: 14px; color: var(--med-blue); }
+.tp-h ha-icon { --mdc-icon-size: 14px; color: var(--med-accent, var(--med-blue)); }
 svg.drop { width: 34px; flex: none; margin: 0; }
 svg .water { fill: var(--med-blue); opacity: .85; }
 svg .dropl { fill: none; stroke: var(--med-blue); stroke-width: 2; }
@@ -2993,7 +2995,7 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bts .bt { cursor: pointer; }
 .bt-s { font-size: .64rem; color: var(--med-muted); margin-top: 1px; }
 .bf .bc { cursor: pointer; font: inherit; font-size: .72rem; }
-.bf .bc.on { border-color: color-mix(in srgb, var(--med-blue) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-blue) 18%, var(--med-surface)); }
+.bf .bc.on { border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-accent, var(--med-blue)) 18%, var(--med-surface)); }
 .bm { position: relative; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
 .bm-map { position: absolute; inset: 0; background: #0f1724; }
 .bm-map.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.85) saturate(.6); }
@@ -3010,14 +3012,14 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bp > b { font-size: 13px; margin-bottom: 3px; }
 .bp span { color: var(--med-muted); }
 .bp span b { color: var(--med-text); }
-.bp a { color: var(--med-blue); margin-top: 4px; }
+.bp a { color: var(--med-accent, var(--med-blue)); margin-top: 4px; }
 .bm .leaflet-control-attribution { background: color-mix(in srgb, var(--med-bg) 80%, transparent); color: var(--med-muted); font-size: 9px; }
-.bm .leaflet-control-attribution a { color: var(--med-blue); }
+.bm .leaflet-control-attribution a { color: var(--med-accent, var(--med-blue)); }
 .bm .leaflet-bar a { background: var(--med-bg); color: var(--med-text); border-color: var(--med-line); }
 /* option « halo » (avec les deux présentations) : bordures et reflets colorés ;
    couleur : bleu MyElectricalData, ou couleur principale du thème avec theme: ha */
-ha-card.glow { --nx: var(--med-blue); }
-ha-card.th-ha.glow { --nx: var(--primary-color, var(--med-blue)); }
+ha-card.glow { --nx: var(--med-accent, var(--med-blue)); }
+ha-card.th-ha.glow { --nx: var(--primary-color, var(--med-accent, var(--med-blue))); }
 ha-card.glow { --nb: color-mix(in srgb, var(--nx) 55%, transparent); border: 1.5px solid var(--nb);
   background: radial-gradient(120% 70% at 15% 0%, color-mix(in srgb, var(--nx) 20%, var(--med-bg)) 0%, transparent 60%), var(--med-bg);
   box-shadow: 0 0 22px color-mix(in srgb, var(--nx) 28%, transparent), inset 0 0 28px color-mix(in srgb, var(--nx) 8%, transparent); }
@@ -3078,7 +3080,7 @@ svg .bolt path { fill: #1a2434; }
 .qk-l-w { display: grid; gap: 6px; margin: 0 12px; }
 .qk-r { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line);
   color: inherit; text-decoration: none; cursor: pointer; min-width: 0; }
-a.qk-r:hover { border-color: var(--med-blue); }
+a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .qk-m { flex: none; min-width: 38px; text-align: center; padding: 4px 6px; border-radius: 8px; font-weight: 800; font-size: .86rem; color: #1a2434; }
 .qk-p { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .qk-p b { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3106,14 +3108,14 @@ a.qk-r:hover { border-color: var(--med-blue); }
 .ew-dt { flex: 1 1 200px; font-size: .8rem; color: var(--med-muted); padding: 4px 2px; }
 .ew-ds { display: grid; gap: 6px; margin: 10px 12px 0; }
 .ew-d { padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
-.ew-d.sel { border-color: var(--med-blue); }
+.ew-d.sel { border-color: var(--med-accent, var(--med-blue)); }
 .ew-dl { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; }
 .ew-dl ha-icon { --mdc-icon-size: 20px; } .ew-dl span { display: flex; flex-direction: column; flex: 1; } .ew-dl b { font-size: .84rem; }
 .ew-dl small { font-size: .68rem; color: var(--med-muted); } .ew-dl em { font-style: normal; font-size: .76rem; font-weight: 700; text-align: right; }
 .ew-hs { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 8px; }
 .ew-h { all: unset; cursor: pointer; height: 16px; border-radius: 3px; box-sizing: border-box; }
-.ew-h.now { box-shadow: 0 0 0 2px var(--med-text); } .ew-h.on { box-shadow: 0 0 0 2px var(--med-blue); }
-.ew-h:focus-visible { outline: 2px solid var(--med-blue); }
+.ew-h.now { box-shadow: 0 0 0 2px var(--med-text); } .ew-h.on { box-shadow: 0 0 0 2px var(--med-accent, var(--med-blue)); }
+.ew-h:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 .ew-tk { display: flex; justify-content: space-between; margin: 3px 24px 0; font-size: .62rem; color: var(--med-muted); }
 .ew-lg { margin: 8px 14px 0; } .ew-msg { margin-top: 8px; }
 </style>`;

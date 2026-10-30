@@ -190,7 +190,7 @@ type: custom:meteo-card
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
-| `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant) | `v2` |
+| `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant : icônes, sélections, boussoles et flèches du vent prennent la `primary-color` du thème ; la pluie et le froid restent bleus) | `v2` |
 | `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
 
 ### Alertes Environnement Canada
