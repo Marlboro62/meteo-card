@@ -533,3 +533,19 @@ Photo de lune pour l'option `moon_image` : la pleine lune de la photo « [Séque
 Photo de la Terre pour l'option `earth_image` : « [Terre](https://www.pexels.com/fr-fr/photo/terre-30596274/) » de **Zelch Csaba**, sur Pexels ([licence Pexels](https://www.pexels.com/fr-fr/license/)). Un grand merci à Zelch Csaba pour cette image !
 
 Ces deux photos, recadrées et détourées, sont fournies dans le dossier [`photos/`](https://github.com/Marlboro62/meteo-card/blob/main/photos/) sous la [licence Pexels](https://www.pexels.com/fr-fr/license/) (et non sous la licence MIT du code) : elles peuvent être utilisées et modifiées librement, mais pas revendues telles quelles.
+
+## Nom du projet et forks
+
+Ce dépôt est la seule source officielle de **Carte Météo** (releases, HACS, support),
+maintenu par [Marlboro62](https://github.com/Marlboro62).
+
+La licence MIT autorise à copier, modifier et redistribuer le code. Si vous publiez une version modifiée :
+
+- gardez les mentions de copyright du fichier [`LICENSE`](https://github.com/Marlboro62/meteo-card/blob/main/LICENSE) (© Marlboro62) ;
+- **donnez-lui un autre nom** et d'autres types de carte (`custom:meteo-card` et `custom:meteo-…-card` sont ceux de ce dépôt) :
+  Home Assistant ne peut pas charger deux cartes du même type, et personne ne doit confondre les deux versions dans HACS ;
+- ne la présentez pas comme la version officielle et n'orientez pas vers ce dépôt les demandes
+  de support qui concernent votre version.
+
+Une correction ou une idée ? Les **pull requests** et les **issues** sont les bienvenues ici :
+elles profitent à tous les utilisateurs.
