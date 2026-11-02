@@ -5,6 +5,9 @@
 // Les bibliothèques sont reprises telles que publiées sur npm (versions fixées dans package.json).
 import { build } from "esbuild";
 import { copyFileSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 mkdirSync("dist", { recursive: true });
 copyFileSync("src/meteo-card.js", "dist/meteo-card.js");
@@ -18,7 +21,13 @@ await build({
   // les fichiers dist de Leaflet et MapLibre sont déjà minifiés ; MapLibre crée son worker à partir de son
   // propre code : il ne doit pas être retransformé
   minify: false,
-  alias: { leaflet: "leaflet/dist/leaflet.js" },
+  // « leaflet » seul (carte et extension MapLibre) : le fichier minifié publié, une seule instance
+  plugins: [{
+    name: "leaflet-dist",
+    setup(b) {
+      b.onResolve({ filter: /^leaflet$/ }, () => ({ path: require.resolve("leaflet/dist/leaflet.js") }));
+    },
+  }],
   loader: { ".css": "text" },
   legalComments: "inline",
   banner: { js: "/* Carte Météo : Leaflet (BSD-2-Clause), MapLibre GL JS (BSD-3-Clause), maplibre-gl-leaflet (ISC). Licences dans les commentaires ci-dessous. */" },
