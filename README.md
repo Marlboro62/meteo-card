@@ -90,6 +90,19 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.10.0
+
+**Améliorations**
+
+- Les cartes interactives (Séismes, Feux de forêt, Crues et rivières, Bolides) n'utilisent plus de CDN : Leaflet, MapLibre GL et leurs styles sont livrés avec la carte (`dist/meteo-card-maps.js`). Ce fichier n'est chargé qu'à l'affichage d'une carte : les tableaux de bord sans carte interactive ne le téléchargent pas.
+- Installation par la recherche de HACS (dépôt personnalisé en repli). L'option `leaflet_path` disparaît, elle ne sert plus.
+
+**Corrections**
+
+- Sécurité : les couleurs, icônes et textes venus des capteurs ou de la configuration sont filtrés ou échappés avant d'être affichés. Une valeur avec des guillemets ou du code ne peut plus s'exécuter dans le tableau de bord.
+- Les liens vers les fiches de séismes n'acceptent que des adresses `http(s)`.
+- Le cadre des cartes interactives garde sa taille quand Home Assistant construit la carte avant de l'afficher (carte vide en 3.10.0-beta.1).
+
 ## Installation
 
 ### Avec HACS (recommandé)
