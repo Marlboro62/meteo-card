@@ -94,19 +94,22 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 
 ### Avec HACS (recommandé)
 
-1. Dans HACS, menu **⋮** → **Dépôts personnalisés**.
-2. Ajoutez `https://github.com/Marlboro62/meteo-card` avec le type **Tableau de bord** (Dashboard).
-3. Cherchez **Carte Météo**, installez-la, puis rechargez la page (Ctrl+F5).
+1. Dans HACS, cherchez **Carte Météo** et installez-la.
+2. Rechargez la page (Ctrl+F5).
 
-Les cinq cartes apparaissent ensuite dans la liste des cartes, chacune avec son éditeur visuel.
+Les cartes apparaissent ensuite dans la liste des cartes, chacune avec son éditeur visuel.
+
+Si la carte n'apparaît pas encore dans la recherche de HACS, ajoutez le dépôt à la main : menu **⋮** → **Dépôts personnalisés**, adresse `https://github.com/Marlboro62/meteo-card`, type **Tableau de bord** (Dashboard), puis cherchez **Carte Météo**.
 
 ### Manuellement
 
-1. Téléchargez [`meteo-card.js`](https://raw.githubusercontent.com/Marlboro62/meteo-card/main/meteo-card.js) (clic droit → Enregistrer sous) et copiez-le dans `/config/www/`.
+1. Téléchargez les deux fichiers du dossier [`dist`](https://github.com/Marlboro62/meteo-card/tree/main/dist) : `meteo-card.js` et `meteo-card-maps.js` (les bibliothèques des cartes interactives). Copiez-les ensemble dans `/config/www/`.
 2. **Paramètres → Tableaux de bord → ⋮ → Ressources → Ajouter une ressource** :
    - URL : `/local/meteo-card.js`
    - Type : **Module JavaScript**
 3. Rechargez la page (Ctrl+F5).
+
+Les cartes interactives (Séismes, Feux de forêt, Crues et rivières, Bolides) utilisent [Leaflet](https://leafletjs.com/) et [MapLibre GL JS](https://maplibre.org/), livrés avec la carte dans `meteo-card-maps.js` : aucun script n'est chargé depuis un CDN, et ce fichier n'est chargé qu'à l'affichage d'une carte. Seuls les fonds de carte (OpenStreetMap, OpenFreeMap) viennent d'Internet.
 
 ## Photos de la lune et de la Terre (facultatif)
 
@@ -508,7 +511,6 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
-| `leaflet_path` | Dossier de Leaflet pour un usage hors ligne (ex. `/local/leaflet/`) | jsDelivr |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 

@@ -1,0 +1,11 @@
+// Bibliothèques des cartes interactives (Séismes, Feux de forêt, Crues et rivières, Bolides), livrées
+// avec la carte dans dist/meteo-card-maps.js : aucun script ni style chargé depuis un CDN.
+// Ce fichier n'est chargé qu'à l'affichage de la première carte (import() depuis meteo-card.js).
+import L from "leaflet";
+import maplibregl from "maplibre-gl";
+// extension Leaflet de MapLibre (fonds vectoriels) : ajoute L.maplibreGL à la même instance de Leaflet
+import "@maplibre/maplibre-gl-leaflet";
+import leafletCss from "leaflet/dist/leaflet.css";
+import maplibreCss from "maplibre-gl/dist/maplibre-gl.css";
+
+export { L, maplibregl, leafletCss, maplibreCss };

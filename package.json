@@ -1,0 +1,17 @@
+{
+  "name": "meteo-card",
+  "private": true,
+  "description": "Construction de la Carte Météo : dist/meteo-card.js et dist/meteo-card-maps.js (Leaflet, MapLibre GL et leurs styles, sans CDN)",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@maplibre/maplibre-gl-leaflet": "0.1.4",
+    "leaflet": "1.9.4",
+    "maplibre-gl": "5.24.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

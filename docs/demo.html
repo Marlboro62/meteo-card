@@ -41,8 +41,8 @@ if (!customElements.get("ha-icon")) customElements.define("ha-icon", class exten
   }
 });
 </script>
-<script src="../meteo-card.js"></script>
-<script>
+<script type="module" src="../dist/meteo-card.js"></script>
+<script type="module">
 // Données fictives : aucune donnée réelle (villes, capteurs et coordonnées inventés)
 const DAY = 86400e3, HOUR = 3600e3;
 const mk = (conds, base) => conds.map((c, i) => ({ datetime: new Date(Date.now() + i * DAY).toISOString(), condition: c,

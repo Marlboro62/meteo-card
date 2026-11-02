@@ -5,12 +5,13 @@ name: Contrôle et release
 # pas encore. Une version avec un tiret (0.2.0-beta) sort en pré-release.
 # Lancement manuel avec « refaire_release » : supprime la release et le tag de la
 # version courante puis les recrée sur le commit lancé (ex. après une réécriture).
-# Pas de fichier joint à la release : HACS prend alors meteo-card.js dans
-# le dépôt au tag de la version (le téléchargement des fichiers joints échoue dans HACS).
+# Pas de fichier joint à la release : HACS prend alors dist/meteo-card.js et dist/meteo-card-maps.js
+# dans le dépôt au tag de la version (le téléchargement des fichiers joints échoue dans HACS).
+# dist/ est construit ici depuis src/ (npm run build) et committé avant le tag.
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -23,28 +24,65 @@ permissions:
   contents: write
 
 jobs:
+  build:
+    name: Construction de dist/
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dépendances (versions fixées dans package.json)
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Construire dist/
+        run: npm run build
+      - name: Aucun CDN dans dist/
+        run: |
+          ! grep -n "cdn.jsdelivr.net/npm\|unpkg.com" dist/*.js || { echo "::error::script chargé depuis un CDN"; exit 1; }
+      - name: Committer dist/ s'il a changé
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist package-lock.json
+          if [ "${{ github.event_name }}" != "pull_request" ] && ! git diff --cached --quiet; then
+            git commit -m "build: dist/ construit depuis src/ [skip ci]"
+            git push
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   controle:
     name: Contrôle de la carte
+    needs: build
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Syntaxe JavaScript
-        run: node --check meteo-card.js
+        run: |
+          node --check src/meteo-card.js
+          node --input-type=module --check < dist/meteo-card.js
+          cmp src/meteo-card.js dist/meteo-card.js || { echo "::error::dist/meteo-card.js n'est pas à jour"; exit 1; }
       - name: Version de la carte
         id: v
         run: |
-          v=$(grep -oP 'CARD_VERSION = "\K[^"]+' meteo-card.js)
+          v=$(grep -oP 'CARD_VERSION = "\K[^"]+' src/meteo-card.js)
           [ -n "$v" ] || { echo "::error::CARD_VERSION introuvable"; exit 1; }
           echo "Version de la carte : $v"
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
   hacs:
     name: Validation HACS
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: hacs/action@main
@@ -53,7 +91,7 @@ jobs:
 
   release:
     name: Publication de la release
-    needs: controle
+    needs: [build, controle]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
@@ -62,6 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.build.outputs.sha }}
           fetch-depth: 0 # historique et tags complets pour les notes de release
       - name: Supprimer l'ancienne release (lancement manuel)
         if: github.event_name == 'workflow_dispatch' && inputs.refaire_release
@@ -90,7 +129,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ needs.build.outputs.sha }}
           name: Carte Météo ${{ env.VERSION }}
           body_path: release-notes.md
           prerelease: ${{ contains(env.VERSION, '-') }}

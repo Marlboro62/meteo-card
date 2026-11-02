@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.9.0";
+const CARD_VERSION = "3.10.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -37,7 +37,15 @@ const fmt = (n, digits = 0) =>
     ? "—"
     : Number(n).toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+/** Couleur pour un attribut style (configuration, attribut d'entité) : #hex, rgb()/hsl(), var(--x) ou nom CSS.
+ *  Ni guillemet, ni point-virgule, ni chevron : une valeur ne peut pas sortir de la déclaration. Sinon, le repli. */
+const safeColor = (v, fallback = "") => {
+  const s = String(v ?? "").trim();
+  return s && s.length < 80 && /^[#\w\s.,%()/+-]+$/.test(s) ? s : fallback;
+};
+/** Adresse d'un lien venu d'une API : http(s) seulement. */
+const safeUrl = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) ? u : null);
 
 /** Classe de thème de la carte :
  *  v2   : style MyElectricalData, toujours bleu nuit ;
@@ -512,19 +520,21 @@ class MeteoBase extends HTMLElement {
     const c = this._config;
     if (!this._keep) return null;
     if (!this._keep.querySelector(".bm")) {
-      const base = c.leaflet_path || LEAFLET;
-      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${height}px">
+      this._keep.innerHTML = `<style class="bm-css"></style><div class="bm" style="height:${height}px">
         <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
         <div class="bm-leg">${legend}</div>`;
       this._map = null;
       this._fitted = null;
     }
     let L;
-    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
+    let lib;
+    try { lib = await loadMaps(); L = lib.L; } catch (e) {
       const box = this._keep.querySelector(".bm-map");
-      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
+      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>Les bibliothèques de la carte n'ont pas pu être chargées (${esc(e.message)}).</span></div>`;
       return null;
     }
+    const css = this._keep.querySelector(".bm-css");
+    if (css && !css.textContent) css.textContent = lib.leafletCss + lib.maplibreCss;
     const el = this._keep.querySelector(".bm-map");
     if (!el) return null;
     try {
@@ -548,7 +558,7 @@ class MeteoBase extends HTMLElement {
         this._tiles = null;
         this._tilesKey = null;
       }
-      const vector = !c.tiles_url && (await loadVector());
+      const vector = !c.tiles_url && hasWebgl2();
       const tkey = vector ? `ofm|${light}` : c.tiles_url || "raster";
       el.classList.toggle("dark", !vector && !light && !c.tiles_url);
       if (this._tilesKey !== tkey) {
@@ -588,7 +598,7 @@ class MeteoBase extends HTMLElement {
   }
 
   _head(icon, color, title, sub, right = "") {
-    return `<header><div class="brand"><ha-icon class="b-ic" icon="${icon}" style="color:${color}"></ha-icon>
+    return `<header><div class="brand"><ha-icon class="b-ic" icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>
       <div><div class="title">${esc(title)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div></div>${right}</header>`;
   }
 }
@@ -691,7 +701,7 @@ class MeteoCard extends MeteoBase {
     const vg = this._vg(al, ent);
     const pill = vg && c.show_alert !== false ? this._pill(vg) : "";
     return `<header class="nh"><div class="nh-m" data-entity="${esc(ent.weather)}">
-      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
+      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
       <div class="nh-n"><div class="title">${esc(city.name || c.title || "Météo")}</div><div class="sub">${esc(label)}</div></div>
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(a.temperature_unit || "°C")}</span></div>
       ${today ? `<i class="nh-sep"></i>${this._hilo(today)}` : ""}</div>${pill}</header>`;
@@ -744,7 +754,7 @@ class MeteoCard extends MeteoBase {
     // intensité de pluie mesurée par une station (mm/h), choisie avec rain_rate
     const rr = this._num(rate);
     if (rr !== null) items.push([rate, "mdi:weather-pouring", "Intensité",
-      `${fmt(rr, rr > 0 && rr < 10 ? 1 : 0)} ${this._st(rate).attributes?.unit_of_measurement || "mm/h"}`]);
+      `${fmt(rr, rr > 0 && rr < 10 ? 1 : 0)} ${this._st(rate).attributes?.unit_of_measurement || "mm/h"}`]); // échappé avec la valeur, à l'affichage
     // l'heure de la prochaine pluie est déjà dans la barre « pluie dans l'heure » quand elle est affichée
     const hourBar = this._config.show_rain_hour !== false && this._st(rainHourOf(this._hass, w.entity_id, this._config.rain_hour))?.attributes?.["1_hour_forecast"];
     const nr = hourBar ? null : this._st(rel.next_rain);
@@ -754,7 +764,7 @@ class MeteoCard extends MeteoBase {
     }
     if (!items.length) return "";
     return `<div class="det">${items.map(([id, icon, label, v]) =>
-      `<span class="d-i"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}"></ha-icon>${label}<b>${esc(v)}</b></span>`).join("")}</div>`;
+      `<span class="d-i"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${esc(icon)}"></ha-icon>${esc(label)}<b>${esc(v)}</b></span>`).join("")}</div>`;
   }
 
   /** Niveau de vigilance (0 à 3) et phénomènes actifs. */
@@ -874,13 +884,13 @@ class MeteoCard extends MeteoBase {
     </div>`;
     if (statsOnly) return stats;
     return `<div class="now" data-entity="${esc(ent.weather)}">
-      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${icon}" style="color:${color}"></ha-icon>`)}
+      ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(tu)}</span></div>
       ${hilo}</div>${stats}`;
   }
 
   _stat(icon, label, value, note = "", extra = "") {
-    return `<div class="stat"><div class="s-h"><ha-icon icon="${icon}"></ha-icon><span>${label}</span>${extra}</div>
+    return `<div class="stat"><div class="s-h"><ha-icon icon="${esc(icon)}"></ha-icon><span>${esc(label)}</span>${extra}</div>
       <div class="s-v">${value}</div>${note ? `<div class="s-n">${esc(note)}</div>` : ""}</div>`;
   }
 
@@ -912,7 +922,7 @@ class MeteoCard extends MeteoBase {
     const head = vg.info ? "Bulletin météo" : vg.active.length > 1 ? `${vg.active.length} alertes météo` : "Alerte météo";
     return `<div class="vig" data-entity="${esc(vg.entity)}" style="--vc:${vg.info ? INFO_COLOR : LEVEL_COLOR[vg.max]}">
       <div class="v-h"><ha-icon icon="mdi:alert-outline"></ha-icon><span>${head}</span></div>
-      <div class="v-rows">${vg.active.map((p) => `<div class="v-r" data-entity="${esc(p.entity)}" style="--pc:${col(p)}"><ha-icon icon="${p.icon}"></ha-icon>
+      <div class="v-rows">${vg.active.map((p) => `<div class="v-r" data-entity="${esc(p.entity)}" style="--pc:${col(p)}"><ha-icon icon="${esc(p.icon)}"></ha-icon>
         <div class="v-t"><span>${esc(p.name)}</span><small><b>${esc(p.label)}</b>${when(p) ? ` · ${esc(when(p))}` : ""}</small></div></div>`).join("")}</div>
     </div>`;
   }
@@ -975,7 +985,7 @@ class MeteoCard extends MeteoBase {
         const barF = !hourly && hi !== null && lo !== null
           ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
         return `<div class="fc-d full" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
-          ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
+          ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
           <div class="f-hi">${hi === null ? "—" : `${fmt(hi, 1)}°`}</div>${!hourly ? `<div class="f-lo">${lo === null ? "&nbsp;" : `${fmt(lo, 1)}°`}</div>` : ""}${barF}${details}</div>`;
       }
       const wet = !on.mm ? "" : (mm !== null && mm > 0 ? `<span>${fmt(mm, mm < 10 ? 1 : 0)}<small>mm</small></span>` : "") +
@@ -983,7 +993,7 @@ class MeteoCard extends MeteoBase {
       const bar = !hourly && hi !== null && lo !== null
         ? `<div class="f-bar"><span style="left:${pct(lo).toFixed(0)}%;right:${(100 - pct(hi)).toFixed(0)}%"></span></div>` : "";
       return `<div class="fc-d" title="${esc(lab)}"><div class="f-n">${esc(name)}</div>
-        ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`)}
+        ${this._wicon(d.condition, hourly ? dt : null, "f-ic", false, `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
         <div class="f-hi">${hi === null ? "—" : `${fmt(hi)}°`}</div>${lo !== null ? `<div class="f-lo">${fmt(lo)}°</div>` : ""}${bar}
         <div class="f-r">${wet}</div>${on.hum && hum !== null ? `<div class="f-hu" title="Humidité"><ha-icon icon="mdi:water-percent"></ha-icon>${fmt(hum)}%</div>` : ""}${wind}</div>`;
     }).join("");
@@ -1015,7 +1025,7 @@ class MeteoCard extends MeteoBase {
     const moon = MOON[mRaw] || MOON[moonOfDate(now)];
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
     const tile = (id, icon, color, value, label) =>
-      `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${color}"></ha-icon><div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
+      `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon><div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
     // soleil : au-dessus ou sous l'horizon, lever et coucher du jour (calculés d'après les coordonnées)
     const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
     const sunSt = this._st("sun.sun")?.state;
@@ -1537,7 +1547,7 @@ class MeteoAstroCard extends MeteoBase {
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
     const sunI = SUN_ICON[sun?.state];
     const tile = (attr, icon, color, value, label, svg) =>
-      `<div class="sky-t" ${attr}>${svg || `<ha-icon icon="${icon}" style="color:${color}"></ha-icon>`}<div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
+      `<div class="sky-t" ${attr}>${svg || `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`}<div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
     return `<div class="sky">
       ${tile(`data-act="moon" role="button" tabindex="0"`, "", "", MOON[mk][0], "Lune", `<svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(il.phase, 20, 0, 0, this._config.moon_image)}</svg>`)}
       ${sunI ? tile(`data-entity="sun.sun"`, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
@@ -1671,7 +1681,7 @@ class MeteoAirCard extends MeteoBase {
     const n = num(st.state);
     const lv = n === null ? null : Math.max(0, Math.min(7, Math.round(n)));
     const label = st.attributes?.["Libellé"] || st.attributes?.libelle || st.attributes?.label || (lv === null ? st.state : (pollen ? ATMO_POLLEN : ATMO)[lv] || st.state);
-    const color = st.attributes?.Couleur || st.attributes?.couleur || (lv === null ? ATMO_COLOR[0] : ATMO_COLOR[lv]);
+    const color = safeColor(st.attributes?.Couleur || st.attributes?.couleur, lv === null ? ATMO_COLOR[0] : ATMO_COLOR[lv]);
     return { lv, label: String(label), color };
   }
 
@@ -1683,11 +1693,11 @@ class MeteoAirCard extends MeteoBase {
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|") + `|${f.bans.join(",")}`;
     if (sig === this._sig) return;
     this._sig = sig;
-    const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${icon}" style="color:${a.color}"></ha-icon>
-      <div class="pol-t"><span>${title}</span><b style="color:${a.color}">${esc(a.label)}${a.lv !== null ? ` (${a.lv})` : ""}</b></div>
-      ${a.lv !== null ? `<div class="pol-r"><div class="rbar"><i style="width:${Math.min(100, (a.lv / max) * 100).toFixed(0)}%;background:${a.color}"></i></div><b>${a.lv}/${max}</b></div>` : ""}</div>`;
-    const tile = (id, icon, name, a, extra = "") => `<div class="pl-t" data-entity="${esc(id)}" style="--pc:${a ? a.color : ATMO_COLOR[0]}">
-      <ha-icon icon="${icon}"></ha-icon><div class="pl-n">${esc(name)}</div><div class="pl-v">${a ? esc(a.label) : "—"}</div>${extra}</div>`;
+    const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}" style="color:${safeColor(a.color)}"></ha-icon>
+      <div class="pol-t"><span>${esc(title)}</span><b style="color:${safeColor(a.color)}">${esc(a.label)}${a.lv !== null ? ` (${a.lv})` : ""}</b></div>
+      ${a.lv !== null ? `<div class="pol-r"><div class="rbar"><i style="width:${Math.min(100, (a.lv / max) * 100).toFixed(0)}%;background:${safeColor(a.color)}"></i></div><b>${a.lv}/${max}</b></div>` : ""}</div>`;
+    const tile = (id, icon, name, a, extra = "") => `<div class="pl-t" data-entity="${esc(id)}" style="--pc:${a ? safeColor(a.color, ATMO_COLOR[0]) : ATMO_COLOR[0]}">
+      <ha-icon icon="${esc(icon)}"></ha-icon><div class="pl-n">${esc(name)}</div><div class="pl-v">${a ? esc(a.label) : "—"}</div>${extra}</div>`;
     const parts = [];
     if (c.show_air !== false && (f.air || f.pollutants.length)) {
       const tiles = f.pollutants.map((id) => {
@@ -1712,7 +1722,7 @@ class MeteoAirCard extends MeteoBase {
         const st = this._st(id);
         const w = WATER.find(([re]) => re.test(st?.state || "")) || [null, null, st?.state];
         const type = f.waters.length > 1 ? (TYPES.find(([re]) => re.test(id.replace(/^sensor\./, ""))) || [, ""])[1] : "";
-        return { id, lv: w[1], label: w[2], type, col: st?.attributes?.Couleur || (w[1] === null ? ATMO_COLOR[0] : WATER_COLOR[w[1]]),
+        return { id, lv: w[1], label: w[2], type, col: safeColor(st?.attributes?.Couleur, w[1] === null ? ATMO_COLOR[0] : WATER_COLOR[w[1]]),
           area: st?.attributes?.zone || st?.attributes?.zone_name || st?.attributes?.commune || "" };
       });
       const top = levels.reduce((a, b) => ((b.lv ?? -1) > (a.lv ?? -1) ? b : a));
@@ -1883,7 +1893,7 @@ class MeteoSeismesCard extends MeteoBase {
     const emsc = home ? `${EMSC_API}&lat=${home[0].toFixed(2)}&lon=${home[1].toFixed(2)}&maxradius=${((Number(c.radius) || 1000) / 111.2).toFixed(1)}&minmag=${Number(c.min_magnitude) || 0}&start=${start}` : null;
     Promise.all([
       fetchJson(USGS_FEED, 6e5).then((j) => (j.features || []).map((f) => ({ mag: num(f.properties?.mag), lat: f.geometry?.coordinates?.[1], lon: f.geometry?.coordinates?.[0],
-        depth: num(f.geometry?.coordinates?.[2]), t: new Date(f.properties?.time), place: f.properties?.place, url: f.properties?.url, src: "USGS" }))).catch(() => null),
+        depth: num(f.geometry?.coordinates?.[2]), t: new Date(f.properties?.time), place: f.properties?.place, url: safeUrl(f.properties?.url), src: "USGS" }))).catch(() => null),
       emsc ? fetchJson(emsc, 6e5).then((j) => (j.features || []).map((f) => ({ mag: num(f.properties?.mag), lat: num(f.properties?.lat), lon: num(f.properties?.lon),
         depth: num(f.properties?.depth), t: new Date(f.properties?.time), place: titleCase(f.properties?.flynn_region),
         url: f.properties?.unid ? `https://www.seismicportal.eu/eventdetails.html?unid=${f.properties.unid}` : null, src: "EMSC" }))).catch(() => null) : Promise.resolve([]),
@@ -2130,7 +2140,7 @@ class MeteoFeuxCard extends MeteoBase {
           .bindPopup(`<div class="bp"><b>${f.place ? `${f.placeKm !== null ? `${km(f.placeKm)} de ` : "Près de "}${esc(f.place)}` : "Feu détecté"}</b>
             <span>Intensité <b>${f.band[0]}</b>${f.frp !== null ? ` · ${fmt(f.frp, f.frp < 10 ? 1 : 0)} MW` : ""}</span>
             ${f.dist !== null ? `<span>À <b>${km(f.dist)}</b>${f.az !== null ? ` ${compass16(f.az)}` : ""} de chez vous</span>` : ""}
-            ${f.t ? `<span>Détecté ${dt(f.t)}</span>` : ""}${f.conf ? `<span>Confiance <b>${f.conf}</b>${f.sats.length ? ` · ${f.sats.map(SAT_FR).join(", ")}` : ""}</span>` : ""}
+            ${f.t ? `<span>Détecté ${dt(f.t)}</span>` : ""}${f.conf ? `<span>Confiance <b>${f.conf}</b>${f.sats.length ? ` · ${esc(f.sats.map(SAT_FR).join(", "))}` : ""}</span>` : ""}
             ${f.smoke ? `<span style="color:${f.smoke[1]}">${f.smoke[0]}${f.wind !== null ? ` · vent ${fmt(f.wind * 3.6)} km/h` : ""}</span>` : ""}</div>`,
           { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
         m.addTo(this._layer);
@@ -2468,33 +2478,25 @@ class MeteoEcowattCard extends MeteoBase {
 
 const BOLIDES_DEFAULTS = { title: "Bolides", period: "all", min_energy: 0, show_home: true, map_height: 320, theme: "v2" };
 const FIREBALL_API = "https://ssd-api.jpl.nasa.gov/fireball.api?req-loc=true";
-const LEAFLET = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/";
-const MAPLIBRE = "https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/";
-const MAPLIBRE_LEAFLET = "https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
 // fonds vectoriels officiels d'OpenStreetMap (Shortbread), ceux de Home Assistant depuis que CARTO exige une clé
 const OSM_VECTOR = "https://vector.openstreetmap.org/shortbread_v1/tilejson.json";
 // styles vectoriels complets d'OpenFreeMap (villes, routes, noms), gratuits et sans clé : carte des feux
 const OFM = "https://tiles.openfreemap.org/styles/";
-const scripts = {};
-/** Script classique chargé une seule fois (délai de 20 s : sans réponse, la carte affiche un message au lieu de rester vide). */
-const loadScript = (src, ready) => (scripts[src] = scripts[src] || new Promise((resolve, reject) => {
-  if (ready()) { resolve(); return; }
-  const s = document.createElement("script");
-  const timer = setTimeout(() => reject(new Error("délai dépassé")), 20000);
-  s.src = src;
-  s.onload = () => { clearTimeout(timer); ready() ? resolve() : reject(new Error(`${src} incomplet`)); };
-  s.onerror = () => { clearTimeout(timer); reject(new Error(`${src} introuvable`)); };
-  document.head.appendChild(s);
-}).catch((e) => { delete scripts[src]; throw e; }));
-/** Leaflet (carte du monde, window.L), à la première carte Bolides affichée. */
-const loadLeaflet = (base) => loadScript(`${base}leaflet.js`, () => window.L?.map).then(() => window.L);
-/** Fond vectoriel : MapLibre GL et son extension Leaflet ; faux si le navigateur n'a pas WebGL2 ou si le chargement échoue. */
-const loadVector = () => {
-  if (!document.createElement("canvas").getContext("webgl2")) return Promise.resolve(false);
-  return loadScript(`${MAPLIBRE}maplibre-gl.js`, () => window.maplibregl?.Map)
-    .then(() => loadScript(MAPLIBRE_LEAFLET, () => window.L?.maplibreGL))
-    .then(() => true, () => false);
+/** Leaflet, MapLibre GL et leurs styles, livrés avec la carte (dist/meteo-card-maps.js, à côté de ce fichier) et
+ *  chargés à la première carte affichée. Même paramètre de version que ce fichier (hacstag) : une mise à jour
+ *  de la carte recharge aussi les bibliothèques. */
+let mapsLib = null;
+const loadMaps = () => {
+  if (!mapsLib) {
+    const self = new URL(import.meta.url);
+    const url = new URL("./meteo-card-maps.js", self);
+    url.search = self.search || `?v=${CARD_VERSION}`;
+    mapsLib = import(url.href).catch((e) => { mapsLib = null; throw new Error(`meteo-card-maps.js introuvable (${e.message})`); });
+  }
+  return mapsLib;
 };
+/** Fond vectoriel possible : le navigateur a WebGL2 (sinon, images OpenStreetMap). */
+const hasWebgl2 = () => !!document.createElement("canvas").getContext("webgl2");
 /** Style sobre des fonds Shortbread : continents, océans, lacs et frontières (sans étiquettes, donc sans polices à charger). */
 const vectorStyle = (light) => {
   const k = light ? { land: "#eef2f6", sea: "#b9d3ea", line: "#9aaabd" } : { land: "#24324a", sea: "#111a28", line: "#4b5e7c" };
@@ -2619,18 +2621,20 @@ class MeteoBolidesCard extends MeteoBase {
     const c = this._config;
     if (!this._keep) return;
     if (!this._keep.querySelector(".bm")) {
-      const base = c.leaflet_path || LEAFLET;
-      this._keep.innerHTML = `<link rel="stylesheet" href="${esc(base)}leaflet.css"><link rel="stylesheet" href="${MAPLIBRE}maplibre-gl.css"><div class="bm" style="height:${Number(c.map_height) || 320}px">
+      this._keep.innerHTML = `<style class="bm-css"></style><div class="bm" style="height:${Number(c.map_height) || 320}px">
         <div class="bm-map"></div><button class="bm-full" data-act="full" title="Plein écran"><ha-icon icon="mdi:fullscreen"></ha-icon></button></div>
         <div class="bm-leg"><span><i style="background:#ee4a4a"></i>moins de 30 jours</span><span><i style="background:#ff8c33"></i>moins de 6 mois</span><span><i style="background:#8fa0b8"></i>plus ancien</span><span>taille : énergie</span></div>`;
       this._map = null;
     }
     let L;
-    try { L = await loadLeaflet(c.leaflet_path || LEAFLET); } catch (e) {
+    let lib;
+    try { lib = await loadMaps(); L = lib.L; } catch (e) {
       const box = this._keep.querySelector(".bm-map");
-      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>La bibliothèque Leaflet n'a pas pu être chargée (${esc(e.message)}).</span></div>`;
+      if (box) box.innerHTML = `<div class="empty"><b>Carte indisponible</b><span>Les bibliothèques de la carte n'ont pas pu être chargées (${esc(e.message)}).</span></div>`;
       return;
     }
+    const css = this._keep.querySelector(".bm-css");
+    if (css && !css.textContent) css.textContent = lib.leafletCss + lib.maplibreCss;
     const el = this._keep.querySelector(".bm-map");
     if (!el) return;
     try {
@@ -2644,7 +2648,7 @@ class MeteoBolidesCard extends MeteoBase {
         this._layer = L.layerGroup().addTo(this._map);
       }
       // fond : vectoriel OpenStreetMap (comme Home Assistant), sinon images OpenStreetMap assombries par un filtre CSS ; tiles_url pour un autre fournisseur
-      const vector = !c.tiles_url && (await loadVector());
+      const vector = !c.tiles_url && hasWebgl2();
       const attribution = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
       const key = vector ? `vector|${light}` : c.tiles_url || "raster";
       el.classList.toggle("dark", !vector && !light && !c.tiles_url);
