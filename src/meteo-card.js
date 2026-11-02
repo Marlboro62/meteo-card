@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.10.0-beta.1";
+const CARD_VERSION = "3.10.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3001,7 +3001,9 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bf .bc { cursor: pointer; font: inherit; font-size: .72rem; }
 .bf .bc.on { border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-accent, var(--med-blue)) 18%, var(--med-surface)); }
 .bm { position: relative; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
-.bm-map { position: absolute; inset: 0; background: #0f1724; }
+/* !important : Leaflet pose position: relative en ligne s'il crée la carte avant que ce style s'applique
+   (carte construite hors de la page par Home Assistant), et le cadre perdait alors sa taille */
+.bm-map { position: absolute !important; inset: 0; background: #0f1724; }
 .bm-map.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.85) saturate(.6); }
 .bm-full { position: absolute; top: 10px; right: 10px; z-index: 1000; width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--med-line);
   background: var(--med-bg); color: var(--med-text); cursor: pointer; display: grid; place-items: center; }
