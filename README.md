@@ -44,6 +44,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Montagne** | `custom:meteo-montagne-card` | **Stations de ski et sommets** en onglets : température **au pied et au sommet**, **isotherme 0 °C**, **neige fraîche** (24 h passées, 72 h à venir), **neige au sol**, prévisions, et **risque d'avalanche** du bulletin Météo-France (avec [ha-serac](https://github.com/atacamalabs/ha-serac)) |
+| **Marine** | `custom:meteo-marine-card` | **Zones en mer** en onglets : vent en **nœuds et force Beaufort**, rafales, **mer du vent et houle**, visibilité, **pression et tendance**, courant, prévisions heure par heure et **avis dès force 7** |
 | **Plage** | `custom:meteo-plage-card` | **Plages** en onglets : température de l'air et **de l'eau**, **indice UV**, vent, **vagues et houle**, **marée** (courbe, pleines et basses mers), prévisions des prochains jours |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude), en liste et sur une **carte interactive**, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
@@ -91,6 +92,12 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, tabbed-card, card-mod, meteofrance-weather-card, compass-card, tempometer-gauge-card, rain-gauge-card, uv-index-card, sun-card, button-card, bar-card, auto-entities, popup-card…
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
+
+## Nouveautés de la 3.13.0
+
+**Nouvelle carte**
+
+- **Carte Marine** (`custom:meteo-marine-card`) : zones en mer en onglets, vent en nœuds avec la force Beaufort et les rafales, mer du vent et houle, visibilité, pression avec sa tendance sur 3 h, courant, prévisions toutes les 3 heures et avis quand la force 7 est prévue dans les 24 h. Open-Meteo (prévisions et API marine), sans clé ni intégration. Voir [Carte Marine](#carte-marine).
 
 ## Nouveautés de la 3.12.0
 
@@ -548,6 +555,35 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Marine
+
+```yaml
+type: custom:meteo-marine-card
+zones:
+  - name: Ma zone
+    latitude: 47.0
+    longitude: -3.0
+```
+
+- **Une zone par onglet** : un point en mer, au large de votre port ou sur votre route.
+- **Vent** : vitesse moyenne en **nœuds**, direction, **force Beaufort** avec son nom (jolie brise, grand frais…), rafales et leur force.
+- **Mer** : hauteur des vagues et état de la mer (échelle de Douglas), **mer du vent**, **houle** (hauteur, direction, période).
+- **Visibilité**, **pression** au niveau de la mer et sa **tendance sur 3 h**, **courant** (vitesse et direction).
+- **Heure par heure**, toutes les 3 heures : force, vent et rafales, mer et houle.
+- **Avis** en tête de carte dès que la **force 7** (grand frais) est prévue dans les 24 heures, en vent moyen ou en rafales.
+
+**Rien à installer** : la carte lit [Open-Meteo](https://open-meteo.com/) depuis le navigateur, gratuit et sans clé (vent : Météo-France et ECMWF ; mer : API marine, modèle MFWAM de Météo-France et modèles de vagues), toutes les 30 minutes.
+
+> **Prévisions indicatives.** Cette carte ne remplace pas les bulletins officiels : avant de sortir en mer, consultez le **bulletin météo marine (BMS)** de Météo-France, les bulletins **VHF** des CROSS et l'affichage de votre capitainerie.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `zones` | Zones suivies : `name`, `latitude`, `longitude` | — |
+| `title` | Titre | `Météo marine` |
+| `hours` | Heures de prévision dans le tableau (6 à 48, par pas de 3) | `24` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 

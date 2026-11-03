@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.12.0";
+const CARD_VERSION = "3.13.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2839,6 +2839,145 @@ class MeteoPlageCard extends MeteoBase {
   }
 }
 
+/* ----------------------------------------------------------------- marine */
+
+const MARINE_DEFAULTS = { title: "Météo marine", hours: 24, theme: "v2" };
+/** Échelle de Beaufort d'après le vent en nœuds : force, nom, couleur. */
+const BEAUFORT = [[1, "Calme"], [4, "Très légère brise"], [7, "Légère brise"], [11, "Petite brise"], [17, "Jolie brise"], [22, "Bonne brise"], [28, "Vent frais"],
+  [34, "Grand frais"], [41, "Coup de vent"], [48, "Fort coup de vent"], [56, "Tempête"], [64, "Violente tempête"], [Infinity, "Ouragan"]];
+const BFT_COL = ["#8fa0b8", "#9fd3ff", "#6fd3e0", "#5fcf8a", "#96d21f", "#f7c948", "#ffb02e", "#ff8c33", "#ee4a4a", "#d62e5c", "#b38cf0", "#8a5cf0", "#7a0a0a"];
+const beaufort = (kn) => { if (kn === null) return null; const f = BEAUFORT.findIndex(([max]) => kn < max); return { f, name: BEAUFORT[f][1], col: BFT_COL[f] }; };
+const visInfo = (m) => (m === null ? null : m < 1000 ? ["Mauvaise", "#ee4a4a"] : m < 5000 ? ["Médiocre", "#ff8c33"] : m < 10000 ? ["Moyenne", "#f7c948"] : ["Bonne", "#5fcf8a"]);
+const marineZones = (c) => (Array.isArray(c.zones) ? c.zones : []).map((z, i) => ({ name: String(z?.name || `Zone ${i + 1}`), lat: num(z?.latitude), lon: num(z?.longitude) }))
+  .filter((z) => z.lat !== null && z.lon !== null && Math.abs(z.lat) <= 90 && Math.abs(z.lon) <= 180);
+/** Lecture Open-Meteo : la raison d'un refus est gardée pour l'afficher. */
+const omGet = (url) => fetch(url).then((r) => r.json().catch(() => null).then((j) => {
+  if (!r.ok || !j || j.error) throw new Error(j?.reason || `erreur ${r.status}${r.status === 503 ? ", service indisponible" : r.status === 429 ? ", trop de requêtes" : ""}`);
+  return j;
+}));
+/** Flèche « vers où va » le vent, la houle ou le courant (la direction donnée est celle d'où il vient, sauf pour le courant). */
+// « du N », mais « d'ONO » / « vers l'E » devant une voyelle
+const dirDe = (deg) => { const c = compass16(deg); return /^[EO]/.test(c) ? `d'${c}` : `du ${c}`; };
+const dirVers = (deg) => { const c = compass16(deg); return /^[EO]/.test(c) ? `vers l'${c}` : `vers le ${c}`; };
+const arrowTo = (deg, from = true) => (deg === null ? "" : `<ha-icon class="mr-ar" icon="mdi:navigation" style="transform:rotate(${Math.round((deg + (from ? 180 : 0)) % 360)}deg)"></ha-icon>`);
+
+class MeteoMarineCard extends MeteoBase {
+  static get defaults() {
+    return MARINE_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-marine-card-editor");
+  }
+
+  static getStubConfig() {
+    return { zones: [{ name: "Ma zone", latitude: 47.2, longitude: -2.7 }] };
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  _action(act, el) {
+    if (act === "tab") { this._tab = Number(el.dataset.i) || 0; this._sig = null; this._render(); }
+  }
+
+  /** Vent, visibilité, pression (prévisions) et vagues, houle, courant (API marine), toutes les 30 minutes ; 2 minutes après un échec. */
+  _fetch(z) {
+    const key = `${z.lat},${z.lon}`;
+    this._wx = this._wx || {};
+    const cur = this._wx[key];
+    if (cur && (cur.busy || Date.now() - cur.at < (cur.failed ? 12e4 : 18e5))) return cur;
+    const entry = (this._wx[key] = { ...(cur || {}), busy: true, at: cur?.at || 0 });
+    const pos = { latitude: z.lat.toFixed(4), longitude: z.lon.toFixed(4), timezone: "auto", past_days: "1", forecast_days: "3" };
+    const air = new URLSearchParams({ ...pos, wind_speed_unit: "kn", cell_selection: "sea",
+      hourly: "wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,pressure_msl,weather_code,is_day,precipitation" });
+    const sea = new URLSearchParams({ ...pos, cell_selection: "sea",
+      hourly: "wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period,ocean_current_velocity,ocean_current_direction" });
+    Promise.all([omGet(`${OPEN_METEO}?${air}`), omGet(`${OPEN_METEO_MARINE}?${sea}`).catch((e) => ({ seaError: e.message }))]).then(([a, m]) => {
+      entry.air = a; entry.sea = m.seaError ? null : m; entry.seaError = m.seaError || "";
+      entry.failed = false; entry.error = ""; entry.okAt = Date.now();
+    }).catch((e) => { entry.failed = true; entry.error = e?.message || "réseau"; })
+      .finally(() => { entry.busy = false; entry.at = Date.now(); this._sig = null; this._render(); });
+    return entry;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, list = marineZones(c);
+    const head = (sub) => this._head(c.icon || "mdi:sail-boat", "#4fc3f7", c.title || "Météo marine", sub);
+    if (!list.length) {
+      this._card(head("") + `<div class="empty"><b>Aucune zone configurée</b><span>Ajoutez une zone dans l'éditeur : nom, latitude et longitude (un point en mer, au large de votre port).</span></div>`);
+      return;
+    }
+    const ti = Math.min(Math.max(0, this._tab || 0), list.length - 1), z = list[ti];
+    const wx = this._fetch(z);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${wx.at}|${wx.failed}|${new Date().getHours()}`;
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const tabs = list.length > 1 ? `<div class="tabs" role="tablist">${list.map((x, i) => `<button class="tab${i === ti ? " on" : ""}" role="tab" aria-selected="${i === ti}" data-act="tab" data-i="${i}"><ha-icon icon="mdi:sail-boat"></ha-icon>${esc(x.name)}</button>`).join("")}</div>` : "";
+    const A = wx.air;
+    if (!A) {
+      this._card(head(z.name) + tabs + `<div class="fc-empty">${wx.failed ? `Prévisions marines inaccessibles : Open-Meteo (${esc(wx.error || "réseau")}). Nouvel essai dans 2 minutes.` : "Chargement des prévisions marines…"}</div>`);
+      return;
+    }
+    const M = wx.sea, off = Number(A.utc_offset_seconds) || 0;
+    const local = new Date(Date.now() + off * 1000).toISOString().slice(0, 13);
+    const idx = (d) => { const t = d?.hourly?.time || []; const i = t.findIndex((x) => x.slice(0, 13) === local); return i < 0 ? 0 : i; };
+    const ia = idx(A), im = idx(M);
+    const ha = (k, j = ia) => num(A.hourly?.[k]?.[j]), hm2 = (k, j = im) => (M ? num(M.hourly?.[k]?.[j]) : null);
+    const kn = ha("wind_speed_10m"), dir = ha("wind_direction_10m"), gust = ha("wind_gusts_10m"), bf = beaufort(kn), bg = beaufort(gust);
+    const vis = ha("visibility"), vi = visInfo(vis), p = ha("pressure_msl"), p3 = ha("pressure_msl", ia - 3);
+    const dp = p !== null && p3 !== null ? p - p3 : null;
+    const wave = hm2("wave_height"), wdir = hm2("wave_direction"), wper = hm2("wave_period"), ww = hm2("wind_wave_height");
+    const sw = hm2("swell_wave_height"), sdir = hm2("swell_wave_direction"), sper = hm2("swell_wave_period");
+    // courant : km/h dans l'API, affiché en nœuds ; sa direction est celle vers où il porte
+    const cur = hm2("ocean_current_velocity"), cdir = hm2("ocean_current_direction"), curKn = cur === null ? null : cur / 1.852;
+    const code = wmoCond(ha("weather_code")), cond = code === "sunny" && ha("is_day") === 0 ? "clear-night" : code, [cLab, cIcon, cCol] = condOf(cond);
+    const tile = (icon, col, value, label, note = "", extra = "") => `<div class="sky-t">${extra || `<ha-icon icon="${icon}" style="color:${col}"></ha-icon>`}<div class="k-v">${value}</div><div class="k-l">${label}</div>${note ? `<div class="mt-n">${note}</div>` : ""}</div>`;
+    const kts = (v) => (v === null ? "—" : `${fmt(v, 0)} nds`);
+
+    // grand frais (force 7) ou plus dans les 24 prochaines heures, d'après le modèle
+    const next = (A.hourly?.wind_speed_10m || []).slice(ia, ia + 24).map(num), nextG = (A.hourly?.wind_gusts_10m || []).slice(ia, ia + 24).map(num);
+    const maxF = Math.max(-1, ...next.filter((v) => v !== null).map((v) => beaufort(v).f));
+    const kAt = next.findIndex((v) => v !== null && beaufort(v).f >= 7);
+    const warn = maxF >= 7 ? `<div class="mr-w" style="--wc:${BFT_COL[maxF]}"><ha-icon icon="mdi:alert"></ha-icon><div><b>Force ${maxF} (${BEAUFORT[maxF][1].toLowerCase()}) prévue${kAt > 0 ? ` dans ${kAt} h` : " maintenant"}</b>
+      <span>Rafales jusqu'à ${fmt(Math.max(...nextG.filter((v) => v !== null)), 0)} nds. Selon le modèle : vérifiez le bulletin officiel de Météo-France (BMS) avant de sortir.</span></div></div>` : "";
+
+    const top = [
+      tile("", bf?.col || "var(--med-muted)", bf ? `Force ${bf.f}` : "—", bf ? bf.name : "Vent", `${kts(kn)}${dir !== null ? ` · ${dirDe(dir)}` : ""}${gust !== null ? ` · raf. ${fmt(gust, 0)}${bg && bg.f > (bf?.f ?? 0) ? ` (F${bg.f})` : ""}` : ""}`,
+        `<span class="mr-bf" style="background:${bf?.col || "var(--med-line)"}">${arrowTo(dir)}</span>`),
+      tile("mdi:wave", "#4fc3f7", wave === null ? "—" : `${fmt(wave, 1)} m`, `Mer · ${seaState(wave)}`, [ww !== null ? `mer du vent ${fmt(ww, 1)} m` : "", wper !== null ? `${fmt(wper, 0)} s` : ""].filter(Boolean).join(" · ")),
+      tile("mdi:waves-arrow-right", "#6fa8ff", sw === null ? "—" : `${fmt(sw, 1)} m`, "Houle", [sdir !== null ? dirDe(sdir) : "", sper !== null ? `${fmt(sper, 0)} s` : ""].filter(Boolean).join(" · ")),
+      tile("mdi:eye-outline", vi ? vi[1] : "var(--med-muted)", vis === null ? "—" : vis >= 10000 ? "≥ 10 km" : `${fmt(vis / 1000, vis < 1000 ? 1 : 0)} km`, `Visibilité${vi ? ` · ${vi[0].toLowerCase()}` : ""}`),
+      tile("mdi:gauge", "#9fd3ff", p === null ? "—" : `${fmt(p, 0)} hPa`, "Pression", dp === null ? "" : `${dp > 0.4 ? "en hausse" : dp < -0.4 ? "en baisse" : "stable"} (${dp > 0 ? "+" : ""}${fmt(dp, 1)} en 3 h)`),
+      ...(curKn !== null ? [tile("", "#2fbf8f", `${fmt(curKn, 1)} nds`, "Courant", cdir !== null ? dirVers(cdir) : "", `<span class="mr-bf" style="background:#2fbf8f">${arrowTo(cdir, false)}</span>`)] : []),
+    ];
+
+    // heure par heure, toutes les 3 heures
+    const hours = Math.max(6, Math.min(48, Number(c.hours) || 24));
+    const rows = [];
+    for (let k = 0; k <= hours; k += 3) {
+      const j = ia + k, jm = im + k, t = A.hourly?.time?.[j];
+      if (!t) break;
+      const w = num(A.hourly.wind_speed_10m?.[j]), g = num(A.hourly.wind_gusts_10m?.[j]), d = num(A.hourly.wind_direction_10m?.[j]), b2 = beaufort(w);
+      const cd = wmoCond(num(A.hourly.weather_code?.[j])), cn = cd === "sunny" && num(A.hourly.is_day?.[j]) === 0 ? "clear-night" : cd;
+      const wh = M ? num(M.hourly?.wave_height?.[jm]) : null, sh = M ? num(M.hourly?.swell_wave_height?.[jm]) : null;
+      const hh = t.slice(11, 13), dd = t.slice(0, 10) !== local.slice(0, 10);
+      rows.push(`<div class="mr-r"><span class="mr-t">${k === 0 ? "Maint." : `${dd && hh === "00" ? "<b>0 h</b>" : `${Number(hh)} h`}`}</span><ha-icon icon="${condOf(cn)[1]}" style="color:${condOf(cn)[2]}"></ha-icon>
+        <span class="mr-f" style="background:${b2?.col || "var(--med-line)"}">${b2 ? b2.f : "—"}</span><span class="mr-k">${arrowTo(d)}${fmt(w, 0)}<small>/${fmt(g, 0)}</small></span>
+        <span class="mr-s">${wh === null ? "—" : `${fmt(wh, 1)} m`}<small>${sh === null ? "" : `houle ${fmt(sh, 1)}`}</small></span></div>`);
+    }
+
+    this._card(head(`${z.name} · ${cLab.toLowerCase()}`) + tabs + warn
+      + `<div class="sky mr-top">${top.join("")}</div>`
+      + (!M && wx.seaError ? `<div class="fc-empty">Prévisions de la mer indisponibles (${esc(wx.seaError)}).</div>` : "")
+      + (rows.length ? `<div class="sec">Heure par heure · vent en nœuds (rafales), force Beaufort, mer</div><div class="mr-rs">${rows.join("")}</div>` : "")
+      + (wx.failed ? `<div class="fc-empty">Open-Meteo injoignable (${esc(wx.error || "réseau")}) : prévisions de ${esc(new Date(wx.okAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }))}, nouvel essai dans 2 minutes.</div>` : "")
+      + `<div class="qk-src">Prévisions : Open-Meteo (Météo-France, ECMWF ; mer : MFWAM et modèles de vagues). Indicatif : ne remplace pas les bulletins officiels de Météo-France (BMS, VHF).</div>`);
+  }
+}
+
 /* ---------------------------------------------------------------- bolides */
 
 const BOLIDES_DEFAULTS = { title: "Bolides", period: "all", min_energy: 0, show_home: true, map_height: 320, theme: "v2" };
@@ -3480,6 +3619,18 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .pl-ts .pl-hi ha-icon { color: #4fc3f7; } .pl-ts .pl-lo ha-icon { color: var(--med-muted); } .pl-ts small { color: var(--med-muted); }
 .pl-tn { margin-top: 4px; font-size: .66rem; color: var(--med-muted); }
 .pl-nt { text-align: left; } .pl-w { font-weight: 600; }
+.mr-bf { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto; color: #1a2434; }
+.mr-ar { --mdc-icon-size: 18px; display: inline-flex; transition: transform .3s; }
+.mr-w { display: flex; gap: 10px; align-items: flex-start; margin: 10px 12px 0; padding: 10px 12px; border-radius: 12px; font-size: .8rem;
+  background: color-mix(in srgb, var(--wc) 16%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--wc) 55%, transparent); }
+.mr-w > ha-icon { color: var(--wc); flex: none; } .mr-w div { display: flex; flex-direction: column; gap: 2px; } .mr-w span { color: var(--med-muted); }
+.mr-rs { display: flex; flex-direction: column; gap: 4px; margin: 0 12px; }
+.mr-r { display: grid; grid-template-columns: 50px 24px 26px minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px;
+  background: var(--med-surface); border: 1px solid var(--med-line); font-size: .82rem; }
+.mr-r > ha-icon { --mdc-icon-size: 20px; } .mr-t { color: var(--med-muted); }
+.mr-f { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-weight: 800; color: #1a2434; font-size: .8rem; }
+.mr-k { display: flex; align-items: center; gap: 3px; font-weight: 700; } .mr-k small { font-weight: 500; color: var(--med-muted); }
+.mr-s { display: flex; flex-direction: column; text-align: right; } .mr-s small { font-size: .68rem; color: var(--med-muted); }
 .rv-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .rv-v { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; cursor: pointer; font-size: .8rem;
   background: color-mix(in srgb, var(--vc) 14%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--vc) 55%, transparent); }
@@ -3860,6 +4011,24 @@ const MONTAGNE_SCHEMA = [
   THEME_SELECT,
   TEXT_SIZE,
 ];
+const MARINE_SCHEMA = [
+  { name: "zones", selector: { object: { multiple: true, label_field: "name", fields: {
+    name: { label: "Nom de la zone (port, baie, large)", required: true, selector: { text: {} } },
+    latitude: { label: "Latitude (un point en mer)", required: true, selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
+    longitude: { label: "Longitude", required: true, selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } } },
+  } } } },
+  { name: "title", selector: { text: {} } },
+  { name: "hours", selector: { number: { min: 6, max: 48, step: 3, mode: "box", unit_of_measurement: "h" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const MARINE_LABELS = {
+  zones: "Zones suivies (un onglet par zone)",
+  title: "Titre (Météo marine par défaut)",
+  hours: "Prévisions heure par heure sur",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const PLAGE_SCHEMA = [
   { name: "beaches", selector: { object: { multiple: true, label_field: "name", fields: {
     name: { label: "Nom de la plage", required: true, selector: { text: {} } },
@@ -3959,6 +4128,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-crues-card-editor", makeEditor(CRUES_SCHEMA, CRUES_LABELS, CRUES_DEFAULTS));
   define("meteo-feux-card", MeteoFeuxCard);
   define("meteo-feux-card-editor", makeEditor(FEUX_SCHEMA, FEUX_LABELS, FEUX_DEFAULTS));
+  define("meteo-marine-card", MeteoMarineCard);
+  define("meteo-marine-card-editor", makeEditor(MARINE_SCHEMA, MARINE_LABELS, MARINE_DEFAULTS));
   define("meteo-plage-card", MeteoPlageCard);
   define("meteo-plage-card-editor", makeEditor(PLAGE_SCHEMA, PLAGE_LABELS, PLAGE_DEFAULTS));
   define("meteo-montagne-card", MeteoMontagneCard);
@@ -3976,6 +4147,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-ecowatt-card", name: "Carte Météo : EcoWatt", description: "Signal EcoWatt de RTE (risque de coupures) aujourd'hui, demain et après-demain, heure par heure, avec la France à la couleur du jour." },
     { type: "meteo-crues-card", name: "Carte Météo : crues et rivières", description: "Hauteur et débit des rivières proches avec leur tendance sur 24 h, vigilance crues, carte interactive des stations (Vigicrues, Hub'Eau)." },
     { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
+    { type: "meteo-marine-card", name: "Carte Météo : marine", description: "Zones en mer : vent en nœuds et force Beaufort, rafales, mer et houle, visibilité, pression, courant, avis de grand frais, prévisions heure par heure." },
     { type: "meteo-plage-card", name: "Carte Météo : plage", description: "Plages en onglets : air, eau, UV, vent, vagues et houle, marée (pleines et basses mers), prévisions des prochains jours." },
     { type: "meteo-montagne-card", name: "Carte Météo : montagne", description: "Stations de ski et sommets : températures au pied et au sommet, isotherme 0 °C, neige fraîche et au sol, prévisions, risque d'avalanche (ha-serac)." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
