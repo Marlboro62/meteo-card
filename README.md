@@ -99,6 +99,10 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 
 - **Carte Marine** (`custom:meteo-marine-card`) : zones en mer en onglets, vent en nœuds avec la force Beaufort et les rafales, mer du vent et houle, visibilité, pression avec sa tendance sur 3 h, courant, prévisions toutes les 3 heures et avis quand la force 7 est prévue dans les 24 h. Open-Meteo (prévisions et API marine), sans clé ni intégration. Voir [Carte Marine](#carte-marine).
 
+**Corrections**
+
+- Onglets à la ligne quand ils ne tiennent pas sur une rangée : toutes les villes, stations, plages et zones restent visibles (avant, les derniers étaient cachés hors de la carte). Concerne toutes les cartes à onglets.
+
 ## Nouveautés de la 3.12.0
 
 **Nouvelle carte**
