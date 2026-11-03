@@ -41,7 +41,7 @@ jobs:
         run: npm run build
       - name: Aucun CDN dans dist/
         run: |
-          ! grep -n "cdn.jsdelivr.net/npm\|unpkg.com" dist/*.js || { echo "::error::script chargé depuis un CDN"; exit 1; }
+          ! grep -n "cdn.jsdelivr.net\|unpkg.com\|cdnjs" dist/*.js || { echo "::error::fichier chargé depuis un CDN"; exit 1; }
       - name: Committer dist/ s'il a changé
         id: commit
         run: |

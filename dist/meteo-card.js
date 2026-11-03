@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.0";
+const CARD_VERSION = "3.13.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -313,8 +313,8 @@ const weatherSvg = (cond, night = false, anim = false, cls = "") => {
 };
 
 /** Icônes amCharts (CC BY 4.0, https://www.amcharts.com/free-animated-svg-weather-icons/), jeu repris par la
- *  carte Météo-France de HACF ; servies par jsDelivr à une version figée, ou depuis « icons_path ». */
-const AMCHARTS_URL = "https://cdn.jsdelivr.net/gh/hacf-fr/lovelace-meteofrance-weather-card@56f1264b401b3cc37f9a6756eb9dc8b30b5f02bd/dist/icons/";
+ *  carte Météo-France de HACF ; livrées avec la carte (dossier icons/ à côté de ce fichier), ou depuis « icons_path ». */
+const AMCHARTS_URL = new URL("./icons/", import.meta.url).href;
 const AMCHARTS = {
   "sunny": ["day", "night"], "clear-night": ["night", "night"], "partlycloudy": ["cloudy-day-3", "cloudy-night-3"],
   "cloudy": ["cloudy"], "fog": ["fog"], "hail": ["rainy-7"], "lightning": ["thunder"], "lightning-rainy": ["lightning-rainy"],

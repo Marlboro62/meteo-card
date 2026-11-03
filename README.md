@@ -93,6 +93,10 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.13.1
+
+- Les icônes météo animées (amCharts) sont livrées avec la carte dans `dist/icons` : plus aucun fichier chargé depuis un CDN, et elles s'affichent même sans accès à Internet.
+
 ## Nouveautés de la 3.13.0
 
 **Nouvelle carte**
@@ -157,7 +161,7 @@ Si la carte n'apparaît pas encore dans la recherche de HACS, ajoutez le dépôt
    - Type : **Module JavaScript**
 3. Rechargez la page (Ctrl+F5).
 
-Les cartes interactives (Séismes, Feux de forêt, Crues et rivières, Bolides) utilisent [Leaflet](https://leafletjs.com/) et [MapLibre GL JS](https://maplibre.org/), livrés avec la carte dans `meteo-card-maps.js` : aucun script n'est chargé depuis un CDN, et ce fichier n'est chargé qu'à l'affichage d'une carte. Seuls les fonds de carte (OpenStreetMap, OpenFreeMap) viennent d'Internet.
+Les cartes interactives (Séismes, Feux de forêt, Crues et rivières, Bolides) utilisent [Leaflet](https://leafletjs.com/) et [MapLibre GL JS](https://maplibre.org/), livrés avec la carte dans `meteo-card-maps.js` : aucun script n'est chargé depuis un CDN, et ce fichier n'est chargé qu'à l'affichage d'une carte. Les icônes météo animées sont livrées aussi (`dist/icons`). Seuls les fonds de carte (OpenStreetMap, OpenFreeMap) viennent d'Internet.
 
 ## Photos de la lune et de la Terre (facultatif)
 
@@ -236,7 +240,7 @@ type: custom:meteo-card
 | `layout` | Présentation : `classic` (classique) ou `warc0zes` (mode WarC0zes : en-tête sur une ligne avec la température, textes plus grands, mêmes couleurs que le thème choisi) | `classic` |
 | `halo` | Halo coloré, avec les deux présentations : bordures et reflets bleus, ou de la couleur principale du thème avec `theme: ha` | `false` |
 | `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
-| `icons_path` | Dossier des icônes amCharts, pour un usage hors ligne (ex. `/local/meteo-icons/`) | jsDelivr |
+| `icons_path` | Autre dossier d'icônes amCharts (ex. `/local/meteo-icons/`) | icônes livrées avec la carte |
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
@@ -264,7 +268,7 @@ ec_alerts:                            # facultatif : détectés
 
 > L'ancienne option `forecast_type` (une seule prévision) reste acceptée. Avec plusieurs villes, la vigilance détectée va à la première ; indiquez `alert` pour les autres.
 >
-> Les icônes amCharts sont chargées depuis jsDelivr, à une version figée du dépôt de la carte Météo-France. Pour ne rien charger depuis Internet, copiez le dossier [`dist/icons`](https://github.com/hacf-fr/lovelace-meteofrance-weather-card/tree/Meteo-France/dist/icons) dans `/config/www/meteo-icons/` et indiquez `icons_path: /local/meteo-icons/`.
+> Les icônes amCharts ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)) sont livrées avec la carte, dans `dist/icons` : rien n'est chargé depuis un CDN et elles s'affichent hors ligne. `icons_path` permet d'utiliser un autre jeu d'icônes portant les mêmes noms.
 
 ## Carte Vent et ciel
 

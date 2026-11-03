@@ -4,13 +4,16 @@
 //   chargé par la carte seulement quand une carte interactive s'affiche.
 // Les bibliothèques sont reprises telles que publiées sur npm (versions fixées dans package.json).
 import { build } from "esbuild";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
 mkdirSync("dist", { recursive: true });
 copyFileSync("src/meteo-card.js", "dist/meteo-card.js");
+// icônes météo animées (amCharts, CC BY 4.0), servies à côté de la carte : aucun appel à un CDN
+mkdirSync("dist/icons", { recursive: true });
+for (const f of readdirSync("icons")) copyFileSync(`icons/${f}`, `dist/icons/${f}`);
 
 await build({
   entryPoints: ["src/maps.js"],
