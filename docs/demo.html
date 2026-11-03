@@ -256,7 +256,8 @@ window.fetch = (url, ...rest) => {
         hourly: { time: hours.map(loc), temperature_2m: temp, freezing_level_height: hours.map((h, i) => Math.round(snowy ? 1500 + i * 4 : 2600 + Math.sin(i / 12) * 300)),
           snowfall: snow, snow_depth: hours.map((h, i) => +((alt > 2000 ? 0.85 : 0.35) + (snowy ? i * 0.004 : 0)).toFixed(2)),
           wind_speed_10m: hours.map((h, i) => Math.round((alt > 2000 ? 35 : 12) + Math.sin(i / 5) * 8)), wind_gusts_10m: hours.map((h, i) => Math.round((alt > 2000 ? 60 : 25) + Math.sin(i / 5) * 12)),
-          weather_code: hours.map((h, i) => (snowy && i > 12 && i < 70 ? 73 : i % 24 > 18 ? 2 : 0)) },
+          weather_code: hours.map((h, i) => (snowy && i > 12 && i < 70 ? 73 : i % 24 > 18 ? 2 : 0)),
+          is_day: hours.map((h) => { const hr = new Date(h + 3600e3).getUTCHours(); return hr >= 8 && hr < 18 ? 1 : 0; }) },
         daily: { time: days.map((d) => loc(t0 + d * 24 * HOUR).slice(0, 10)), weather_code: days.map((d) => (snowy && d < 3 ? 73 : d === 5 ? 71 : d % 3 ? 2 : 0)),
           temperature_2m_max: days.map((d) => +(13 - alt * 0.0065 - (snowy && d < 3 ? 4 : 0)).toFixed(1)), temperature_2m_min: days.map((d) => +(5 - alt * 0.0065 - (snowy && d < 3 ? 4 : 0)).toFixed(1)),
           snowfall_sum: days.map((d) => (snowy && d < 3 ? [8, 22, 14][d] : d === 5 ? 5 : 0)), wind_gusts_10m_max: days.map((d) => (alt > 2000 ? 70 : 30) + d * 2) } };

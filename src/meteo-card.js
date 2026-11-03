@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.11.0-beta.2";
+const CARD_VERSION = "3.11.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2524,7 +2524,7 @@ class MeteoMontagneCard extends MeteoBase {
     const n = Math.max(1, alts.length);
     const q = new URLSearchParams({
       latitude: Array(n).fill(s.lat.toFixed(4)).join(","), longitude: Array(n).fill(s.lon.toFixed(4)).join(","),
-      hourly: "temperature_2m,freezing_level_height,snowfall,snow_depth,wind_speed_10m,wind_gusts_10m,weather_code",
+      hourly: "temperature_2m,freezing_level_height,snowfall,snow_depth,wind_speed_10m,wind_gusts_10m,weather_code,is_day",
       daily: "weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_gusts_10m_max",
       timezone: "auto", past_days: "1", forecast_days: "7", wind_speed_unit: "kmh",
     });
@@ -2606,7 +2606,9 @@ class MeteoMontagneCard extends MeteoBase {
       return n ? t : null;
     };
     const snowSrc = wx.top || ref;
-    const cond = wmoCond(at(snowSrc, "weather_code")), [cLab, cIcon, cCol] = condOf(cond);
+    // ciel clair la nuit : « nuit claire » et la lune (Open-Meteo donne le même code de jour comme de nuit)
+    const code = wmoCond(at(snowSrc, "weather_code")), cond = code === "sunny" && at(snowSrc, "is_day") === 0 ? "clear-night" : code;
+    const [cLab, cIcon, cCol] = condOf(cond);
     const iso = at(ref, "freezing_level_height");
     const isoNext = (H.freezing_level_height || []).slice(i, i + 24).map(num).filter((v) => v !== null);
     const past24 = sum(snowSrc, "snowfall", i - 24, i), next72 = sum(snowSrc, "snowfall", i, i + 72);
