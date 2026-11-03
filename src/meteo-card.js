@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.10.0";
+const CARD_VERSION = "3.11.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2474,6 +2474,193 @@ class MeteoEcowattCard extends MeteoBase {
 }
 
 
+/* ---------------------------------------------------------------- montagne */
+
+const MONTAGNE_DEFAULTS = { title: "Montagne", days: 5, theme: "v2" };
+const OPEN_METEO = "https://api.open-meteo.com/v1/forecast";
+/** Code météo de l'OMM (Open-Meteo) vers la condition Home Assistant, pour reprendre icônes et libellés. */
+const wmoCond = (c) => (c === 0 ? "sunny" : c <= 2 ? "partlycloudy" : c === 3 ? "cloudy" : c <= 48 ? "fog" : c <= 57 ? "rainy" : c <= 63 ? "rainy" : c === 65 ? "pouring"
+  : c <= 67 ? "snowy-rainy" : c <= 77 ? "snowy" : c <= 81 ? "rainy" : c === 82 ? "pouring" : c <= 86 ? "snowy" : c === 95 ? "lightning-rainy" : c <= 99 ? "hail" : "cloudy");
+/** Échelle européenne du risque d'avalanche (BERA de Météo-France). */
+const AVAL = { 1: ["Faible", "#c8f05a", "#1a2434"], 2: ["Limité", "#ffe100", "#1a2434"], 3: ["Marqué", "#ff9a1f", "#1a2434"], 4: ["Fort", "#ee3b3b", "#fff"], 5: ["Très fort", "#7a0a0a", "#fff"] };
+/** Stations de la configuration : nom, position, altitude du bas et du sommet, premier capteur avalanche (ha-serac). */
+const mountainStations = (c) => (Array.isArray(c.stations) ? c.stations : []).map((s, i) => ({
+  name: String(s?.name || `Station ${i + 1}`), lat: num(s?.latitude), lon: num(s?.longitude),
+  bottom: num(s?.bottom), top: num(s?.top), avalanche: typeof s?.avalanche === "string" ? s.avalanche : "",
+})).filter((s) => s.lat !== null && s.lon !== null && Math.abs(s.lat) <= 90 && Math.abs(s.lon) <= 180);
+/** Réponse d'Open-Meteo pour plusieurs altitudes d'un même point (un objet ou une liste) en liste. */
+const asList = (j) => (Array.isArray(j) ? j : j ? [j] : []);
+
+class MeteoMontagneCard extends MeteoBase {
+  static get defaults() {
+    return MONTAGNE_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-montagne-card-editor");
+  }
+
+  static getStubConfig() {
+    return { stations: [{ name: "Ma station", latitude: 45.3, longitude: 6.58, bottom: 1300, top: 2700 }] };
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  _action(act, el) {
+    if (act === "tab") { this._tab = Number(el.dataset.i) || 0; this._sig = null; this._render(); }
+  }
+
+  /** Prévisions Open-Meteo (modèles Météo-France AROME et ARPEGE, puis ECMWF) au sommet et au pied, toutes les 30 minutes. */
+  _fetch(s) {
+    const alts = [s.top, s.bottom].filter((v) => v !== null);
+    const key = `${s.lat},${s.lon},${alts.join("/")}`;
+    this._wx = this._wx || {};
+    const cur = this._wx[key];
+    if (cur && (cur.busy || Date.now() - cur.at < 18e5)) return cur;
+    const entry = (this._wx[key] = { ...(cur || {}), busy: true, at: cur?.at || 0 });
+    const n = Math.max(1, alts.length);
+    const q = new URLSearchParams({
+      latitude: Array(n).fill(s.lat.toFixed(4)).join(","), longitude: Array(n).fill(s.lon.toFixed(4)).join(","),
+      hourly: "temperature_2m,freezing_level_height,snowfall,snow_depth,wind_speed_10m,wind_gusts_10m,weather_code",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,wind_gusts_10m_max",
+      timezone: "auto", past_days: "1", forecast_days: "7", wind_speed_unit: "kmh",
+    });
+    if (alts.length) q.set("elevation", alts.join(","));
+    fetchJson(`${OPEN_METEO}?${q}`, 18e5).then((j) => {
+      const list = asList(j);
+      entry.top = s.top !== null ? list[0] : null;
+      entry.bottom = s.bottom !== null ? list[s.top !== null ? 1 : 0] : null;
+      entry.any = list[0] || null;
+      entry.failed = !list.length;
+    }).catch(() => { entry.failed = true; })
+      .finally(() => { entry.busy = false; entry.at = Date.now(); this._sig = null; this._render(); });
+    return entry;
+  }
+
+  /** Capteurs ha-serac du massif, retrouvés à partir de l'un d'eux (…_avalanche_risk_today, …_tomorrow, etc.). */
+  _aval(s) {
+    const st = this._hass.states;
+    let base = s.avalanche ? s.avalanche.replace(/_avalanche_[a-z_]+$/, "") : "";
+    if (!base) {
+      const ids = Object.keys(st).filter((id) => /^sensor\.serac_.+_avalanche_risk_today$/.test(id));
+      // sans capteur choisi : seulement une carte d'une seule station et une intégration d'un seul massif (sinon, quel massif ?)
+      if (ids.length === 1 && mountainStations(this._config).length === 1) base = ids[0].replace(/_avalanche_risk_today$/, "");
+    }
+    if (!base) return null;
+    const id = (k) => `${base}_avalanche_${k}`;
+    const today = num(st[id("risk_today")]?.state);
+    if (today === null && !st[id("risk_today")]) return null;
+    const hi = st[id("risk_high_altitude")], lo = st[id("risk_low_altitude")];
+    return {
+      today, todayId: id("risk_today"), tomorrow: num(st[id("risk_tomorrow")]?.state), tomorrowId: id("risk_tomorrow"),
+      high: num(hi?.state), low: num(lo?.state), limit: num(hi?.attributes?.altitude_limit ?? lo?.attributes?.altitude_limit), hiId: id("risk_high_altitude"),
+      accidental: st[id("accidental")]?.state, natural: st[id("natural")]?.state, accId: id("accidental"),
+      date: st[id("bulletin_date")]?.state, massif: st[id("bulletin_date")]?.attributes?.massif, dateId: id("bulletin_date"),
+      comment: st[id("risk_today")]?.attributes?.risk_comment,
+    };
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, list = mountainStations(c);
+    const head = (sub) => this._head(c.icon || "mdi:image-filter-hdr", "#9fd3ff", c.title || "Montagne", sub);
+    if (!list.length) {
+      this._card(head("") + `<div class="empty"><b>Aucune station configurée</b><span>Ajoutez une station de ski ou un sommet dans l'éditeur : nom, latitude, longitude, altitude du bas et du sommet.</span></div>`);
+      return;
+    }
+    const ti = Math.min(Math.max(0, this._tab || 0), list.length - 1), s = list[ti];
+    const wx = this._fetch(s), aval = this._aval(s);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${wx.at}|${wx.failed}|${new Date().getHours()}|` +
+      (aval ? [aval.today, aval.tomorrow, aval.high, aval.low, aval.date, aval.accidental].join(",") : "-");
+    if (sig === this._sig) return;
+    this._sig = sig;
+
+    const tabs = list.length > 1 ? `<div class="tabs" role="tablist">${list.map((x, i) => `<button class="tab${i === ti ? " on" : ""}" role="tab" aria-selected="${i === ti}" data-act="tab" data-i="${i}"><ha-icon icon="mdi:image-filter-hdr"></ha-icon>${esc(x.name)}</button>`).join("")}</div>` : "";
+    const alts = [s.bottom !== null ? `${fmt(s.bottom)} m` : "", s.top !== null ? `${fmt(s.top)} m` : ""].filter(Boolean).join(" – ");
+    const ref = wx.top || wx.bottom || wx.any;
+    if (!ref) {
+      this._card(head(`${s.name}${alts ? ` · ${alts}` : ""}`) + tabs + `<div class="fc-empty">${wx.failed ? "Prévisions de montagne inaccessibles (Open-Meteo)" : "Chargement des prévisions de montagne…"}</div>`);
+      return;
+    }
+    const H = ref.hourly || {}, times = H.time || [];
+    // heure en cours dans le fuseau de la station
+    const local = new Date(Date.now() + (Number(ref.utc_offset_seconds) || 0) * 1000).toISOString().slice(0, 13);
+    let i = times.findIndex((t) => t.slice(0, 13) === local);
+    if (i < 0) i = Math.max(0, times.length - 1);
+    const at = (d, k, j = i) => num(d?.hourly?.[k]?.[j]);
+    const sum = (d, k, from, to) => {
+      const a = d?.hourly?.[k];
+      if (!a) return null;
+      let t = 0, n = 0;
+      for (let j = Math.max(0, from); j < Math.min(a.length, to); j++) { const v = num(a[j]); if (v !== null) { t += v; n++; } }
+      return n ? t : null;
+    };
+    const snowSrc = wx.top || ref;
+    const cond = wmoCond(at(snowSrc, "weather_code")), [cLab, cIcon, cCol] = condOf(cond);
+    const iso = at(ref, "freezing_level_height");
+    const isoNext = (H.freezing_level_height || []).slice(i, i + 24).map(num).filter((v) => v !== null);
+    const past24 = sum(snowSrc, "snowfall", i - 24, i), next72 = sum(snowSrc, "snowfall", i, i + 72);
+    const depth = (d) => { const v = at(d, "snow_depth"); return v === null ? null : v * 100; };
+    const tile = (icon, col, value, label, note = "") => `<div class="sky-t"><ha-icon icon="${icon}" style="color:${col}"></ha-icon><div class="k-v">${value}</div><div class="k-l">${label}</div>${note ? `<div class="mt-n">${note}</div>` : ""}</div>`;
+    const tC = (v) => (v === null ? "—" : `${fmt(v, Math.abs(v) < 10 ? 1 : 0)}°`);
+    const cm = (v) => (v === null ? "—" : `${fmt(v, v > 0 && v < 10 ? 1 : 0)} cm`);
+    const levels = [];
+    if (wx.top) levels.push(tile(cIcon, cCol, tC(at(wx.top, "temperature_2m")), `Sommet · ${fmt(s.top)} m`, `Vent ${fmt(at(wx.top, "wind_speed_10m") ?? 0)} km/h · rafales ${fmt(at(wx.top, "wind_gusts_10m") ?? 0)}`));
+    if (wx.bottom) levels.push(tile("mdi:home-variant-outline", "#9fd3ff", tC(at(wx.bottom, "temperature_2m")), `Pied · ${fmt(s.bottom)} m`, `Vent ${fmt(at(wx.bottom, "wind_speed_10m") ?? 0)} km/h`));
+    levels.push(tile("mdi:snowflake-thermometer", "#cfe3ff", iso === null ? "—" : `${fmt(Math.round(iso / 10) * 10)} m`, "Isotherme 0 °C",
+      isoNext.length ? `24 h : ${fmt(Math.round(Math.min(...isoNext) / 10) * 10)} à ${fmt(Math.round(Math.max(...isoNext) / 10) * 10)} m` : ""));
+    const snow = [
+      tile("mdi:weather-snowy", "#cfe3ff", cm(past24), "Neige 24 h passées"),
+      tile("mdi:weather-snowy-heavy", "#9fd3ff", cm(next72), "Neige 72 h à venir"),
+      tile("mdi:ski", "#e7edf5", cm(depth(wx.top || ref)), wx.top ? "Neige au sol, sommet" : "Neige au sol", wx.bottom && wx.top ? `au pied : ${cm(depth(wx.bottom))}` : ""),
+    ];
+
+    // risque d'avalanche (ha-serac)
+    let av = "";
+    if (aval) {
+      const lvl = (v) => AVAL[v] || ["Pas de bulletin", "var(--med-line)", "var(--med-text)"];
+      const badge = (v) => `<b class="av-b" style="background:${lvl(v)[1]};color:${lvl(v)[2]}">${v ?? "—"}</b>`;
+      const cell = (id, label, v, note = "") => `<div class="av-c" data-entity="${esc(id)}">${badge(v)}<div><span>${esc(label)}</span><b>${esc(lvl(v)[0])}</b>${note ? `<small>${esc(note)}</small>` : ""}</div></div>`;
+      const alt = aval.limit !== null && (aval.high !== null || aval.low !== null)
+        ? `${cell(aval.hiId, `Au-dessus de ${fmt(aval.limit)} m`, aval.high)}${cell(aval.hiId, `Sous ${fmt(aval.limit)} m`, aval.low)}` : "";
+      const d = aval.date ? new Date(aval.date) : null;
+      const txt = [aval.accidental && !/^(unknown|unavailable)$/.test(aval.accidental) ? `Déclenchements provoqués : ${aval.accidental}` : "",
+        aval.natural && !/^(unknown|unavailable)$/.test(aval.natural) ? `Départs spontanés : ${aval.natural}` : ""].filter(Boolean);
+      av = `<div class="sec">Risque d'avalanche${aval.massif ? ` · ${esc(aval.massif)}` : ""}</div><div class="av">
+        ${cell(aval.todayId, "Aujourd'hui", aval.today)}${cell(aval.tomorrowId, "Demain", aval.tomorrow)}${alt}</div>
+        ${txt.length ? `<div class="av-t" data-entity="${esc(aval.accId)}">${txt.map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
+        ${d && !isNaN(d) ? `<div class="qk-src" data-entity="${esc(aval.dateId)}">Bulletin Météo-France du ${esc(d.toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }))}</div>` : ""}`;
+    }
+
+    // prévisions par jour (sommet, sinon point de référence) ; le premier jour d'Open-Meteo est hier (past_days)
+    const D = snowSrc.daily || {}, n = Math.max(1, Math.min(7, Number(c.days) || 5));
+    const isoDay = (day) => {
+      const v = times.map((t, j) => (t.slice(0, 10) === day ? num(H.freezing_level_height?.[j]) : null)).filter((x) => x !== null);
+      return v.length ? Math.round(Math.max(...v) / 10) * 10 : null;
+    };
+    const todayStr = local.slice(0, 10);
+    const days = (D.time || []).map((t, j) => ({ t, j })).filter((x) => x.t >= todayStr).slice(0, n).map(({ t, j }) => {
+      const dt = new Date(`${t}T12:00`), [lab, icon, col] = condOf(wmoCond(num(D.weather_code?.[j])));
+      const sn = num(D.snowfall_sum?.[j]), g = num(D.wind_gusts_10m_max?.[j]), iz = isoDay(t);
+      const bot = wx.bottom && wx.top ? num(wx.bottom.daily?.temperature_2m_max?.[j]) : null;
+      return `<div class="mt-d" title="${esc(lab)}"><span class="mt-dn">${t === todayStr ? "Auj." : esc(dt.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", ""))}</span>
+        <ha-icon icon="${icon}" style="color:${col}"></ha-icon>
+        <b>${tC(num(D.temperature_2m_max?.[j]))}</b><small>${tC(num(D.temperature_2m_min?.[j]))}</small>
+        ${bot !== null ? `<small class="mt-bt">pied ${tC(bot)}</small>` : ""}
+        <span class="mt-sn${sn > 0 ? " on" : ""}"><ha-icon icon="mdi:snowflake"></ha-icon>${sn === null ? "—" : `${fmt(sn, sn > 0 && sn < 10 ? 1 : 0)} cm`}</span>
+        ${iz !== null ? `<small>0 °C ${fmt(iz)} m</small>` : ""}${g !== null ? `<small>raf. ${fmt(g)}</small>` : ""}</div>`;
+    }).join("");
+
+    this._card(head(`${s.name}${alts ? ` · ${alts}` : ""} · ${cLab.toLowerCase()}`) + tabs
+      + `<div class="sky mt-l">${levels.join("")}</div><div class="sec">Neige</div><div class="sky">${snow.join("")}</div>`
+      + av
+      + (days ? `<div class="sec">Prochains jours${wx.top ? ` au sommet (${fmt(s.top)} m)` : ""}</div><div class="mt-ds">${days}</div>` : "")
+      + `<div class="qk-src">Prévisions : Open-Meteo (modèles Météo-France AROME et ARPEGE, ECMWF), neige au sol estimée par le modèle${aval ? " · avalanche : bulletin Météo-France (ha-serac)" : ""}.</div>`);
+  }
+}
+
 /* ---------------------------------------------------------------- bolides */
 
 const BOLIDES_DEFAULTS = { title: "Bolides", period: "all", min_energy: 0, show_home: true, map_height: 320, theme: "v2" };
@@ -3093,6 +3280,19 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .qk-p small { font-size: .72rem; color: var(--med-muted); }
 .qk-l { flex: none; font-size: .7rem; color: var(--med-muted); }
 .qk-src { margin: 8px 18px 0; font-size: .68rem; color: var(--med-muted); text-align: right; }
+.mt-n { font-size: .66rem; color: var(--med-muted); margin-top: 2px; }
+.av { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 12px; }
+.av-c { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; }
+.av-c > div { display: flex; flex-direction: column; min-width: 0; } .av-c span { font-size: .72rem; color: var(--med-muted); } .av-c b { font-size: .9rem; }
+.av-c small { font-size: .68rem; color: var(--med-muted); }
+.av-b { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; font-size: 1.05rem; font-weight: 800; }
+.av-t { display: flex; flex-direction: column; gap: 3px; margin: 8px 18px 0; font-size: .76rem; color: var(--med-muted); cursor: pointer; }
+.mt-ds { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 6px; margin: 0 12px; }
+.mt-d { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); text-align: center; min-width: 0; }
+.mt-d ha-icon { --mdc-icon-size: 24px; } .mt-dn { font-size: .74rem; color: var(--med-muted); text-transform: capitalize; }
+.mt-d b { font-size: .95rem; } .mt-d small { font-size: .66rem; color: var(--med-muted); white-space: nowrap; }
+.mt-sn { display: inline-flex; align-items: center; gap: 2px; font-size: .74rem; color: var(--med-muted); } .mt-sn ha-icon { --mdc-icon-size: 13px; }
+.mt-sn.on { color: #9fd3ff; font-weight: 700; }
 .rv-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .rv-v { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; cursor: pointer; font-size: .8rem;
   background: color-mix(in srgb, var(--vc) 14%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--vc) 55%, transparent); }
@@ -3459,6 +3659,27 @@ const ECLAIRS_LABELS = {
 };
 
 /** Éditeur visuel commun : formulaire ha-form ; les champs vidés sont retirés de la configuration. */
+const MONTAGNE_SCHEMA = [
+  { name: "stations", selector: { object: { multiple: true, label_field: "name", description_field: "top", fields: {
+    name: { label: "Nom (station de ski, sommet)", required: true, selector: { text: {} } },
+    latitude: { label: "Latitude", required: true, selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
+    longitude: { label: "Longitude", required: true, selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } } },
+    bottom: { label: "Altitude du bas (m)", selector: { number: { min: 0, max: 5000, step: 10, mode: "box", unit_of_measurement: "m" } } },
+    top: { label: "Altitude du sommet (m)", selector: { number: { min: 0, max: 5000, step: 10, mode: "box", unit_of_measurement: "m" } } },
+    avalanche: { label: "Risque d'avalanche (facultatif, un capteur ha-serac du massif)", selector: { entity: { domain: "sensor" } } },
+  } } } },
+  { name: "title", selector: { text: {} } },
+  { name: "days", selector: { number: { min: 1, max: 7, step: 1, mode: "box" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const MONTAGNE_LABELS = {
+  stations: "Stations et sommets suivis (un onglet par station)",
+  title: "Titre (Montagne par défaut)",
+  days: "Nombre de jours de prévision",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
@@ -3533,6 +3754,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-crues-card-editor", makeEditor(CRUES_SCHEMA, CRUES_LABELS, CRUES_DEFAULTS));
   define("meteo-feux-card", MeteoFeuxCard);
   define("meteo-feux-card-editor", makeEditor(FEUX_SCHEMA, FEUX_LABELS, FEUX_DEFAULTS));
+  define("meteo-montagne-card", MeteoMontagneCard);
+  define("meteo-montagne-card-editor", makeEditor(MONTAGNE_SCHEMA, MONTAGNE_LABELS, MONTAGNE_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
   define("meteo-bolides-card-editor", makeEditor(BOLIDES_SCHEMA, BOLIDES_LABELS, BOLIDES_DEFAULTS));
   window.customCards = window.customCards || [];
@@ -3546,6 +3769,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-ecowatt-card", name: "Carte Météo : EcoWatt", description: "Signal EcoWatt de RTE (risque de coupures) aujourd'hui, demain et après-demain, heure par heure, avec la France à la couleur du jour." },
     { type: "meteo-crues-card", name: "Carte Météo : crues et rivières", description: "Hauteur et débit des rivières proches avec leur tendance sur 24 h, vigilance crues, carte interactive des stations (Vigicrues, Hub'Eau)." },
     { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
+    { type: "meteo-montagne-card", name: "Carte Météo : montagne", description: "Stations de ski et sommets : températures au pied et au sommet, isotherme 0 °C, neige fraîche et au sol, prévisions, risque d'avalanche (ha-serac)." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");

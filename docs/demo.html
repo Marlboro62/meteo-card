@@ -146,6 +146,15 @@ function hassFor() {
     add(id, list.length, list.length ? attrs : {});
     entities[id] = { platform: "environment_canada", device_id: "dev_ec", translation_key: k };
   }
+  // risque d'avalanche fictif (mêmes capteurs que l'intégration ha-serac), massif inventé
+  const av = scen === "pluie" ? [4, 3, 4, 2] : [2, 2, 2, 1], avb = "sensor.serac_demo_massif_exemple_avalanche_";
+  add(`${avb}risk_today`, av[0], { risk_comment: "Neige fraîche et vent fort" }, "serac");
+  add(`${avb}risk_tomorrow`, av[1], {}, "serac");
+  add(`${avb}risk_high_altitude`, av[2], { altitude_limit: 2200 }, "serac");
+  add(`${avb}risk_low_altitude`, av[3], { altitude_limit: 2200 }, "serac");
+  add(`${avb}accidental`, scen === "pluie" ? "Plaques à vent fréquentes au-dessus de 2200 m" : "Déclenchements possibles dans les pentes raides", {}, "serac");
+  add(`${avb}natural`, scen === "pluie" ? "Coulées de neige fraîche en journée" : "Quelques coulées sur les pentes ensoleillées", {}, "serac");
+  add(`${avb}bulletin_date`, new Date(Math.floor(Date.now() / DAY) * DAY + 16 * HOUR).toISOString(), { massif: "Massif-Exemple" }, "serac");
   return {
     themes: { darkMode: !document.body.classList.contains("light") },
     config: { latitude: 46.6, longitude: 2.4 }, // centre de la France, fictif
@@ -233,6 +242,26 @@ window.fetch = (url, ...rest) => {
     }
     return json({ data: out });
   }
+  // Open-Meteo : prévisions de montagne fictives, au sommet puis au pied (une liste par altitude demandée)
+  if (u.includes("api.open-meteo.com")) {
+    const q = new URL(u).searchParams, alts = (q.get("elevation") || "1800").split(",").map(Number);
+    const t0 = Math.floor(Date.now() / HOUR) * HOUR - 24 * HOUR, snowy = scen === "pluie";
+    const loc = (h) => new Date(h + 3600e3).toISOString().slice(0, 16);
+    return json(alts.map((alt) => {
+      const hours = Array.from({ length: 8 * 24 }, (_, i) => t0 + i * HOUR);
+      const temp = hours.map((h, i) => +(10 - alt * 0.0065 + 3 * Math.sin((i % 24 - 9) / 24 * 2 * Math.PI) - (snowy ? 4 : 0)).toFixed(1));
+      const snow = hours.map((h, i) => (snowy && i > 12 && i < 70 ? +(0.6 + Math.sin(i / 4) * 0.4).toFixed(2) : !snowy && i > 110 && i < 130 ? 0.3 : 0));
+      const days = Array.from({ length: 8 }, (_, d) => d);
+      return { latitude: 45, longitude: 6, elevation: alt, utc_offset_seconds: 3600,
+        hourly: { time: hours.map(loc), temperature_2m: temp, freezing_level_height: hours.map((h, i) => Math.round(snowy ? 1500 + i * 4 : 2600 + Math.sin(i / 12) * 300)),
+          snowfall: snow, snow_depth: hours.map((h, i) => +((alt > 2000 ? 0.85 : 0.35) + (snowy ? i * 0.004 : 0)).toFixed(2)),
+          wind_speed_10m: hours.map((h, i) => Math.round((alt > 2000 ? 35 : 12) + Math.sin(i / 5) * 8)), wind_gusts_10m: hours.map((h, i) => Math.round((alt > 2000 ? 60 : 25) + Math.sin(i / 5) * 12)),
+          weather_code: hours.map((h, i) => (snowy && i > 12 && i < 70 ? 73 : i % 24 > 18 ? 2 : 0)) },
+        daily: { time: days.map((d) => loc(t0 + d * 24 * HOUR).slice(0, 10)), weather_code: days.map((d) => (snowy && d < 3 ? 73 : d === 5 ? 71 : d % 3 ? 2 : 0)),
+          temperature_2m_max: days.map((d) => +(13 - alt * 0.0065 - (snowy && d < 3 ? 4 : 0)).toFixed(1)), temperature_2m_min: days.map((d) => +(5 - alt * 0.0065 - (snowy && d < 3 ? 4 : 0)).toFixed(1)),
+          snowfall_sum: days.map((d) => (snowy && d < 3 ? [8, 22, 14][d] : d === 5 ? 5 : 0)), wind_gusts_10m_max: days.map((d) => (alt > 2000 ? 70 : 30) + d * 2) } };
+    }));
+  }
   return realFetch(url, ...rest);
 };
 const cards = {
@@ -246,6 +275,7 @@ const cards = {
   feux: document.createElement("meteo-feux-card"),
   seismes: document.createElement("meteo-seismes-card"),
   bolides: document.createElement("meteo-bolides-card"),
+  montagne: document.createElement("meteo-montagne-card"),
 };
 Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
@@ -262,6 +292,9 @@ function apply() {
   cards.feux.setConfig({ theme: t });
   cards.seismes.setConfig({ theme: t });
   cards.bolides.setConfig({ theme: t });
+  cards.montagne.setConfig({ theme: t, stations: [
+    { name: "Station-Exemple", latitude: 45.3, longitude: 6.6, bottom: 1550, top: 2750, avalanche: "sensor.serac_demo_massif_exemple_avalanche_risk_today" },
+    { name: "Col-Imaginaire", latitude: 44.9, longitude: 6.4, top: 2100 }] });
   const h = hassFor();
   Object.values(cards).forEach((c) => { c.hass = h; });
   listeners.forEach((f) => f());

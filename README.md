@@ -43,6 +43,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **EcoWatt** | `custom:meteo-ecowatt-card` | **Risque de coupures d'électricité** : signal EcoWatt de RTE aujourd'hui, demain et après-demain, **heure par heure** (cases cliquables), avec la France à la couleur du jour choisi (MyElectricalData ou RTE EcoWatt) |
 | **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
+| **Montagne** | `custom:meteo-montagne-card` | **Stations de ski et sommets** en onglets : température **au pied et au sommet**, **isotherme 0 °C**, **neige fraîche** (24 h passées, 72 h à venir), **neige au sol**, prévisions, et **risque d'avalanche** du bulletin Météo-France (avec [ha-serac](https://github.com/atacamalabs/ha-serac)) |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude), en liste et sur une **carte interactive**, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
@@ -524,6 +525,37 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Montagne
+
+```yaml
+type: custom:meteo-montagne-card
+stations:
+  - name: Ma station
+    latitude: 45.30
+    longitude: 6.58
+    bottom: 1300   # altitude du bas (m)
+    top: 2700      # altitude du sommet (m)
+    avalanche: sensor.serac_maison_mon_massif_avalanche_risk_today   # facultatif
+```
+
+- **Une station par onglet** : station de ski, col ou sommet, avec son altitude du bas et/ou du sommet.
+- **Températures au pied et au sommet**, vent et rafales, **isotherme 0 °C** (maintenant, et le plus bas et le plus haut des 24 prochaines heures).
+- **Neige** : tombée ces dernières 24 h, attendue sur 72 h, et hauteur au sol au sommet et au pied.
+- **Prochains jours** au sommet : conditions, températures (et maximum au pied), neige fraîche, isotherme 0 °C et rafales.
+- **Risque d'avalanche** (facultatif) : risque du jour et du lendemain sur l'échelle européenne de 1 à 5, au-dessus et au-dessous de l'altitude limite, déclenchements provoqués et départs spontanés, date du bulletin. Un clic ouvre le capteur.
+
+**Rien à installer pour les prévisions** : la carte lit [Open-Meteo](https://open-meteo.com/) depuis le navigateur (gratuit, sans clé, modèles Météo-France AROME et ARPEGE puis ECMWF), à l'altitude de chaque station, toutes les 30 minutes. La hauteur de neige au sol est **estimée par le modèle**, ce n'est pas une mesure de station.
+
+**Risque d'avalanche** : installez l'intégration [ha-serac](https://github.com/atacamalabs/ha-serac) (HACS), qui lit le bulletin d'estimation du risque d'avalanche (BERA) de Météo-France par massif ; elle demande un jeton gratuit du [portail des API de Météo-France](https://portail-api.meteofrance.fr/). Dans la carte, choisissez pour la station l'un des capteurs du massif (par exemple `…_avalanche_risk_today`) : la carte retrouve les autres. Avec une seule station et un seul massif, elle le trouve toute seule.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `stations` | Stations suivies : `name`, `latitude`, `longitude`, `bottom` et `top` (altitudes en m, au moins une conseillée), `avalanche` (capteur ha-serac du massif, facultatif) | — |
+| `title` | Titre | `Montagne` |
+| `days` | Nombre de jours de prévision (1 à 7) | `5` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
