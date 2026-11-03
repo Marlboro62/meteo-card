@@ -242,6 +242,29 @@ window.fetch = (url, ...rest) => {
     }
     return json({ data: out });
   }
+  // Open-Meteo : météo et mer de plage fictives (marée de 4 m sur l'Atlantique, presque rien en Méditerranée)
+  if (u.includes("api.open-meteo.com") && u.includes("uv_index") || u.includes("marine-api.open-meteo.com")) {
+    const q = new URL(u).searchParams, lon = Number(q.get("longitude")), med = lon > 3, sun = scen !== "pluie";
+    const t0 = Math.floor(Date.now() / HOUR) * HOUR, loc = (h) => new Date(h + 3600e3).toISOString().slice(0, 16);
+    const hours = Array.from({ length: 7 * 24 }, (_, i) => t0 - (new Date(t0 + 3600e3).getUTCHours()) * HOUR + i * HOUR), days = Array.from({ length: 7 }, (_, d) => d);
+    const hr = (h) => new Date(h + 3600e3).getUTCHours(), day = (d) => loc(hours[0] + d * 24 * HOUR).slice(0, 10);
+    if (u.includes("marine-api")) return json({ latitude: 47, longitude: lon, utc_offset_seconds: 3600, timezone: "Europe/Paris",
+      hourly: { time: hours.map(loc), wave_height: hours.map((h, i) => +((sun ? 0.6 : 1.8) + Math.sin(i / 7) * 0.3).toFixed(2)), wave_direction: hours.map(() => (med ? 160 : 280)),
+        wave_period: hours.map(() => (sun ? 7 : 10)), swell_wave_height: hours.map((h, i) => +((sun ? 0.4 : 1.4) + Math.sin(i / 9) * 0.2).toFixed(2)), swell_wave_period: hours.map(() => (sun ? 9 : 12)),
+        sea_surface_temperature: hours.map((h, i) => +((med ? 19.5 : 16.8) + Math.sin(i / 24) * 0.3).toFixed(1)),
+        sea_level_height_msl: hours.map((h) => +((med ? 0.12 : 2.0) * Math.cos(((h / HOUR) % 12.42) / 12.42 * 2 * Math.PI)).toFixed(2)) },
+      daily: { time: days.map(day), wave_height_max: days.map((d) => +((sun ? 0.9 : 2.2) - d * 0.1).toFixed(1)) } });
+    return json({ latitude: 47, longitude: lon, utc_offset_seconds: 3600, timezone: "Europe/Paris",
+      hourly: { time: hours.map(loc), temperature_2m: hours.map((h) => +((med ? 17 : 14) + 4 * Math.sin((hr(h) - 9) / 24 * 2 * Math.PI) - (sun ? 0 : 3)).toFixed(1)),
+        apparent_temperature: hours.map((h) => +((med ? 16 : 12) + 4 * Math.sin((hr(h) - 9) / 24 * 2 * Math.PI)).toFixed(1)),
+        uv_index: hours.map((h) => (hr(h) > 8 && hr(h) < 18 ? +(Math.sin((hr(h) - 8) / 10 * Math.PI) * (sun ? (med ? 4.5 : 3.5) : 1.5)).toFixed(1) : 0)),
+        wind_speed_10m: hours.map((h, i) => Math.round((sun ? 14 : 38) + Math.sin(i / 5) * 6)), wind_direction_10m: hours.map(() => (med ? 320 : 250)),
+        wind_gusts_10m: hours.map((h, i) => Math.round((sun ? 25 : 65) + Math.sin(i / 5) * 8)), weather_code: hours.map((h) => (sun ? (hr(h) > 15 ? 2 : 0) : 63)),
+        is_day: hours.map((h) => (hr(h) >= 8 && hr(h) < 18 ? 1 : 0)), precipitation_probability: hours.map(() => (sun ? 5 : 80)) },
+      daily: { time: days.map(day), weather_code: days.map((d) => (sun ? (d === 3 ? 61 : d % 2 ? 2 : 0) : d < 2 ? 63 : 3)),
+        temperature_2m_max: days.map((d) => (med ? 21 : 18) - (sun ? 0 : 3) + (d % 3)), temperature_2m_min: days.map((d) => (med ? 13 : 10) + (d % 2)),
+        uv_index_max: days.map((d) => (sun ? (med ? 4.5 : 3.5) : 1.5) + (d % 2) * 0.5), wind_gusts_10m_max: days.map(() => (sun ? 30 : 70)), precipitation_probability_max: days.map(() => (sun ? 10 : 85)) } });
+  }
   // Open-Meteo : prévisions de montagne fictives, au sommet puis au pied (une liste par altitude demandée)
   if (u.includes("api.open-meteo.com")) {
     const q = new URL(u).searchParams, alts = (q.get("elevation") || "1800").split(",").map(Number);
@@ -277,6 +300,7 @@ const cards = {
   seismes: document.createElement("meteo-seismes-card"),
   bolides: document.createElement("meteo-bolides-card"),
   montagne: document.createElement("meteo-montagne-card"),
+  plage: document.createElement("meteo-plage-card"),
 };
 Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
@@ -296,6 +320,7 @@ function apply() {
   cards.montagne.setConfig({ theme: t, stations: [
     { name: "Station-Exemple", latitude: 45.3, longitude: 6.6, bottom: 1550, top: 2750, avalanche: "sensor.serac_demo_massif_exemple_avalanche_risk_today" },
     { name: "Col-Imaginaire", latitude: 44.9, longitude: 6.4, top: 2100 }] });
+  cards.plage.setConfig({ theme: t, beaches: [{ name: "Plage-Exemple", latitude: 47.2, longitude: -2.5 }, { name: "Crique-Imaginaire", latitude: 43.2, longitude: 5.4 }] });
   const h = hassFor();
   Object.values(cards).forEach((c) => { c.hass = h; });
   listeners.forEach((f) => f());

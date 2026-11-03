@@ -44,6 +44,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Montagne** | `custom:meteo-montagne-card` | **Stations de ski et sommets** en onglets : température **au pied et au sommet**, **isotherme 0 °C**, **neige fraîche** (24 h passées, 72 h à venir), **neige au sol**, prévisions, et **risque d'avalanche** du bulletin Météo-France (avec [ha-serac](https://github.com/atacamalabs/ha-serac)) |
+| **Plage** | `custom:meteo-plage-card` | **Plages** en onglets : température de l'air et **de l'eau**, **indice UV**, vent, **vagues et houle**, **marée** (courbe, pleines et basses mers), prévisions des prochains jours |
 | **Séismes** | `custom:meteo-seismes-card` | **Séismes autour de chez vous** sur une boussole (direction, distance, magnitude), en liste et sur une **carte interactive**, et les plus forts **dans le monde** (EMSC et USGS, sans intégration) |
 | **Éclairs** | `custom:meteo-eclairs-card` | **Direction et distance** du dernier éclair sur une boussole, **compteur** d'éclairs et total du mois (Blitzortung) |
 
@@ -536,6 +537,32 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Plage
+
+```yaml
+type: custom:meteo-plage-card
+beaches:
+  - name: Ma plage
+    latitude: 47.27
+    longitude: -2.39
+```
+
+- **Une plage par onglet**.
+- **Maintenant** : température de l'air (et ressentie), **de l'eau**, **indice UV** (le maximum du jour la nuit), vent et rafales.
+- **Mer** : hauteur, période et direction des **vagues**, état de la mer (échelle de Douglas), **houle**.
+- **Marée** : courbe des 24 prochaines heures et prochaines **pleines et basses mers**, avec la hauteur par rapport au niveau moyen. Là où la marée est faible (Méditerranée), la carte l'indique au lieu de tracer la courbe.
+- **Prochains jours** : conditions, températures, eau, vagues maximales et UV.
+
+**Rien à installer** : la carte lit [Open-Meteo](https://open-meteo.com/) depuis le navigateur, gratuit et sans clé (météo : Météo-France et ECMWF ; mer : API marine, modèle MFWAM de Météo-France et modèles de vagues), toutes les 30 minutes. La marée est calculée par un modèle au large, à environ 8 km : les heures sont **indicatives**, à ne pas utiliser pour la navigation ni la pêche à pied (consultez l'annuaire des marées du SHOM).
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `beaches` | Plages suivies : `name`, `latitude`, `longitude` | — |
+| `title` | Titre | `Plage` |
+| `days` | Nombre de jours de prévision (1 à 7) | `5` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 

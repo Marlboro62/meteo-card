@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.11.0";
+const CARD_VERSION = "3.12.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2672,6 +2672,172 @@ class MeteoMontagneCard extends MeteoBase {
   }
 }
 
+/* ------------------------------------------------------------------ plage */
+
+const PLAGE_DEFAULTS = { title: "Plage", days: 5, theme: "v2" };
+const OPEN_METEO_MARINE = "https://marine-api.open-meteo.com/v1/marine";
+/** Indice UV : libellé et couleur (échelle de l'OMS). */
+const uvInfo = (v) => (v === null ? ["—", "var(--med-muted)"] : v < 3 ? ["Faible", "#5fcf8a"] : v < 6 ? ["Modéré", "#f7c948"] : v < 8 ? ["Élevé", "#ff8c33"] : v < 11 ? ["Très élevé", "#ee4a4a"] : ["Extrême", "#b38cf0"]);
+/** État de la mer d'après la hauteur des vagues (échelle de Douglas). */
+const seaState = (h) => (h === null ? "—" : h < 0.1 ? "Calme" : h < 0.5 ? "Belle" : h < 1.25 ? "Peu agitée" : h < 2.5 ? "Agitée" : h < 4 ? "Forte" : h < 6 ? "Très forte" : h < 9 ? "Grosse" : "Très grosse");
+/** Température de l'eau : couleur, du froid au chaud. */
+const waterCol = (t) => (t === null ? "var(--med-muted)" : t < 14 ? "#6fa8ff" : t < 18 ? "#4fc3f7" : t < 22 ? "#2fbf8f" : t < 25 ? "#f7c948" : "#ff8c33");
+const beaches = (c) => (Array.isArray(c.beaches) ? c.beaches : []).map((b, i) => ({ name: String(b?.name || `Plage ${i + 1}`), lat: num(b?.latitude), lon: num(b?.longitude) }))
+  .filter((b) => b.lat !== null && b.lon !== null && Math.abs(b.lat) <= 90 && Math.abs(b.lon) <= 180);
+/** Pleines et basses mers : extremums de la hauteur d'eau heure par heure, l'heure affinée par une parabole. */
+const tideTurns = (times, h) => {
+  const out = [];
+  for (let j = 1; j < h.length - 1; j++) {
+    const a = h[j - 1], b = h[j], c = h[j + 1];
+    if (a === null || b === null || c === null) continue;
+    const hi = b > a && b >= c, lo = b < a && b <= c;
+    if (!hi && !lo) continue;
+    const den = a - 2 * b + c, dx = den ? (0.5 * (a - c)) / den : 0;
+    out.push({ t: times[j] + Math.max(-0.5, Math.min(0.5, dx)) * 36e5, v: b - 0.25 * (a - c) * dx, high: hi });
+  }
+  return out;
+};
+
+class MeteoPlageCard extends MeteoBase {
+  static get defaults() {
+    return PLAGE_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-plage-card-editor");
+  }
+
+  static getStubConfig() {
+    return { beaches: [{ name: "Ma plage", latitude: 47.27, longitude: -2.39 }] };
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  _action(act, el) {
+    if (act === "tab") { this._tab = Number(el.dataset.i) || 0; this._sig = null; this._render(); }
+  }
+
+  /** Lecture d'une API Open-Meteo : la raison d'un refus est gardée pour l'afficher. */
+  _get(url) {
+    return fetch(url).then((r) => r.json().catch(() => null).then((j) => {
+      if (!r.ok || !j || j.error) throw new Error(j?.reason || `erreur ${r.status}${r.status === 503 ? ", service indisponible" : r.status === 429 ? ", trop de requêtes" : ""}`);
+      return j;
+    }));
+  }
+
+  /** Météo (air, vent, UV) et mer (vagues, houle, eau, hauteur d'eau avec la marée), toutes les 30 minutes ; 2 minutes après un échec. */
+  _fetch(b) {
+    const key = `${b.lat},${b.lon}`;
+    this._wx = this._wx || {};
+    const cur = this._wx[key];
+    if (cur && (cur.busy || Date.now() - cur.at < (cur.failed ? 12e4 : 18e5))) return cur;
+    const entry = (this._wx[key] = { ...(cur || {}), busy: true, at: cur?.at || 0 });
+    const pos = { latitude: b.lat.toFixed(4), longitude: b.lon.toFixed(4), timezone: "auto", forecast_days: "7" };
+    const air = new URLSearchParams({ ...pos, wind_speed_unit: "kmh",
+      hourly: "temperature_2m,apparent_temperature,uv_index,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,is_day,precipitation_probability",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,uv_index_max,wind_gusts_10m_max,precipitation_probability_max" });
+    const sea = new URLSearchParams({ ...pos, cell_selection: "sea",
+      hourly: "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_period,sea_surface_temperature,sea_level_height_msl",
+      daily: "wave_height_max" });
+    Promise.all([this._get(`${OPEN_METEO}?${air}`), this._get(`${OPEN_METEO_MARINE}?${sea}`).catch((e) => ({ seaError: e.message }))]).then(([a, m]) => {
+      entry.air = a;
+      entry.sea = m.seaError ? null : m;
+      entry.seaError = m.seaError || "";
+      entry.failed = false;
+      entry.error = "";
+      entry.okAt = Date.now();
+    }).catch((e) => { entry.failed = true; entry.error = e?.message || "réseau"; })
+      .finally(() => { entry.busy = false; entry.at = Date.now(); this._sig = null; this._render(); });
+    return entry;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config, list = beaches(c);
+    const head = (sub) => this._head(c.icon || "mdi:beach", "#f7c948", c.title || "Plage", sub);
+    if (!list.length) {
+      this._card(head("") + `<div class="empty"><b>Aucune plage configurée</b><span>Ajoutez une plage dans l'éditeur : nom, latitude et longitude.</span></div>`);
+      return;
+    }
+    const ti = Math.min(Math.max(0, this._tab || 0), list.length - 1), b = list[ti];
+    const wx = this._fetch(b);
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${wx.at}|${wx.failed}|${new Date().getHours()}`;
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const tabs = list.length > 1 ? `<div class="tabs" role="tablist">${list.map((x, i) => `<button class="tab${i === ti ? " on" : ""}" role="tab" aria-selected="${i === ti}" data-act="tab" data-i="${i}"><ha-icon icon="mdi:beach"></ha-icon>${esc(x.name)}</button>`).join("")}</div>` : "";
+    const A = wx.air;
+    if (!A) {
+      this._card(head(b.name) + tabs + `<div class="fc-empty">${wx.failed ? `Prévisions de plage inaccessibles : Open-Meteo (${esc(wx.error || "réseau")}). Nouvel essai dans 2 minutes.` : "Chargement des prévisions de plage…"}</div>`);
+      return;
+    }
+    const M = wx.sea, off = Number(A.utc_offset_seconds) || 0;
+    const local = new Date(Date.now() + off * 1000).toISOString().slice(0, 13), today = local.slice(0, 10);
+    const idx = (d) => { const t = d?.hourly?.time || []; const i = t.findIndex((x) => x.slice(0, 13) === local); return i < 0 ? 0 : i; };
+    const ia = idx(A), im = idx(M);
+    const ha = (k, j = ia) => num(A.hourly?.[k]?.[j]), hm2 = (k, j = im) => (M ? num(M.hourly?.[k]?.[j]) : null);
+    const code = wmoCond(ha("weather_code")), cond = code === "sunny" && ha("is_day") === 0 ? "clear-night" : code;
+    const [cLab, cIcon, cCol] = condOf(cond);
+    const tC = (v) => (v === null ? "—" : `${fmt(v, Math.abs(v) < 10 ? 1 : 0)}°`);
+    const tile = (icon, col, value, label, note = "") => `<div class="sky-t"><ha-icon icon="${icon}" style="color:${col}"></ha-icon><div class="k-v">${value}</div><div class="k-l">${label}</div>${note ? `<div class="mt-n">${note}</div>` : ""}</div>`;
+    // UV : maintenant, ou le maximum du jour la nuit
+    const uvNow = ha("uv_index"), uvMax = num(A.daily?.uv_index_max?.[(A.daily?.time || []).indexOf(today)]);
+    const uvShow = ha("is_day") === 0 && uvMax !== null ? uvMax : uvNow, [uvLab, uvCol] = uvInfo(uvShow);
+    const water = hm2("sea_surface_temperature"), wave = hm2("wave_height"), wdir = hm2("wave_direction"), wper = hm2("wave_period");
+    const swell = hm2("swell_wave_height"), sper = hm2("swell_wave_period");
+    const wind = ha("wind_speed_10m"), wfrom = ha("wind_direction_10m"), gust = ha("wind_gusts_10m");
+    const top = [
+      tile(cIcon, cCol, tC(ha("temperature_2m")), "Air", ha("apparent_temperature") !== null ? `ressenti ${tC(ha("apparent_temperature"))}` : ""),
+      tile("mdi:waves", waterCol(water), tC(water), "Eau"),
+      tile("mdi:sun-wireless", uvCol, uvShow === null ? "—" : fmt(uvShow, 0), `UV · ${uvLab}`, ha("is_day") === 0 ? "maximum du jour" : ""),
+      tile("mdi:weather-windy", "#9fd3ff", wind === null ? "—" : `${fmt(wind)} km/h`, `Vent${wfrom !== null ? ` ${compass16(wfrom)}` : ""}`, gust !== null ? `rafales ${fmt(gust)} km/h` : ""),
+    ];
+    const seaTiles = M ? [
+      tile("mdi:wave", "#4fc3f7", wave === null ? "—" : `${fmt(wave, 1)} m`, `Vagues · ${seaState(wave)}`, [wper !== null ? `${fmt(wper, 0)} s` : "", wdir !== null ? `de ${compass16(wdir)}` : ""].filter(Boolean).join(" · ")),
+      tile("mdi:waves-arrow-right", "#6fa8ff", swell === null ? "—" : `${fmt(swell, 1)} m`, "Houle", sper !== null ? `période ${fmt(sper, 0)} s` : ""),
+    ] : [];
+
+    // marée : courbe des 24 prochaines heures et prochaines pleines et basses mers
+    let tide = "";
+    const lvl = M?.hourly?.sea_level_height_msl, mt = (M?.hourly?.time || []).map((t) => Date.parse(`${t}:00Z`) - off * 1000);
+    if (lvl && mt.length) {
+      const H = lvl.map(num), win = H.slice(im, im + 48).filter((v) => v !== null);
+      const amp = win.length ? Math.max(...win) - Math.min(...win) : 0;
+      if (amp >= 0.3) {
+        const turns = tideTurns(mt, H).filter((x) => x.t > Date.now() - 36e5).slice(0, 4);
+        const seg = H.slice(im, im + 25), lo = Math.min(...seg.filter((v) => v !== null)), hi = Math.max(...seg.filter((v) => v !== null)), span = Math.max(0.1, hi - lo);
+        const pts = seg.map((v, k) => (v === null ? null : `${f2((k / 24) * 100)},${f2(30 - ((v - lo) / span) * 26)}`)).filter(Boolean);
+        const at = (t) => new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: A.timezone || undefined });
+        const day = (t) => { const d = new Date(t + off * 1000).toISOString().slice(0, 10); return d === today ? "" : "demain "; };
+        tide = `<div class="sec">Marée</div><div class="pl-td"><svg viewBox="0 0 100 32" preserveAspectRatio="none" class="pl-tc"><polyline points="${pts.join(" ")}"/><line x1="0" x2="0" y1="0" y2="32" class="pl-now"/></svg>
+          <div class="pl-ts">${turns.map((x) => `<span class="${x.high ? "pl-hi" : "pl-lo"}"><ha-icon icon="${x.high ? "mdi:arrow-collapse-up" : "mdi:arrow-collapse-down"}"></ha-icon><b>${x.high ? "Pleine mer" : "Basse mer"}</b>${day(x.t)}${at(x.t)}<small>${x.v > 0 ? "+" : x.v < 0 ? "−" : ""}${fmt(Math.abs(x.v), 1)} m</small></span>`).join("")}</div><div class="pl-tn">Hauteurs par rapport au niveau moyen de la mer</div></div>`;
+      } else tide = `<div class="qk-src pl-nt">Marée faible ici (moins de 30 cm), courbe non affichée.</div>`;
+    }
+
+    // prochains jours
+    const D = A.daily || {}, n = Math.max(1, Math.min(7, Number(c.days) || 5));
+    const sstDay = (day) => { const t = M?.hourly?.time || [], v = t.map((x, j) => (x.slice(0, 10) === day ? num(M.hourly.sea_surface_temperature?.[j]) : null)).filter((x) => x !== null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+    const waveDay = (day) => { const j = (M?.daily?.time || []).indexOf(day); return j < 0 ? null : num(M.daily.wave_height_max?.[j]); };
+    const days = (D.time || []).map((t, j) => ({ t, j })).filter((x) => x.t >= today).slice(0, n).map(({ t, j }) => {
+      const [lab, icon, col] = condOf(wmoCond(num(D.weather_code?.[j]))), u = num(D.uv_index_max?.[j]), w = sstDay(t), v = waveDay(t);
+      const dt = new Date(`${t}T12:00`);
+      return `<div class="mt-d" title="${esc(lab)}"><span class="mt-dn">${t === today ? "Auj." : esc(dt.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", ""))}</span>
+        <ha-icon icon="${icon}" style="color:${col}"></ha-icon><b>${tC(num(D.temperature_2m_max?.[j]))}</b><small>${tC(num(D.temperature_2m_min?.[j]))}</small>
+        ${w !== null ? `<small class="pl-w" style="color:${waterCol(w)}">eau ${tC(w)}</small>` : ""}${v !== null ? `<small>vagues ${fmt(v, 1)} m</small>` : ""}
+        ${u !== null ? `<small style="color:${uvInfo(u)[1]}">UV ${fmt(u, 0)}</small>` : ""}</div>`;
+    }).join("");
+
+    this._card(head(`${b.name} · ${cLab.toLowerCase()}`) + tabs
+      + `<div class="sky">${top.join("")}</div>`
+      + (seaTiles.length ? `<div class="sec">Mer</div><div class="sky">${seaTiles.join("")}</div>` : wx.seaError ? `<div class="fc-empty">Prévisions de la mer indisponibles (${esc(wx.seaError)}).</div>` : "")
+      + tide
+      + (days ? `<div class="sec">Prochains jours</div><div class="mt-ds">${days}</div>` : "")
+      + (wx.failed ? `<div class="fc-empty">Open-Meteo injoignable (${esc(wx.error || "réseau")}) : prévisions de ${esc(new Date(wx.okAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }))}, nouvel essai dans 2 minutes.</div>` : "")
+      + `<div class="qk-src">Prévisions : Open-Meteo (Météo-France, ECMWF ; mer : MFWAM et modèles de vagues). Marée calculée au large, indicative : ne pas l'utiliser pour la navigation.</div>`);
+  }
+}
+
 /* ---------------------------------------------------------------- bolides */
 
 const BOLIDES_DEFAULTS = { title: "Bolides", period: "all", min_energy: 0, show_home: true, map_height: 320, theme: "v2" };
@@ -3304,6 +3470,14 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .mt-d b { font-size: .95rem; } .mt-d small { font-size: .66rem; color: var(--med-muted); white-space: nowrap; }
 .mt-sn { display: inline-flex; align-items: center; gap: 2px; font-size: .74rem; color: var(--med-muted); } .mt-sn ha-icon { --mdc-icon-size: 13px; }
 .mt-sn.on { color: #9fd3ff; font-weight: 700; }
+.pl-td { margin: 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
+.pl-tc { width: 100%; height: 46px; display: block; } .pl-tc polyline { fill: none; stroke: #4fc3f7; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.pl-now { stroke: var(--med-text); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: .6; }
+.pl-ts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 4px 10px; margin-top: 6px; font-size: .78rem; }
+.pl-ts span { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; } .pl-ts ha-icon { --mdc-icon-size: 16px; }
+.pl-ts .pl-hi ha-icon { color: #4fc3f7; } .pl-ts .pl-lo ha-icon { color: var(--med-muted); } .pl-ts small { color: var(--med-muted); }
+.pl-tn { margin-top: 4px; font-size: .66rem; color: var(--med-muted); }
+.pl-nt { text-align: left; } .pl-w { font-weight: 600; }
 .rv-vs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 12px 0; }
 .rv-v { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; cursor: pointer; font-size: .8rem;
   background: color-mix(in srgb, var(--vc) 14%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--vc) 55%, transparent); }
@@ -3684,6 +3858,24 @@ const MONTAGNE_SCHEMA = [
   THEME_SELECT,
   TEXT_SIZE,
 ];
+const PLAGE_SCHEMA = [
+  { name: "beaches", selector: { object: { multiple: true, label_field: "name", fields: {
+    name: { label: "Nom de la plage", required: true, selector: { text: {} } },
+    latitude: { label: "Latitude", required: true, selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
+    longitude: { label: "Longitude", required: true, selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } } },
+  } } } },
+  { name: "title", selector: { text: {} } },
+  { name: "days", selector: { number: { min: 1, max: 7, step: 1, mode: "box" } } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const PLAGE_LABELS = {
+  beaches: "Plages suivies (un onglet par plage)",
+  title: "Titre (Plage par défaut)",
+  days: "Nombre de jours de prévision",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const MONTAGNE_LABELS = {
   stations: "Stations et sommets suivis (un onglet par station)",
   title: "Titre (Montagne par défaut)",
@@ -3765,6 +3957,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-crues-card-editor", makeEditor(CRUES_SCHEMA, CRUES_LABELS, CRUES_DEFAULTS));
   define("meteo-feux-card", MeteoFeuxCard);
   define("meteo-feux-card-editor", makeEditor(FEUX_SCHEMA, FEUX_LABELS, FEUX_DEFAULTS));
+  define("meteo-plage-card", MeteoPlageCard);
+  define("meteo-plage-card-editor", makeEditor(PLAGE_SCHEMA, PLAGE_LABELS, PLAGE_DEFAULTS));
   define("meteo-montagne-card", MeteoMontagneCard);
   define("meteo-montagne-card-editor", makeEditor(MONTAGNE_SCHEMA, MONTAGNE_LABELS, MONTAGNE_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
@@ -3780,6 +3974,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-ecowatt-card", name: "Carte Météo : EcoWatt", description: "Signal EcoWatt de RTE (risque de coupures) aujourd'hui, demain et après-demain, heure par heure, avec la France à la couleur du jour." },
     { type: "meteo-crues-card", name: "Carte Météo : crues et rivières", description: "Hauteur et débit des rivières proches avec leur tendance sur 24 h, vigilance crues, carte interactive des stations (Vigicrues, Hub'Eau)." },
     { type: "meteo-feux-card", name: "Carte Météo : feux de forêt", description: "Feux détectés par satellite autour de chez vous (NASA FIRMS) : boussole, distance, intensité, fumée et vent, prochain passage." },
+    { type: "meteo-plage-card", name: "Carte Météo : plage", description: "Plages en onglets : air, eau, UV, vent, vagues et houle, marée (pleines et basses mers), prévisions des prochains jours." },
     { type: "meteo-montagne-card", name: "Carte Météo : montagne", description: "Stations de ski et sommets : températures au pied et au sommet, isotherme 0 °C, neige fraîche et au sol, prévisions, risque d'avalanche (ha-serac)." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
