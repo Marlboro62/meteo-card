@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.11.0-beta.1";
+const CARD_VERSION = "3.11.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2518,7 +2518,8 @@ class MeteoMontagneCard extends MeteoBase {
     const key = `${s.lat},${s.lon},${alts.join("/")}`;
     this._wx = this._wx || {};
     const cur = this._wx[key];
-    if (cur && (cur.busy || Date.now() - cur.at < 18e5)) return cur;
+    // 30 minutes entre deux lectures ; après un échec, nouvel essai au bout de 2 minutes
+    if (cur && (cur.busy || Date.now() - cur.at < (cur.failed ? 12e4 : 18e5))) return cur;
     const entry = (this._wx[key] = { ...(cur || {}), busy: true, at: cur?.at || 0 });
     const n = Math.max(1, alts.length);
     const q = new URLSearchParams({
@@ -2528,13 +2529,20 @@ class MeteoMontagneCard extends MeteoBase {
       timezone: "auto", past_days: "1", forecast_days: "7", wind_speed_unit: "kmh",
     });
     if (alts.length) q.set("elevation", alts.join(","));
-    fetchJson(`${OPEN_METEO}?${q}`, 18e5).then((j) => {
+    // lecture directe (pas le cache commun) : la raison d'un refus d'Open-Meteo est affichée
+    fetch(`${OPEN_METEO}?${q}`).then((r) => r.json().catch(() => null).then((j) => {
+      if (!r.ok || !j || j.error) throw new Error(j?.reason || `erreur ${r.status}${r.status === 503 ? ", service indisponible" : r.status === 429 ? ", trop de requêtes" : ""}`);
+      return j;
+    })).then((j) => {
       const list = asList(j);
+      if (!list.length) throw new Error("réponse vide");
       entry.top = s.top !== null ? list[0] : null;
       entry.bottom = s.bottom !== null ? list[s.top !== null ? 1 : 0] : null;
       entry.any = list[0] || null;
-      entry.failed = !list.length;
-    }).catch(() => { entry.failed = true; })
+      entry.failed = false;
+      entry.error = "";
+      entry.okAt = Date.now();
+    }).catch((e) => { entry.failed = true; entry.error = e?.message || "réseau"; })
       .finally(() => { entry.busy = false; entry.at = Date.now(); this._sig = null; this._render(); });
     return entry;
   }
@@ -2581,7 +2589,7 @@ class MeteoMontagneCard extends MeteoBase {
     const alts = [s.bottom !== null ? `${fmt(s.bottom)} m` : "", s.top !== null ? `${fmt(s.top)} m` : ""].filter(Boolean).join(" – ");
     const ref = wx.top || wx.bottom || wx.any;
     if (!ref) {
-      this._card(head(`${s.name}${alts ? ` · ${alts}` : ""}`) + tabs + `<div class="fc-empty">${wx.failed ? "Prévisions de montagne inaccessibles (Open-Meteo)" : "Chargement des prévisions de montagne…"}</div>`);
+      this._card(head(`${s.name}${alts ? ` · ${alts}` : ""}`) + tabs + `<div class="fc-empty">${wx.failed ? `Prévisions de montagne inaccessibles : Open-Meteo (${esc(wx.error || "réseau")}). Nouvel essai dans 2 minutes.` : "Chargement des prévisions de montagne…"}</div>`);
       return;
     }
     const H = ref.hourly || {}, times = H.time || [];
@@ -2657,6 +2665,7 @@ class MeteoMontagneCard extends MeteoBase {
       + `<div class="sky mt-l">${levels.join("")}</div><div class="sec">Neige</div><div class="sky">${snow.join("")}</div>`
       + av
       + (days ? `<div class="sec">Prochains jours${wx.top ? ` au sommet (${fmt(s.top)} m)` : ""}</div><div class="mt-ds">${days}</div>` : "")
+      + (wx.failed ? `<div class="fc-empty">Open-Meteo injoignable (${esc(wx.error || "réseau")}) : prévisions de ${esc(new Date(wx.okAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }))}, nouvel essai dans 2 minutes.</div>` : "")
       + `<div class="qk-src">Prévisions : Open-Meteo (modèles Météo-France AROME et ARPEGE, ECMWF), neige au sol estimée par le modèle${aval ? " · avalanche : bulletin Météo-France (ha-serac)" : ""}.</div>`);
   }
 }
