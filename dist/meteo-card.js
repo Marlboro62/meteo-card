@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.0-beta.2";
+const CARD_VERSION = "3.13.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2855,11 +2855,11 @@ const omGet = (url) => fetch(url).then((r) => r.json().catch(() => null).then((j
   if (!r.ok || !j || j.error) throw new Error(j?.reason || `erreur ${r.status}${r.status === 503 ? ", service indisponible" : r.status === 429 ? ", trop de requêtes" : ""}`);
   return j;
 }));
-/** Flèche « vers où va » (l'icône mdi:navigation pointe déjà vers le nord-est, d'où le -45°) le vent, la houle ou le courant (la direction donnée est celle d'où il vient, sauf pour le courant). */
+/** Flèche « vers où va » (l'icône mdi:navigation pointe vers le nord au repos) le vent, la houle ou le courant (la direction donnée est celle d'où il vient, sauf pour le courant). */
 // « du N », mais « d'ONO » / « vers l'E » devant une voyelle
 const dirDe = (deg) => { const c = compass16(deg); return /^[EO]/.test(c) ? `d'${c}` : `du ${c}`; };
 const dirVers = (deg) => { const c = compass16(deg); return /^[EO]/.test(c) ? `vers l'${c}` : `vers le ${c}`; };
-const arrowTo = (deg, from = true) => (deg === null ? "" : `<ha-icon class="mr-ar" icon="mdi:navigation" style="transform:rotate(${Math.round((deg + (from ? 180 : 0) + 315) % 360)}deg)"></ha-icon>`);
+const arrowTo = (deg, from = true) => (deg === null ? "" : `<ha-icon class="mr-ar" icon="mdi:navigation" style="transform:rotate(${Math.round((deg + (from ? 180 : 0)) % 360)}deg)"></ha-icon>`);
 
 class MeteoMarineCard extends MeteoBase {
   static get defaults() {
