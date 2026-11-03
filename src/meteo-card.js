@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.0-beta.4";
+const CARD_VERSION = "3.13.0-beta.5";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3315,7 +3315,8 @@ ha-icon.rot { display: inline-block; }
 .sky-t ha-icon { --mdc-icon-size: 22px; }
 .k-v { font-size: .8rem; font-weight: 600; margin-top: 3px; overflow-wrap: anywhere; }
 .k-l { font-size: .66rem; color: var(--med-muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 1px; }
-.tabs { display: flex; gap: 6px; padding: 12px 12px 0; overflow-x: auto; scrollbar-width: none; }
+/* onglets à la ligne quand ils ne tiennent pas : tous restent visibles */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 0; }
 .tab { flex: 1 1 0; min-width: max-content; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px;
   border-radius: 10px; border: 1px solid var(--med-line); background: transparent; color: var(--med-muted); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer; }
 .tab ha-icon { --mdc-icon-size: 17px; }
