@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.12.0-beta.1";
+const CARD_VERSION = "3.12.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2677,7 +2677,8 @@ class MeteoMontagneCard extends MeteoBase {
 const PLAGE_DEFAULTS = { title: "Plage", days: 5, theme: "v2" };
 const OPEN_METEO_MARINE = "https://marine-api.open-meteo.com/v1/marine";
 /** Indice UV : libellé et couleur (échelle de l'OMS). */
-const uvInfo = (v) => (v === null ? ["—", "var(--med-muted)"] : v < 3 ? ["Faible", "#5fcf8a"] : v < 6 ? ["Modéré", "#f7c948"] : v < 8 ? ["Élevé", "#ff8c33"] : v < 11 ? ["Très élevé", "#ee4a4a"] : ["Extrême", "#b38cf0"]);
+// sur la valeur arrondie, celle affichée : un 2,9 affiché « 3 » est « Modéré »
+const uvInfo = (x) => { const v = x === null ? null : Math.round(x); return (v === null ? ["—", "var(--med-muted)"] : v < 3 ? ["Faible", "#5fcf8a"] : v < 6 ? ["Modéré", "#f7c948"] : v < 8 ? ["Élevé", "#ff8c33"] : v < 11 ? ["Très élevé", "#ee4a4a"] : ["Extrême", "#b38cf0"]); };
 /** État de la mer d'après la hauteur des vagues (échelle de Douglas). */
 const seaState = (h) => (h === null ? "—" : h < 0.1 ? "Calme" : h < 0.5 ? "Belle" : h < 1.25 ? "Peu agitée" : h < 2.5 ? "Agitée" : h < 4 ? "Forte" : h < 6 ? "Très forte" : h < 9 ? "Grosse" : "Très grosse");
 /** Température de l'eau : couleur, du froid au chaud. */
@@ -2811,7 +2812,7 @@ class MeteoPlageCard extends MeteoBase {
         const at = (t) => new Date(t).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: A.timezone || undefined });
         const day = (t) => { const d = new Date(t + off * 1000).toISOString().slice(0, 10); return d === today ? "" : "demain "; };
         tide = `<div class="sec">Marée</div><div class="pl-td"><svg viewBox="0 0 100 32" preserveAspectRatio="none" class="pl-tc"><polyline points="${pts.join(" ")}"/><line x1="0" x2="0" y1="0" y2="32" class="pl-now"/></svg>
-          <div class="pl-ts">${turns.map((x) => `<span class="${x.high ? "pl-hi" : "pl-lo"}"><ha-icon icon="${x.high ? "mdi:arrow-collapse-up" : "mdi:arrow-collapse-down"}"></ha-icon><b>${x.high ? "Pleine mer" : "Basse mer"}</b>${day(x.t)}${at(x.t)}<small>${x.v > 0 ? "+" : x.v < 0 ? "−" : ""}${fmt(Math.abs(x.v), 1)} m</small></span>`).join("")}</div><div class="pl-tn">Hauteurs par rapport au niveau moyen de la mer</div></div>`;
+          <div class="pl-ts">${turns.map((x) => `<span class="${x.high ? "pl-hi" : "pl-lo"}"><ha-icon icon="${x.high ? "mdi:arrow-collapse-up" : "mdi:arrow-collapse-down"}"></ha-icon><b>${x.high ? "Pleine mer" : "Basse mer"}</b><em>${day(x.t)}${at(x.t)}</em><small>${x.v > 0 ? "+" : x.v < 0 ? "−" : ""}${fmt(Math.abs(x.v), 1)} m</small></span>`).join("")}</div><div class="pl-tn">Hauteurs par rapport au niveau moyen de la mer</div></div>`;
       } else tide = `<div class="qk-src pl-nt">Marée faible ici (moins de 30 cm), courbe non affichée.</div>`;
     }
 
@@ -3473,8 +3474,9 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .pl-td { margin: 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
 .pl-tc { width: 100%; height: 46px; display: block; } .pl-tc polyline { fill: none; stroke: #4fc3f7; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .pl-now { stroke: var(--med-text); stroke-width: 2; vector-effect: non-scaling-stroke; opacity: .6; }
-.pl-ts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 4px 10px; margin-top: 6px; font-size: .78rem; }
-.pl-ts span { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; } .pl-ts ha-icon { --mdc-icon-size: 16px; }
+.pl-ts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin-top: 6px; font-size: .78rem; }
+.pl-ts span { display: grid; grid-template-columns: 16px auto 1fr; align-items: center; column-gap: 5px; min-width: 0; } .pl-ts ha-icon { --mdc-icon-size: 16px; grid-row: span 2; }
+.pl-ts b { white-space: nowrap; } .pl-ts em { font-style: normal; white-space: nowrap; text-align: right; } .pl-ts small { grid-column: 2 / 4; }
 .pl-ts .pl-hi ha-icon { color: #4fc3f7; } .pl-ts .pl-lo ha-icon { color: var(--med-muted); } .pl-ts small { color: var(--med-muted); }
 .pl-tn { margin-top: 4px; font-size: .66rem; color: var(--med-muted); }
 .pl-nt { text-align: left; } .pl-w { font-weight: 600; }
