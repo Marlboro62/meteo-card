@@ -91,6 +91,17 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.11.0
+
+**Nouvelle carte**
+
+- **Carte Montagne** (`custom:meteo-montagne-card`) : stations de ski et sommets en onglets, température au pied et au sommet, isotherme 0 °C, neige tombée sur 24 h et attendue sur 72 h, neige au sol, prévisions par jour au sommet. Prévisions Open-Meteo (modèles Météo-France AROME et ARPEGE, ECMWF), sans clé ni intégration. Risque d'avalanche du bulletin Météo-France en option, avec l'intégration ha-serac. Voir [Carte Montagne](#carte-montagne).
+
+**Corrections**
+
+- Si Open-Meteo est indisponible, la carte réessaie au bout de 2 minutes, garde les dernières prévisions et affiche la raison.
+- « Nuit claire » et la lune la nuit, au lieu de « ensoleillé ».
+
 ## Nouveautés de la 3.10.0
 
 **Améliorations**
