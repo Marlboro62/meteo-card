@@ -31,6 +31,9 @@
 
 # Carte Météo
 
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
+[![Release](https://img.shields.io/github/v/release/Marlboro62/meteo-card)](https://github.com/Marlboro62/meteo-card/releases)
+
 Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichier :
 
 | Carte | Type | Ce qu'elle affiche |
