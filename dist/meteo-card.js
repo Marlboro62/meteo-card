@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.2-beta.2";
+const CARD_VERSION = "3.13.2-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -199,7 +199,6 @@ const pictureOf = (o) => {
 
 const RAD = Math.PI / 180, DAYMS = 864e5, J1970 = 2440588, J2000 = 2451545, OBL = RAD * 23.4397;
 const toDays = (d) => d.valueOf() / DAYMS - 0.5 + J1970 - J2000;
-const fromJulian = (j) => new Date((j + 0.5 - J1970) * DAYMS);
 const rightAsc = (l, b) => Math.atan2(Math.sin(l) * Math.cos(OBL) - Math.tan(b) * Math.sin(OBL), Math.cos(l));
 const decl = (l, b) => Math.asin(Math.sin(b) * Math.cos(OBL) + Math.cos(b) * Math.sin(OBL) * Math.sin(l));
 const azim = (H, phi, dec) => Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
@@ -222,22 +221,64 @@ const position = (body, date, lat, lng) => {
   if (body === "moon") { const hh = Math.max(h, 0); h += 0.0002967 / Math.tan(hh + 0.00312536 / (hh + 0.08901179)); }
   return { az: ((azim(H, phi, c.dec) / RAD + 180) % 360 + 360) % 360, el: h / RAD };
 };
-/** Aube, lever, midi solaire, coucher et crépuscule (civils) du jour de « date ». */
-const sunTimes = (date, lat, lng) => {
-  const lw = RAD * -lng, phi = RAD * lat, J0 = 0.0009;
+/** Déclinaison (radians) et équation du temps (minutes) du soleil à l'instant t (ms), formules de la NOAA. */
+const sunNoaa = (t) => {
+  const T = (t / DAYMS + 2440587.5 - J2000) / 36525;
+  const L0 = (280.46646 + T * (36000.76983 + 0.0003032 * T)) % 360, M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+  const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+  const C = Math.sin(M * RAD) * (1.914602 - T * (0.004817 + 0.000014 * T)) + Math.sin(2 * M * RAD) * (0.019993 - 0.000101 * T) + Math.sin(3 * M * RAD) * 0.000289;
+  const om = 125.04 - 1934.136 * T, lam = L0 + C - 0.00569 - 0.00478 * Math.sin(om * RAD);
+  const eps = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - T * 0.001813))) / 60) / 60 + 0.00256 * Math.cos(om * RAD);
+  const y = Math.tan((eps * RAD) / 2) ** 2;
+  const eq = (4 / RAD) * (y * Math.sin(2 * L0 * RAD) - 2 * e * Math.sin(M * RAD) + 4 * e * y * Math.sin(M * RAD) * Math.cos(2 * L0 * RAD)
+    - 0.5 * y * y * Math.sin(4 * L0 * RAD) - 1.25 * e * e * Math.sin(2 * M * RAD));
+  return { dec: Math.asin(Math.sin(eps * RAD) * Math.sin(lam * RAD)), eq };
+};
+/**
+ * Aube, lever, midi solaire, coucher et crépuscule (civils) du jour de « date », comme l'intégration sun de
+ * Home Assistant (astral) : formules de la NOAA, recalculées à l'heure de chaque événement, et horizon abaissé
+ * selon l'altitude du lieu (elevation, en mètres).
+ */
+const sunTimes = (date, lat, lng, elevation = 0) => {
   const noonLocal = new Date(date); noonLocal.setHours(12, 0, 0, 0);
-  const d = toDays(noonLocal), n = Math.round(d - J0 - lw / (2 * Math.PI));
-  const ds = J0 + lw / (2 * Math.PI) + n, M = solarAnomaly(ds), L = eclLongitude(M), dec = decl(L, 0);
-  const transit = (x) => J2000 + x + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
-  const Jnoon = transit(ds);
-  const at = (deg) => {
-    const c = (Math.sin(deg * RAD) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
-    if (c < -1 || c > 1) return [null, null]; // soleil de minuit ou nuit polaire
-    const Jset = transit(J0 + (Math.acos(c) + lw) / (2 * Math.PI) + n);
-    return [fromJulian(Jnoon - (Jset - Jnoon)), fromJulian(Jset)];
+  const target = noonLocal.getTime(), dip = (2.076 * Math.sqrt(Math.max(0, Number(elevation) || 0))) / 60;
+  // midi solaire (UTC) le plus proche de midi heure locale
+  const noonAt = (t) => {
+    const u = new Date(t);
+    let noon = Date.UTC(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate()) + (720 - 4 * lng - sunNoaa(t).eq) * 6e4;
+    while (noon - target > DAYMS / 2) noon -= DAYMS;
+    while (target - noon > DAYMS / 2) noon += DAYMS;
+    return noon;
   };
-  const [rise, set] = at(-0.833), [dawn, dusk] = at(-6);
-  return { dawn, rise, noon: fromJulian(Jnoon), set, dusk };
+  const noon = noonAt(noonAt(target));
+  const at = (zenith, sign) => {
+    let t = noon;
+    for (let i = 0; i < 3; i++) {
+      const { dec } = sunNoaa(t);
+      const c = Math.cos(zenith * RAD) / (Math.cos(lat * RAD) * Math.cos(dec)) - Math.tan(lat * RAD) * Math.tan(dec);
+      if (c < -1 || c > 1) return null; // soleil de minuit ou nuit polaire
+      t = noonAt(t) + sign * 4 * (Math.acos(c) / RAD) * 6e4;
+    }
+    return new Date(t);
+  };
+  return { dawn: at(96 + dip, -1), rise: at(90.833 + dip, -1), noon: new Date(noon), set: at(90.833 + dip, 1), dusk: at(96 + dip, 1) };
+};
+/**
+ * Heures du soleil d'après sun.sun quand il les donne pour le même jour (prochain lever ou coucher),
+ * sinon calculées : la carte affiche alors exactement les heures de Home Assistant.
+ */
+const sunTimesHA = (hass, date, lat, lng) => {
+  const st = sunTimes(date, lat, lng, hass?.config?.elevation);
+  const a = hass?.states?.["sun.sun"]?.attributes || {};
+  const sameDay = (iso) => {
+    const d = iso ? new Date(iso) : null;
+    return d && !isNaN(d) && d.toDateString() === new Date(date).toDateString() ? d : null;
+  };
+  for (const [k, attr] of [["dawn", "next_dawn"], ["rise", "next_rising"], ["noon", "next_noon"], ["set", "next_setting"], ["dusk", "next_dusk"]]) {
+    const d = sameDay(a[attr]);
+    if (d) st[k] = d;
+  }
+  return st;
 };
 /** Lever et coucher de la lune du jour de « date » (recherche heure par heure, interpolation quadratique). */
 const moonTimes = (date, lat, lng) => {
@@ -1061,7 +1102,7 @@ class MeteoCard extends MeteoBase {
     const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
     const sunSt = this._st("sun.sun")?.state;
     const sunI = SUN_ICON[sunSt] || (lat !== null && lon !== null ? SUN_ICON[isNight(now, this._hass) ? "below_horizon" : "above_horizon"] : null);
-    const st = lat !== null && lon !== null ? sunTimes(now, lat, lon) : null;
+    const st = lat !== null && lon !== null ? sunTimesHA(this._hass, now, lat, lon) : null;
     // case Soleil : capteur choisi (option sun, pour son image et son « plus d'infos »), sinon sun.sun
     const sunId = c.sun && usableState(this._st(c.sun)) ? c.sun : sunSt ? "sun.sun" : null;
     const seasonId = usableState(this._st(ent.season)) ? ent.season : null;
@@ -1460,7 +1501,7 @@ class MeteoAstroCard extends MeteoBase {
   }
 
   _sun([lat, lon], now) {
-    const st = sunTimes(now, lat, lon), y = sunTimes(new Date(now.getTime() - DAYMS), lat, lon);
+    const st = sunTimesHA(this._hass, now, lat, lon), y = sunTimes(new Date(now.getTime() - DAYMS), lat, lon, this._hass?.config?.elevation);
     const sp = position("sun", now, lat, lon), mp = position("moon", now, lat, lon);
     const ent = detect(this._hass, this._config), rel = related(this._hass, ent.weather);
     const uv = this._num(this._config.uv || rel.uv) ?? num(this._st(ent.weather)?.attributes?.uv_index);
