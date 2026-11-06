@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.14.0-beta.1";
+const CARD_VERSION = "3.14.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1712,11 +1712,12 @@ class MeteoAstroCard extends MeteoBase {
     const next = (target) => new Date(now.getTime() + (((target - il.phase) % 1 + 1) % 1) * lun * DAYMS);
     const dfmt = (d) => d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
     if (!this._dlg || !this._keep.contains(this._dlg)) {
-      this._keep.insertAdjacentHTML("beforeend", `<dialog class="dlg" aria-label="Phases de la lune"></dialog>`);
-      this._dlg = this._keep.querySelector("dialog");
+      this._keep.insertAdjacentHTML("beforeend", `<dialog class="dlg dlg-moon" aria-label="Phases de la lune"></dialog>`);
+      // sa propre fenêtre : la carte Météo a aussi celle de Soleil et lune dans la même zone
+      this._dlg = this._keep.querySelector("dialog.dlg-moon");
       this._dlg.addEventListener("click", (e) => { if (e.target === this._dlg || e.target.closest("[data-close]")) this._dlg.close(); });
     }
-    this._dlg.className = `dlg ${themeClass(this._config.theme, this._hass)}`;
+    this._dlg.className = `dlg dlg-moon ${themeClass(this._config.theme, this._hass)}`;
     this._dlg.innerHTML = `<div class="d-in" tabindex="-1" autofocus><div class="d-h"><b>Phases de la lune</b><button data-close aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div>
       <svg viewBox="0 0 380 324" class="phases" role="img" aria-label="Phase actuelle : ${esc(MOON[key][0])}">
         <circle cx="${cx}" cy="${cy}" r="${R}" class="orb"/>
