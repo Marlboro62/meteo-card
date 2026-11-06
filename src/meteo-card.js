@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.2";
+const CARD_VERSION = "3.13.3-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -241,7 +241,17 @@ const sunNoaa = (t) => {
  */
 const sunTimes = (date, lat, lng, elevation = 0) => {
   const noonLocal = new Date(date); noonLocal.setHours(12, 0, 0, 0);
-  const target = noonLocal.getTime(), dip = (2.076 * Math.sqrt(Math.max(0, Number(elevation) || 0))) / 60;
+  const target = noonLocal.getTime(), h = Math.max(0, Number(elevation) || 0);
+  // horizon abaissé par l'altitude, puis réfraction : mêmes formules qu'astral (intégration sun de Home Assistant)
+  const dip = h > 0 ? Math.acos(6356900 / (6356900 + h)) / RAD : 0;
+  const refraction = (zenith) => {
+    const el = 90 - zenith, te = Math.tan(el * RAD);
+    if (el >= 85) return 0;
+    const r = el > 5 ? 58.1 / te - 0.07 / te ** 3 + 0.000086 / te ** 5
+      : el > -0.575 ? 1735 + el * (-518.2 + el * (103.4 + el * (-12.79 + el * 0.711))) : -20.774 / te;
+    return r / 3600;
+  };
+  const zen = (z) => z + dip + refraction(z + dip);
   // midi solaire (UTC) le plus proche de midi heure locale
   const noonAt = (t) => {
     const u = new Date(t);
@@ -261,7 +271,25 @@ const sunTimes = (date, lat, lng, elevation = 0) => {
     }
     return new Date(t);
   };
-  return { dawn: at(96 + dip, -1), rise: at(90.833 + dip, -1), noon: new Date(noon), set: at(90.833 + dip, 1), dusk: at(96 + dip, 1) };
+  const sunZ = zen(90 + 32 / 120), civilZ = zen(96); // bord supérieur du soleil (rayon apparent 16'), crépuscule civil
+  return { dawn: at(civilZ, -1), rise: at(sunZ, -1), noon: new Date(noon), set: at(sunZ, 1), dusk: at(civilZ, 1) };
+};
+/**
+ * Prochain lever et prochain coucher, comme l'intégration sun (next_rising, next_setting) :
+ * pris dans sun.sun, sinon calculés (ceux du jour, ou du lendemain une fois passés).
+ * riseTomorrow / setTomorrow : l'heure affichée est celle du lendemain.
+ */
+const nextSunTimes = (hass, now, lat, lng) => {
+  const elev = hass?.config?.elevation, a = hass?.states?.["sun.sun"]?.attributes || {};
+  const today = sunTimes(now, lat, lng, elev), tomorrow = sunTimes(new Date(now.getTime() + DAYMS), lat, lng, elev);
+  const pick = (attr, k) => {
+    const d = a[attr] ? new Date(a[attr]) : null;
+    if (d && !isNaN(d) && d > now) return d;
+    return today[k] && today[k] > now ? today[k] : tomorrow[k];
+  };
+  const rise = pick("next_rising", "rise"), set = pick("next_setting", "set");
+  const isTomorrow = (d) => !!d && d.toDateString() !== now.toDateString();
+  return { rise, set, riseTomorrow: isTomorrow(rise), setTomorrow: isTomorrow(set) };
 };
 /**
  * Heures du soleil d'après sun.sun quand il les donne pour le même jour (prochain lever ou coucher),
@@ -1102,14 +1130,14 @@ class MeteoCard extends MeteoBase {
     const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
     const sunSt = this._st("sun.sun")?.state;
     const sunI = SUN_ICON[sunSt] || (lat !== null && lon !== null ? SUN_ICON[isNight(now, this._hass) ? "below_horizon" : "above_horizon"] : null);
-    const st = lat !== null && lon !== null ? sunTimesHA(this._hass, now, lat, lon) : null;
+    const st = lat !== null && lon !== null ? nextSunTimes(this._hass, now, lat, lon) : null;
     // case Soleil : capteur choisi (option sun, pour son image et son « plus d'infos »), sinon sun.sun
     const sunId = c.sun && usableState(this._st(c.sun)) ? c.sun : sunSt ? "sun.sun" : null;
     const seasonId = usableState(this._st(ent.season)) ? ent.season : null;
     return `<div class="sky">
       ${sunI ? tile(sunId, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
       ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
-        <div class="k-v"><span class="sr">↑ ${hm(st.rise)}</span> <span class="ss">↓ ${hm(st.set)}</span></div><div class="k-l">Lever · coucher</div></div>` : ""}
+        <div class="k-v"><span class="sr"${st.riseTomorrow ? ` title="Demain"` : ""}>↑ ${hm(st.rise)}</span> <span class="ss"${st.setTomorrow ? ` title="Demain"` : ""}>↓ ${hm(st.set)}</span></div><div class="k-l">${st.riseTomorrow && st.setTomorrow ? "Lever · coucher demain" : st.riseTomorrow ? "Lever demain · coucher" : "Lever · coucher"}</div></div>` : ""}
       ${tile(seasonId, season[1], season[2], season[0], "Saison")}
       ${c.moon_image ? `<div class="sky-t"${moonId ? ` data-entity="${esc(moonId)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
         <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune")}
