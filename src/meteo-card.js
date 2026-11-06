@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.1";
+const CARD_VERSION = "3.13.2-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -169,6 +169,23 @@ const seasonOfDate = (d, south) => {
 
 /** Phase de lune approchée d'après la date (lunaison moyenne), quand aucun capteur n'est disponible. */
 const moonOfDate = (d) => MOON_KEYS[Math.round(moonIllum(d).phase * 8) % 8];
+
+/** Phases en français (capteurs template), vers la clé de MOON */
+const MOON_FR = {
+  nouvelle_lune: "new_moon", premier_croissant: "waxing_crescent", premier_quartier: "first_quarter",
+  gibbeuse_croissante: "waxing_gibbous", lune_gibbeuse_croissante: "waxing_gibbous", pleine_lune: "full_moon",
+  gibbeuse_decroissante: "waning_gibbous", lune_gibbeuse_decroissante: "waning_gibbous", dernier_quartier: "last_quarter",
+  dernier_croissant: "waning_crescent",
+};
+
+/** Clé de MOON d'après l'état d'un capteur de phase (anglais ou français, accents, espaces et tirets acceptés), sinon null */
+const moonKeyOf = (state) => {
+  const raw = String(state || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return MOON[raw] ? raw : MOON_FR[raw] || null;
+};
+
+/** Capteur utilisable pour le « plus d'infos » : présent et disponible */
+const usableState = (o) => !!o && o.state !== "unavailable" && o.state !== "unknown";
 
 
 /* ------------------------------------------------------------ astronomie */
@@ -1021,8 +1038,10 @@ class MeteoCard extends MeteoBase {
     const south = Number(this._hass?.config?.latitude) < 0;
     const sRaw = String(this._st(ent.season)?.state || "").toLowerCase();
     const season = SEASON[sRaw] || SEASON[seasonOfDate(now, south)];
-    const mRaw = String(this._st(ent.moon)?.state || "").toLowerCase().replace(/ /g, "_");
-    const moon = MOON[mRaw] || MOON[moonOfDate(now)];
+    const mKey = moonKeyOf(this._st(ent.moon)?.state);
+    const moon = MOON[mKey || moonOfDate(now)];
+    // case cliquable dès que le capteur de lune existe, même si son état n'est pas une phase connue
+    const moonId = usableState(this._st(ent.moon)) ? ent.moon : null;
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
     const tile = (id, icon, color, value, label) =>
       `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon><div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
@@ -1036,8 +1055,8 @@ class MeteoCard extends MeteoBase {
       ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
         <div class="k-v"><span class="sr">↑ ${hm(st.rise)}</span> <span class="ss">↓ ${hm(st.set)}</span></div><div class="k-l">Lever · coucher</div></div>` : ""}
       ${tile(SEASON[sRaw] ? ent.season : null, season[1], season[2], season[0], "Saison")}
-      ${c.moon_image ? `<div class="sky-t"${MOON[mRaw] ? ` data-entity="${esc(ent.moon)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
-        <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(MOON[mRaw] ? ent.moon : null, moon[1], "#d9e2f2", moon[0], "Lune")}
+      ${c.moon_image ? `<div class="sky-t"${moonId ? ` data-entity="${esc(moonId)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
+        <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
     </div>`;
   }
@@ -1465,8 +1484,7 @@ class MeteoAstroCard extends MeteoBase {
   }
 
   _moonKey(ent, now) {
-    const raw = String(this._st(ent.moon)?.state || "").toLowerCase().replace(/ /g, "_");
-    return MOON[raw] ? raw : moonOfDate(now);
+    return moonKeyOf(this._st(ent.moon)?.state) || moonOfDate(now);
   }
 
   /** Étoiles filantes : prochaine grande pluie (pic, taux estimé, lune, meilleure heure) et pluies en cours. */
