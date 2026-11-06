@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.3";
+const CARD_VERSION = "3.14.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -433,6 +433,7 @@ const DEFAULTS = {
   show_alert: true,
   show_forecast: true,
   show_sky: true,
+  sky_tap: "popup",
   entity_pictures: true,
   icons: "animated",
   layout: "classic",
@@ -732,7 +733,38 @@ class MeteoCard extends MeteoBase {
       store.set(this._tabKey(), this._tab);
       this._sig = null;
       this._render();
+    } else if (act === "moon") this._openMoon();
+    else if (act === "astro") this._openAstro();
+  }
+
+  /** Lune de la ville affichée : capteur de la carte (moon), sinon détecté, sinon calculé. */
+  _moonKey(ent, now) {
+    return MeteoAstroCard.prototype._moonKey.call(this, ent, now);
+  }
+
+  /** Fenêtre des phases de la lune, la même que celle de la carte Soleil et lune. */
+  _openMoon() {
+    MeteoAstroCard.prototype._openMoon.call(this);
+  }
+
+  /** Fenêtre avec la carte Soleil et lune (réglages : option astro, qui complète ceux de la carte Météo). */
+  _openAstro() {
+    if (!this._keep) return;
+    const c = this._config;
+    if (!this._dlgAstro || !this._keep.contains(this._dlgAstro)) {
+      this._keep.insertAdjacentHTML("beforeend", `<dialog class="dlg dlg-astro" aria-label="Soleil et lune"><div class="d-in" tabindex="-1" autofocus>
+        <div class="d-h"><span></span><button data-close aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="d-card"></div></div></dialog>`);
+      this._dlgAstro = this._keep.querySelector("dialog.dlg-astro");
+      this._dlgAstro.addEventListener("click", (e) => { if (e.target === this._dlgAstro || e.target.closest("[data-close]")) this._dlgAstro.close(); });
+      this._astroEl = document.createElement("meteo-astro-card");
+      this._dlgAstro.querySelector(".d-card").appendChild(this._astroEl);
     }
+    const pick = (k) => (c[k] !== undefined ? { [k]: c[k] } : {});
+    this._astroEl.setConfig({ ...pick("theme"), ...pick("moon"), ...pick("season"), ...pick("zodiac"), ...pick("moon_image"), ...pick("earth_image"),
+      ...pick("text_size"), ...(c.astro && typeof c.astro === "object" ? c.astro : {}) });
+    this._astroEl.hass = this._hass;
+    this._dlgAstro.className = `dlg dlg-astro ${themeClass(c.theme, this._hass)}`;
+    if (typeof this._dlgAstro.showModal === "function") this._dlgAstro.showModal(); else this._dlgAstro.setAttribute("open", "");
   }
 
   _tabKey() {
@@ -741,6 +773,7 @@ class MeteoCard extends MeteoBase {
 
   _render() {
     if (!this._config || !this._hass || !this.shadowRoot) return;
+    if (this._astroEl && this._dlgAstro?.open) this._astroEl.hass = this._hass;
     const c = this._config;
     const cities = this._cities();
     if (this._tab === undefined) this._tab = Number(store.get(this._tabKey())) || 0;
@@ -1121,10 +1154,13 @@ class MeteoCard extends MeteoBase {
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
     // image de l'entité (entity_picture) à la place de l'icône, sauf entity_pictures: false
     const pic = (id) => (id && c.entity_pictures !== false ? pictureOf(this._st(id)) : null);
-    const tile = (id, icon, color, value, label) => {
+    // clic sur Soleil, Lever · coucher et Lune : fenêtre Soleil et lune ou phases (sky_tap: popup), sinon fiche de l'entité
+    const popup = c.sky_tap !== "more-info";
+    const tap = (id, act) => (popup && act ? ` data-act="${act}" role="button" tabindex="0"` : id ? ` data-entity="${esc(id)}"` : "");
+    const tile = (id, icon, color, value, label, act) => {
       const p = pic(id);
       const visual = p ? `<img class="k-p" src="${esc(p)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`;
-      return `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}>${visual}<div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
+      return `<div class="sky-t"${tap(id, act)}>${visual}<div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
     };
     // soleil : au-dessus ou sous l'horizon, lever et coucher du jour (calculés d'après les coordonnées)
     const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
@@ -1135,12 +1171,12 @@ class MeteoCard extends MeteoBase {
     const sunId = c.sun && usableState(this._st(c.sun)) ? c.sun : sunSt ? "sun.sun" : null;
     const seasonId = usableState(this._st(ent.season)) ? ent.season : null;
     return `<div class="sky">
-      ${sunI ? tile(sunId, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
-      ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
+      ${sunI ? tile(sunId, sunI[1], sunI[2], sunI[0], "Soleil", "astro") : ""}
+      ${st ? `<div class="sky-t"${tap(sunSt ? "sun.sun" : null, "astro")}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
         <div class="k-v"><span class="sr"${st.riseTomorrow ? ` title="Demain"` : ""}>↑ ${hm(st.rise)}</span> <span class="ss"${st.setTomorrow ? ` title="Demain"` : ""}>↓ ${hm(st.set)}</span></div><div class="k-l">${st.riseTomorrow && st.setTomorrow ? "Lever · coucher demain" : st.riseTomorrow ? "Lever demain · coucher" : "Lever · coucher"}</div></div>` : ""}
       ${tile(seasonId, season[1], season[2], season[0], "Saison")}
-      ${c.moon_image ? `<div class="sky-t"${moonId ? ` data-entity="${esc(moonId)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
-        <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune")}
+      ${c.moon_image ? `<div class="sky-t"${tap(moonId, "moon")}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
+        <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune", "moon")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
     </div>`;
   }
@@ -3566,6 +3602,11 @@ svg .under { opacity: .45; filter: none; }
 ha-card.light .pl-v, ha-card.light .pol-t b { filter: brightness(.8); }
 dialog.dlg { padding: 0; border: 1px solid var(--med-line); border-radius: 18px; background: var(--med-bg); color: var(--med-text); max-width: min(560px, calc(100vw - 24px)); width: 100%; }
 dialog.dlg::backdrop { background: rgba(5, 10, 20, .6); }
+dialog.dlg-astro { max-width: min(640px, calc(100vw - 24px)); }
+dialog.dlg-astro .d-in { position: relative; padding: 8px; }
+dialog.dlg-astro .d-h { position: absolute; top: 14px; right: 18px; z-index: 1; }
+dialog.dlg-astro .d-card { max-height: calc(100vh - 80px); overflow: auto; }
+.sky-t[data-act] { cursor: pointer; }
 .d-in { padding: 12px 14px 14px; outline: none; }
 .d-h { display: flex; align-items: center; justify-content: space-between; font-size: 1rem; }
 .d-h button { border: 0; background: none; color: var(--med-muted); cursor: pointer; padding: 4px; border-radius: 8px; }
@@ -3817,6 +3858,8 @@ const SCHEMA = [
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
   { name: "sun", selector: { entity: {} } },
   { name: "entity_pictures", selector: { boolean: {} } },
+  { name: "sky_tap", selector: { select: { mode: "dropdown", options: [
+    { value: "popup", label: "Fenêtre Soleil et lune, phases de la lune" }, { value: "more-info", label: "Fiche de l'entité (plus d'infos)" }] } } },
   { name: "show_stats", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_rain_hour", selector: { boolean: {} } },
@@ -3855,6 +3898,7 @@ const LABELS = {
   zodiac: "Signe du zodiaque (vide = détecté)",
   sun: "Soleil : capteur pour l'image et le « plus d'infos » (vide = sun.sun)",
   entity_pictures: "Images des entités (entity_picture) à la place des icônes",
+  sky_tap: "Clic sur Soleil, Lever · coucher et Lune",
   show_stats: "Ressenti, vent, humidité et pression",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
   show_rain_hour: "Pluie dans l'heure (Météo-France)",

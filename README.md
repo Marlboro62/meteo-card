@@ -258,6 +258,8 @@ type: custom:meteo-card
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
 | `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque (états en anglais ou en français). Un clic ouvre leur « plus d'infos » | détectés, sinon calculés |
 | `sun` | Capteur de la case Soleil, pour son image et son « plus d'infos » (le lever et le coucher restent calculés) | `sun.sun` |
+| `sky_tap` | Clic sur les cases Soleil, Lever · coucher et Lune : `popup` ouvre la carte **Soleil et lune** (soleil) ou la fenêtre des **phases de la lune** (lune), `more-info` ouvre la fiche de l'entité | `popup` |
+| `astro` | Réglages de la carte Soleil et lune ouverte au clic (mêmes options que `custom:meteo-astro-card`, ex. `show_pollens: false`) | thème, lune, saison et images de la carte Météo |
 | `entity_pictures` | Afficher l'image des capteurs soleil, saison, lune et zodiaque (attribut `entity_picture`, PNG, JPG ou SVG animé) à la place des icônes. `moon_image` reste prioritaire pour la lune | `true` |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
