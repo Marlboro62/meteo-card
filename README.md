@@ -96,6 +96,12 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.14.0
+
+- **Soleil et lune en un clic** : dans la carte Météo, un clic sur la tuile **Soleil** ou **Lever · coucher** ouvre la carte **Soleil et lune** dans une fenêtre, et un clic sur la tuile **Lune** ouvre la fenêtre des **phases de la lune**. Merci à MichelJ pour l'idée et à @JourMic pour les tests.
+- **Changement de comportement** : ces tuiles ouvraient jusqu'ici la fiche de Home Assistant (« plus d'infos »). Pour la retrouver : `sky_tap: more-info`, aussi dans l'éditeur visuel.
+- **Option `astro`** : les réglages de la carte Soleil et lune ouverte au clic (par exemple `show_pollens: false`).
+
 ## Nouveautés de la 3.13.3
 
 - **Prochain lever et prochain coucher du soleil**, comme `sun.sun` : une fois le lever passé, la carte affiche celui du lendemain, avec « demain » dans le libellé. Les heures calculées (sans `sun.sun`) sont celles de Home Assistant à la seconde près, réfraction et altitude comprises. Merci à @JourMic pour les tests.
