@@ -96,6 +96,13 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.13.2
+
+- **Images des entités** : quand un capteur soleil, saison, lune ou zodiaque a une image (`entity_picture`, PNG, JPG ou SVG animé), elle remplace l'icône de sa case. Option `entity_pictures: false` pour garder les icônes. Merci à @WarC0zes pour l'idée.
+- **Option `sun`** : le capteur de la case Soleil, pour son image et son « plus d'infos » (`sun.sun` par défaut).
+- **Cases Lune et Saison cliquables** avec un capteur personnalisé, même quand son état est en français (« Gibbeuse décroissante », « Automne »…).
+- **Lever et coucher du soleil** identiques à ceux de `sun.sun` : la carte reprend ses heures du jour, sinon les calcule comme Home Assistant, altitude comprise. Jusqu'ici, l'écart pouvait atteindre 3 minutes.
+
 ## Nouveautés de la 3.13.1
 
 - Les icônes météo animées (amCharts) sont livrées avec la carte dans `dist/icons` : plus aucun fichier chargé depuis un CDN, et elles s'affichent même sans accès à Internet.
