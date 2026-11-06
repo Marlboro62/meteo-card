@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.13.2-beta.1";
+const CARD_VERSION = "3.13.2-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -186,6 +186,12 @@ const moonKeyOf = (state) => {
 
 /** Capteur utilisable pour le « plus d'infos » : présent et disponible */
 const usableState = (o) => !!o && o.state !== "unavailable" && o.state !== "unknown";
+
+/** Image d'une entité (attribut entity_picture) : chemin local de Home Assistant ou adresse http(s), sinon null */
+const pictureOf = (o) => {
+  const p = o?.attributes?.entity_picture;
+  return typeof p === "string" && (/^\/(?!\/)/.test(p) || /^https?:\/\//i.test(p)) ? p : null;
+};
 
 
 /* ------------------------------------------------------------ astronomie */
@@ -358,6 +364,7 @@ const DEFAULTS = {
   show_alert: true,
   show_forecast: true,
   show_sky: true,
+  entity_pictures: true,
   icons: "animated",
   layout: "classic",
   halo: false,
@@ -1043,18 +1050,26 @@ class MeteoCard extends MeteoBase {
     // case cliquable dès que le capteur de lune existe, même si son état n'est pas une phase connue
     const moonId = usableState(this._st(ent.moon)) ? ent.moon : null;
     const zRaw = String(this._st(ent.zodiac)?.state || "").toLowerCase();
-    const tile = (id, icon, color, value, label) =>
-      `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon><div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
+    // image de l'entité (entity_picture) à la place de l'icône, sauf entity_pictures: false
+    const pic = (id) => (id && c.entity_pictures !== false ? pictureOf(this._st(id)) : null);
+    const tile = (id, icon, color, value, label) => {
+      const p = pic(id);
+      const visual = p ? `<img class="k-p" src="${esc(p)}" alt="" loading="lazy">` : `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`;
+      return `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}>${visual}<div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
+    };
     // soleil : au-dessus ou sous l'horizon, lever et coucher du jour (calculés d'après les coordonnées)
     const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
     const sunSt = this._st("sun.sun")?.state;
     const sunI = SUN_ICON[sunSt] || (lat !== null && lon !== null ? SUN_ICON[isNight(now, this._hass) ? "below_horizon" : "above_horizon"] : null);
     const st = lat !== null && lon !== null ? sunTimes(now, lat, lon) : null;
+    // case Soleil : capteur choisi (option sun, pour son image et son « plus d'infos »), sinon sun.sun
+    const sunId = c.sun && usableState(this._st(c.sun)) ? c.sun : sunSt ? "sun.sun" : null;
+    const seasonId = usableState(this._st(ent.season)) ? ent.season : null;
     return `<div class="sky">
-      ${sunI ? tile(sunSt ? "sun.sun" : null, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
+      ${sunI ? tile(sunId, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
       ${st ? `<div class="sky-t"${sunSt ? ` data-entity="sun.sun"` : ""}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
         <div class="k-v"><span class="sr">↑ ${hm(st.rise)}</span> <span class="ss">↓ ${hm(st.set)}</span></div><div class="k-l">Lever · coucher</div></div>` : ""}
-      ${tile(SEASON[sRaw] ? ent.season : null, season[1], season[2], season[0], "Saison")}
+      ${tile(seasonId, season[1], season[2], season[0], "Saison")}
       ${c.moon_image ? `<div class="sky-t"${moonId ? ` data-entity="${esc(moonId)}"` : ""}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
         <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
@@ -3465,6 +3480,7 @@ svg .under { opacity: .45; filter: none; }
 .mbtn { width: 48px; height: 48px; flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
 .mbtn svg, .k-m { width: 100%; height: 100%; display: block; }
 .k-m { width: 24px; height: 24px; margin: 0 auto; }
+.k-p { width: 32px; height: 32px; margin: -5px auto; display: block; object-fit: contain; }
 .pol { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; flex-wrap: wrap; }
 .pol > ha-icon { --mdc-icon-size: 30px; }
 .pol-t { display: flex; flex-direction: column; font-size: .8rem; }
@@ -3730,6 +3746,8 @@ const SCHEMA = [
   { name: "season", selector: { entity: { domain: "sensor" } } },
   { name: "moon", selector: { entity: { domain: "sensor" } } },
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
+  { name: "sun", selector: { entity: {} } },
+  { name: "entity_pictures", selector: { boolean: {} } },
   { name: "show_stats", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_rain_hour", selector: { boolean: {} } },
@@ -3766,6 +3784,8 @@ const LABELS = {
   season: "Saison (vide = détectée, sinon calculée d'après la date)",
   moon: "Phase de lune (vide = détectée, sinon calculée)",
   zodiac: "Signe du zodiaque (vide = détecté)",
+  sun: "Soleil : capteur pour l'image et le « plus d'infos » (vide = sun.sun)",
+  entity_pictures: "Images des entités (entity_picture) à la place des icônes",
   show_stats: "Ressenti, vent, humidité et pression",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
   show_rain_hour: "Pluie dans l'heure (Météo-France)",

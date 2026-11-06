@@ -245,7 +245,9 @@ type: custom:meteo-card
 | `icons` | `animated`, `static` (amCharts), `drawn`, `drawn_static` (dessinées par la carte) ou `mdi` | `animated` |
 | `icons_path` | Autre dossier d'icônes amCharts (ex. `/local/meteo-icons/`) | icônes livrées avec la carte |
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
-| `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque | détectés, sinon calculés |
+| `season`, `moon`, `zodiac` | Capteurs de saison, phase de lune, zodiaque (états en anglais ou en français). Un clic ouvre leur « plus d'infos » | détectés, sinon calculés |
+| `sun` | Capteur de la case Soleil, pour son image et son « plus d'infos » (le lever et le coucher restent calculés) | `sun.sun` |
+| `entity_pictures` | Afficher l'image des capteurs soleil, saison, lune et zodiaque (attribut `entity_picture`, PNG, JPG ou SVG animé) à la place des icônes. `moon_image` reste prioritaire pour la lune | `true` |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant : icônes, sélections, boussoles et flèches du vent prennent la `primary-color` du thème ; la pluie et le froid restent bleus) | `v2` |
