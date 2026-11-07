@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.15.0";
+const CARD_VERSION = "3.15.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -660,7 +660,7 @@ class MeteoBase extends HTMLElement {
         const osm = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
         this._tiles = vector
           ? L.maplibreGL({ style: `${OFM}${light ? "liberty" : "dark"}`, attribution: `<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> ${osm}` })
-          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: osm });
+          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: osm, referrerPolicy: "strict-origin-when-cross-origin" });
         this._tiles.addTo(this._map);
         this._tilesKey = tkey;
       }
@@ -3330,7 +3330,18 @@ const loadMaps = () => {
   return mapsLib;
 };
 /** Fond vectoriel possible : le navigateur a WebGL2 (sinon, images OpenStreetMap). */
-const hasWebgl2 = () => !!document.createElement("canvas").getContext("webgl2");
+/** Test fait une seule fois, contexte libéré tout de suite : un contexte WebGL créé à chaque affichage
+ *  et jamais rendu épuisait la limite du navigateur, qui refusait ensuite (fond vectoriel abandonné). */
+let WEBGL2 = null;
+const hasWebgl2 = () => {
+  if (WEBGL2 !== null) return WEBGL2;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    WEBGL2 = !!gl;
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+  } catch (e) { WEBGL2 = false; }
+  return WEBGL2;
+};
 /** Style sobre des fonds Shortbread : continents, océans, lacs et frontières (sans étiquettes, donc sans polices à charger). */
 const vectorStyle = (light) => {
   const k = light ? { land: "#eef2f6", sea: "#b9d3ea", line: "#9aaabd" } : { land: "#24324a", sea: "#111a28", line: "#4b5e7c" };
@@ -3489,7 +3500,7 @@ class MeteoBolidesCard extends MeteoBase {
       if (this._tilesKey !== key) {
         this._tiles?.remove();
         this._tiles = vector ? L.maplibreGL({ style: vectorStyle(light), attribution, interactive: false })
-          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution });
+          : L.tileLayer(c.tiles_url || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution, referrerPolicy: "strict-origin-when-cross-origin" });
         this._tiles.addTo(this._map);
         this._tilesKey = key;
       }
