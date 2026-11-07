@@ -136,7 +136,7 @@ function hassFor() {
   add("sensor.jardin_temperature", s.attrs.temperature - 0.6, { friendly_name: "Jardin" });
   add("sensor.jardin_humidity", s.attrs.humidity - 4, {});
   // Environnement Canada (lieu fictif) : météo et 5 capteurs d'alertes sur le même appareil, noms en français
-  add("weather.ville_erable", rainy ? "windy" : "sunny", { temperature: rainy ? 4.2 : 16.8, humidity: 76, pressure: 1001, wind_speed: rainy ? 54 : 12, wind_gust_speed: rainy ? 90 : 20, wind_bearing: 270, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Érable" });
+  add("weather.ville_erable", rainy ? "snowy" : "sunny", { temperature: rainy ? -18.4 : 31.2, humidity: rainy ? 72 : 64, pressure: 1001, wind_speed: rainy ? 32 : 12, wind_gust_speed: rainy ? 55 : 20, wind_bearing: 270, temperature_unit: "°C", pressure_unit: "hPa", wind_speed_unit: "km/h", friendly_name: "Ville-Érable" });
   entities["weather.ville_erable"] = { platform: "environment_canada", device_id: "dev_ec" };
   const ec = EC_ALERTS();
   for (const [k, fr] of [["warnings", "alertes"], ["watches", "veilles"], ["advisories", "avis"], ["statements", "bulletins"], ["endings", "terminaisons"]]) {
@@ -146,6 +146,23 @@ function hassFor() {
     add(id, list.length, list.length ? attrs : {});
     entities[id] = { platform: "environment_canada", device_id: "dev_ec", translation_key: k };
   }
+  // autres capteurs Environnement Canada du même lieu (carte Météo : Canada), hiver avec la pluie, été avec le beau temps
+  const ecs = (fr, v, tk, a = {}) => { add(`sensor.ville_erable_${fr}`, v, { location: "Ville-Érable", station: "Station-Exemple", ...a }); entities[`sensor.ville_erable_${fr}`] = { platform: "environment_canada", device_id: "dev_ec", translation_key: tk }; };
+  ecs("temperature", rainy ? -18.4 : 31.2, undefined, { device_class: "temperature", unit_of_measurement: "°C" });
+  ecs("humidite", rainy ? 72 : 64, undefined, { device_class: "humidity", unit_of_measurement: "%" });
+  ecs("vitesse_du_vent", rainy ? 32 : 12, undefined, { device_class: "wind_speed", unit_of_measurement: "km/h" });
+  ecs("condition_actuelle", rainy ? "Neige légère et poudrerie" : "Généralement ensoleillé", "condition");
+  ecs("temperature_maximale", rainy ? -14 : 33, "high_temp"); ecs("temperature_minimale", rainy ? -24 : 21, "low_temp");
+  ecs("probabilite_de_precipitations", rainy ? 70 : 10, "pop");
+  ecs("refroidissement_eolien", rainy ? -31 : "unknown", "wind_chill"); ecs("humidex", rainy ? "unknown" : 41, "humidex");
+  ecs("cas", rainy ? 3 : 7, "aqhi"); ecs("indice_uv", rainy ? 1 : 8, "uv_index");
+  ecs("rafales", rainy ? 55 : 20, "wind_gust"); ecs("direction_du_vent", rainy ? "NO" : "SO", "wind_dir");
+  ecs("pression", rainy ? 102.4 : 100.9, "pressure", { unit_of_measurement: "kPa" }); ecs("tendance", rainy ? "À la hausse" : "À la baisse", "tendency");
+  ecs("point_de_rosee", rainy ? -22 : 23, "dewpoint"); ecs("visibilite", rainy ? 4 : 24, "visibility");
+  ecs("normale_maximale", rainy ? -6 : 26, "normal_high"); ecs("normale_minimale", rainy ? -15 : 15, "normal_low");
+  ecs("resume", rainy ? "Neige intermittente et poudrerie. Accumulation de 10 cm. Vents du nord-ouest de 30 km/h avec rafales à 55. Maximum moins 14. Refroidissement éolien moins 31."
+    : "Généralement ensoleillé. Maximum 33, humidex 41. Indice UV de 8 ou très élevé.", "text_summary");
+  ecs("heure_d_observation", new Date(Date.now() - 20 * 60e3).toISOString(), "timestamp");
   // risque d'avalanche fictif (mêmes capteurs que l'intégration ha-serac), massif inventé
   const av = scen === "pluie" ? [4, 3, 4, 2] : [2, 2, 2, 1], avb = "sensor.serac_demo_massif_exemple_avalanche_";
   add(`${avb}risk_today`, av[0], { risk_comment: "Neige fraîche et vent fort" }, "serac");
@@ -182,10 +199,10 @@ const host = document.getElementById("host");
 // alertes Environnement Canada fictives (même format que l'action environment_canada.get_alerts)
 function EC_ALERTS() {
   const t = (h) => new Date(Math.floor(Date.now() / HOUR) * HOUR + h * HOUR).toISOString();
-  if (scen !== "pluie") return { warnings: [], watches: [], advisories: [], statements: [], endings: [{ title: "Avertissement de vent terminé", date: t(-30) }] };
+  if (scen !== "pluie") return { warnings: [{ title: "Avertissement de chaleur en vigueur", date: t(-3), alert_colour_level: "yellow", expiry_time: t(30) }], watches: [], advisories: [], statements: [], endings: [{ title: "Avertissement de vent terminé", date: t(-30) }] };
   return {
-    warnings: [{ title: "Avertissement de vent en vigueur", date: t(-2), alert_colour_level: "orange", expiry_time: t(9) }],
-    watches: [{ title: "Veille d'orages violents en vigueur", date: t(-1), alert_colour_level: "yellow", expiry_time: t(5) }],
+    warnings: [{ title: "Avertissement de froid extrême en vigueur", date: t(-2), alert_colour_level: "orange", expiry_time: t(9) }],
+    watches: [{ title: "Veille de tempête hivernale en vigueur", date: t(-1), alert_colour_level: "yellow", expiry_time: t(20) }],
     advisories: [],
     statements: [{ title: "Bulletin météorologique spécial en vigueur", date: t(-5) }],
     endings: [],
@@ -316,6 +333,7 @@ const cards = {
   montagne: document.createElement("meteo-montagne-card"),
   plage: document.createElement("meteo-plage-card"),
   marine: document.createElement("meteo-marine-card"),
+  canada: document.createElement("meteo-canada-card"),
 };
 Object.values(cards).forEach((c) => host.appendChild(c));
 function apply() {
@@ -328,6 +346,7 @@ function apply() {
   cards.air.setConfig({ theme: t });
   cards.eclairs.setConfig({ theme: t, month_counter: "sensor.eclairs_du_mois" });
   cards.ecowatt.setConfig({ theme: t });
+  cards.canada.setConfig({ theme: t });
   cards.crues.setConfig({ theme: t });
   cards.feux.setConfig({ theme: t });
   cards.seismes.setConfig({ theme: t });

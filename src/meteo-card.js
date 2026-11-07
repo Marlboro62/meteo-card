@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.14.0";
+const CARD_VERSION = "3.15.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1877,6 +1877,197 @@ class MeteoAirCard extends MeteoBase {
     this._card(body);
   }
 }
+
+/* ------------------------------------------------- carte Météo canadienne */
+
+const CANADA_DEFAULTS = { title: "", show_alerts: true, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
+/** Clés des capteurs de l'intégration (translation_key), et la fin de leur identifiant en repli. */
+const CA_KEYS = ["condition", "dewpoint", "high_temp", "humidex", "low_temp", "normal_high", "normal_low", "pop", "pressure", "tendency", "text_summary",
+  "timestamp", "uv_index", "visibility", "wind_bearing", "wind_chill", "wind_dir", "wind_gust", "aqhi", ...Object.keys(EC_KINDS)];
+/** Cote air santé (CAS / AQHI) : couleurs officielles 1 à 10+, catégories de risque. */
+const AQHI_COLOR = ["#00ccff", "#00ccff", "#0099cc", "#006699", "#ffff00", "#ffcc00", "#ff9933", "#ff6666", "#ff0000", "#cc0000", "#990000", "#660000"];
+const aqhiRisk = (v) => (v <= 3 ? "Risque faible" : v <= 6 ? "Risque modéré" : v <= 10 ? "Risque élevé" : "Risque très élevé");
+/** Indice UV : catégorie et couleur. */
+const uvRisk = (v) => (v < 3 ? ["Faible", "#5fcf8a"] : v < 6 ? ["Modéré", "#f7c948"] : v < 8 ? ["Élevé", "#ff8c33"] : v < 11 ? ["Très élevé", "#ee4a4a"] : ["Extrême", "#a35cd6"]);
+/** Refroidissement éolien (Environnement Canada) : risque et temps avant les engelures. */
+const windChillRisk = (v) => (v > -10 ? ["Risque faible", "#5fcf8a", "Peu d'inconfort."]
+  : v > -28 ? ["Risque modéré", "#f7c948", "Couvrez-vous : inconfort, risque d'hypothermie si l'on reste longtemps dehors."]
+    : v > -40 ? ["Risque élevé", "#ff8c33", "Engelures possibles en 10 à 30 minutes sur la peau exposée."]
+      : v > -48 ? ["Risque très élevé", "#ee4a4a", "Engelures possibles en 5 à 10 minutes."]
+        : v > -55 ? ["Risque grave", "#b3172f", "Engelures possibles en 2 à 5 minutes."]
+          : ["Risque extrêmement grave", "#7a0b1f", "Engelures possibles en moins de 2 minutes : restez à l'intérieur."]);
+/** Humidex : degré d'inconfort. */
+const humidexRisk = (v) => (v < 30 ? ["Confortable", "#5fcf8a", ""]
+  : v < 40 ? ["Inconfort", "#f7c948", "Buvez souvent."]
+    : v < 46 ? ["Grand inconfort", "#ff8c33", "Évitez les efforts, buvez souvent."]
+      : ["Danger", "#ee4a4a", "Coup de chaleur possible : restez au frais."]);
+
+class MeteoCanadaCard extends MeteoBase {
+  static get defaults() {
+    return CANADA_DEFAULTS;
+  }
+
+  static getConfigElement() {
+    return document.createElement("meteo-canada-card-editor");
+  }
+
+  getCardSize() {
+    return 7;
+  }
+
+  /** Capteurs d'Environnement Canada, groupés par emplacement (un appareil par emplacement configuré). */
+  _find() {
+    const st = this._hass.states, reg = this._hass.entities || {}, c = this._config;
+    const ids = Object.keys(st).filter((id) => reg[id]?.platform === "environment_canada"
+      || (!reg[id] && /^(sensor|weather)\./.test(id) && st[id]?.attributes?.attribution && /environment canada|environnement canada/i.test(st[id].attributes.attribution)));
+    if (!ids.length) return null;
+    // emplacement : celui de la prévision choisie, sinon le premier
+    const devOf = (id) => reg[id]?.device_id || "_";
+    const weather = c.weather && st[c.weather] ? c.weather : ids.find((id) => id.startsWith("weather."));
+    const dev = weather ? devOf(weather) : devOf(ids[0]);
+    const mine = ids.filter((id) => devOf(id) === dev);
+    const out = { weather: weather && devOf(weather) === dev ? weather : mine.find((id) => id.startsWith("weather.")) };
+    const sensors = mine.filter((id) => id.startsWith("sensor."));
+    for (const k of CA_KEYS) {
+      out[k] = c[k] || sensors.find((id) => reg[id]?.translation_key === k) || sensors.find((id) => id.endsWith(`_${k}`) || id === `sensor.${k}` || (EC_KINDS[k] && !reg[id]?.translation_key && EC_KINDS[k].re.test(id)));
+    }
+    // température, humidité et vent : sans clé de traduction, reconnus à leur classe d'appareil
+    const free = sensors.filter((id) => !reg[id]?.translation_key);
+    const byClass = (dc) => free.find((id) => st[id]?.attributes?.device_class === dc);
+    out.temperature = c.temperature || byClass("temperature") || sensors.find((id) => /_temperature$/.test(id) && !/_(high|low|normal)/.test(id));
+    out.humidity = c.humidity || byClass("humidity") || sensors.find((id) => /_humidity$/.test(id));
+    out.wind_speed = c.wind_speed || byClass("wind_speed") || sensors.find((id) => /_wind_speed$/.test(id));
+    return out;
+  }
+
+  /** Alertes d'un capteur : attributs alert_1, alert_time_1… */
+  _alerts(id) {
+    const a = this._st(id)?.attributes || {};
+    const list = [];
+    for (let i = 1; a[`alert_${i}`] !== undefined; i++) list.push({ title: String(a[`alert_${i}`] || ""), time: a[`alert_time_${i}`] });
+    return list;
+  }
+
+  _render() {
+    if (!this._config || !this._hass || !this.shadowRoot) return;
+    const c = this._config;
+    const f = this._find();
+    const ids = f ? Object.values(f).filter(Boolean) : [];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    if (sig === this._sig) return;
+    this._sig = sig;
+    if (!f) {
+      this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", "")
+        + `<div class="empty"><b>Environnement Canada introuvable</b><span>Ajoutez l'intégration Environnement Canada dans Paramètres › Appareils et services, en choisissant le français.</span></div>`);
+      return;
+    }
+    const v = (k) => this._num(f[k]);
+    const s = (k) => { const x = this._st(f[k])?.state; return x && !/^(unknown|unavailable|none)$/i.test(x) ? x : null; };
+    const unit = (k, d = "") => this._st(f[k])?.attributes?.unit_of_measurement || d;
+    const anyAttr = ids.map((id) => this._st(id)?.attributes).find((a) => a?.location);
+    const place = anyAttr?.location || this._st(f.weather)?.attributes?.friendly_name || "";
+    const parts = [];
+
+    // en-tête : température, condition, maximum et minimum
+    const t = v("temperature"), hi = v("high_temp"), lo = v("low_temp");
+    const wst = this._st(f.weather);
+    const cond = s("condition") || (wst && COND[wst.state]?.[0]) || "";
+    const icon = (wst && COND[wst.state]?.[1]) || "mdi:weather-partly-cloudy";
+    const icol = (wst && COND[wst.state]?.[2]) || "#8fa0b8";
+    if (t !== null || cond) {
+      parts.push(`<div class="ca-hero" data-entity="${esc(f.weather || f.temperature || "")}">
+        <ha-icon icon="${esc(icon)}" style="color:${safeColor(icol)}"></ha-icon>
+        <div class="ca-ht"><b>${t !== null ? `${fmt(t, 1)} °C` : "—"}</b><span>${esc(cond)}</span></div>
+        <div class="ca-hl">${hi !== null ? `<span><ha-icon icon="mdi:arrow-up"></ha-icon>${fmt(hi, 0)}°</span>` : ""}${lo !== null ? `<span><ha-icon icon="mdi:arrow-down"></ha-icon>${fmt(lo, 0)}°</span>` : ""}
+          ${v("pop") !== null ? `<span><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(v("pop"), 0)} %</span>` : ""}</div>
+      </div>`);
+    }
+
+    // alertes : même lecture que la carte Météo (couleur réelle et heure de fin par environment_canada.get_alerts)
+    if (c.show_alerts !== false) {
+      const ec = {};
+      for (const k of Object.keys(EC_KINDS)) if (f[k]) ec[k] = f[k];
+      if (Object.keys(ec).length) {
+        this._ecFetch(ec);
+        const vg = this._ecVigilance(ec);
+        const when = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleString("fr-CA", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""; };
+        const rows = (vg?.active || []).map((a) => {
+          const col = a.info ? INFO_COLOR : LEVEL_COLOR[Math.max(1, a.level)];
+          const meta = [a.label, a.since ? `depuis ${when(a.since)}` : "", a.until ? `jusqu'à ${when(a.until)}` : ""].filter(Boolean).join(" · ");
+          return `<div class="ca-al" data-entity="${esc(a.entity)}" style="--pc:${col}"><ha-icon icon="${esc(phenoIcon(a.name) !== "mdi:alert" ? phenoIcon(a.name) : a.icon)}"></ha-icon>
+            <div><small>${esc(meta)}</small><b>${esc(a.name)}</b></div></div>`;
+        });
+        // alertes levées : rappel discret
+        const ended = this._alerts(f.endings).map((a) => `<span class="w-i" data-entity="${esc(f.endings)}" style="--pc:#5fcf8a"><ha-icon icon="mdi:check-circle-outline"></ha-icon>${esc(a.title)}</span>`).join("");
+        parts.push(`<div class="sec">Alertes météo${place ? ` · ${esc(place)}` : ""}</div>` + (rows.length ? `<div class="ca-als">${rows.join("")}</div>`
+          : `<div class="ca-al" data-entity="${esc(f.warnings || Object.values(ec)[0])}" style="--pc:#5fcf8a"><ha-icon icon="mdi:shield-check-outline"></ha-icon><div><b>Aucune alerte en vigueur</b></div></div>`)
+          + (ended ? `<div class="wl">${ended}</div>` : ""));
+      }
+    }
+
+    // ressenti : refroidissement éolien l'hiver, humidex l'été
+    if (c.show_feel !== false) {
+      const wc = v("wind_chill"), hx = v("humidex");
+      const feel = (id, title, val, [label, col, tip], scale) => `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${scale}" style="color:${col}"></ha-icon>
+        <div class="pol-t"><span>${esc(title)}</span><b style="color:${col}">${fmt(val, 0)}${title === "Humidex" ? "" : " °C"} · ${esc(label)}</b>${tip ? `<span class="ca-tip">${esc(tip)}</span>` : ""}</div></div>`;
+      const rows = [];
+      if (wc !== null) rows.push(feel(f.wind_chill, "Refroidissement éolien", wc, windChillRisk(wc), "mdi:snowflake-thermometer"));
+      if (hx !== null) rows.push(feel(f.humidex, "Humidex", hx, humidexRisk(hx), "mdi:sun-thermometer"));
+      if (rows.length) parts.push(`<div class="sec">Ressenti</div><div class="ca-col">${rows.join("")}</div>`);
+    }
+
+    // cote air santé et indice UV
+    if (c.show_air !== false) {
+      const rows = [];
+      const aq = v("aqhi");
+      if (aq !== null) {
+        // barre aux couleurs officielles ; texte et icône dans une couleur lisible sur fond sombre
+        const lv = Math.max(1, Math.min(11, Math.round(aq))), col = lv <= 3 ? "#33c4ee" : lv <= 6 ? "#f7c948" : lv <= 10 ? "#ff6b6b" : "#d9534f";
+        rows.push(`<div class="pol" data-entity="${esc(f.aqhi)}"><ha-icon icon="mdi:air-filter" style="color:${col}"></ha-icon>
+          <div class="pol-t"><span>Cote air santé</span><b style="color:${col}">${lv > 10 ? "10+" : fmt(aq, 0)} · ${esc(aqhiRisk(aq))}</b></div>
+          <div class="pol-r"><div class="wbar">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => `<i style="background:${AQHI_COLOR[i]};opacity:${i <= lv ? 1 : 0.22}"></i>`).join("")}</div></div></div>`);
+      }
+      const uv = v("uv_index");
+      if (uv !== null) {
+        const [label, col] = uvRisk(uv);
+        rows.push(`<div class="pol" data-entity="${esc(f.uv_index)}"><ha-icon icon="mdi:sun-wireless-outline" style="color:${col}"></ha-icon>
+          <div class="pol-t"><span>Indice UV</span><b style="color:${col}">${fmt(uv, 0)} · ${esc(label)}</b></div>
+          <div class="pol-r"><div class="rbar"><i style="width:${Math.min(100, (uv / 11) * 100).toFixed(0)}%;background:${col}"></i></div><b>${fmt(uv, 0)}/11+</b></div></div>`);
+      }
+      if (rows.length) parts.push(`<div class="sec">Air et soleil</div><div class="ca-col">${rows.join("")}</div>`);
+    }
+
+    // détails
+    if (c.show_details !== false) {
+      const tile = (k, icon, name, val) => val === null || val === undefined || val === "" ? "" : `<div class="pl-t" data-entity="${esc(f[k])}" style="--pc:#3f9ff0">
+        <ha-icon icon="${esc(icon)}"></ha-icon><div class="pl-n">${esc(name)}</div><div class="pl-v">${esc(val)}</div></div>`;
+      const ws = v("wind_speed"), wg = v("wind_gust");
+      const wind = ws !== null ? `${fmt(ws, 0)} km/h${s("wind_dir") ? ` ${s("wind_dir")}` : ""}${wg !== null ? ` · rafales ${fmt(wg, 0)}` : ""}` : null;
+      const pr = v("pressure");
+      const tiles = [
+        tile("wind_speed", "mdi:weather-windy", "Vent", wind),
+        tile("pressure", "mdi:gauge", "Pression", pr !== null ? `${fmt(pr, 1)} ${unit("pressure", "kPa")}${s("tendency") ? ` · ${s("tendency")}` : ""}` : null),
+        tile("humidity", "mdi:water-percent", "Humidité", v("humidity") !== null ? `${fmt(v("humidity"), 0)} %` : null),
+        tile("dewpoint", "mdi:water-thermometer", "Point de rosée", v("dewpoint") !== null ? `${fmt(v("dewpoint"), 0)} °C` : null),
+        tile("visibility", "mdi:eye-outline", "Visibilité", v("visibility") !== null ? `${fmt(v("visibility"), 0)} km` : null),
+        tile("normal_high", "mdi:chart-bell-curve", "Normales", v("normal_high") !== null || v("normal_low") !== null ? `${fmt(v("normal_high"), 0)}° / ${fmt(v("normal_low"), 0)}°` : null),
+      ].join("");
+      if (tiles) parts.push(`<div class="sec">Détails</div><div class="plants">${tiles}</div>`);
+    }
+
+    // résumé du jour
+    const sum = s("text_summary");
+    if (c.show_summary !== false && sum) parts.push(`<div class="sec">Prévision</div><div class="ca-sum" data-entity="${esc(f.text_summary)}">${esc(sum)}</div>`);
+
+    const ts = this._st(f.timestamp)?.state;
+    const obs = ts && !isNaN(new Date(ts)) ? `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}` : "";
+    const sub = [place, obs].filter(Boolean).join(" · ");
+    this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", sub) + parts.join("") + `<div class="ca-src">Données : Environnement et Changement climatique Canada</div>`);
+  }
+}
+
+// lecture des alertes Environnement Canada : les mêmes fonctions que la carte Météo
+for (const m of ["_ecSig", "_ecFetch", "_ecVigilance"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
 
 /* ---------------------------------------------------------- carte Éclairs */
 
@@ -3808,6 +3999,19 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .ew-h:focus-visible { outline: 2px solid var(--med-accent, var(--med-blue)); }
 .ew-tk { display: flex; justify-content: space-between; margin: 3px 24px 0; font-size: .62rem; color: var(--med-muted); }
 .ew-lg { margin: 8px 14px 0; } .ew-msg { margin-top: 8px; }
+.ca-hero { display: flex; align-items: center; gap: 14px; margin: 4px 14px 0; padding: 10px 12px; border-radius: 14px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; flex-wrap: wrap; }
+.ca-hero > ha-icon { --mdc-icon-size: 46px; }
+.ca-ht { display: flex; flex-direction: column; } .ca-ht b { font-size: 1.9rem; line-height: 1.1; } .ca-ht span { font-size: .84rem; color: var(--med-muted); }
+.ca-hl { margin-left: auto; display: flex; gap: 10px; font-size: .84rem; color: var(--med-muted); } .ca-hl span { display: inline-flex; align-items: center; gap: 2px; } .ca-hl ha-icon { --mdc-icon-size: 16px; }
+.ca-als, .ca-col { display: grid; gap: 6px; }
+.ca-al { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer;
+  background: color-mix(in srgb, var(--pc) 12%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--pc) 60%, transparent); }
+.ca-al > ha-icon { --mdc-icon-size: 26px; color: var(--pc); flex: 0 0 auto; }
+.ca-al div { display: flex; flex-direction: column; min-width: 0; } .ca-al small { font-size: .72rem; color: var(--pc); font-weight: 700; } .ca-al b { font-size: .86rem; overflow-wrap: anywhere; }
+ha-card.light .ca-al small { filter: brightness(.75); }
+.ca-tip { font-size: .72rem; }
+.ca-sum { margin: 0 14px; padding: 10px 12px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); font-size: .84rem; line-height: 1.4; cursor: pointer; }
+.ca-src { margin: 12px 16px 14px; font-size: .66rem; color: var(--med-muted); text-align: right; }
 </style>`;
 
 /* ----------------------------------------------------------------- éditeur */
@@ -4207,6 +4411,28 @@ const MONTAGNE_LABELS = {
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
+const CANADA_SCHEMA = [
+  { name: "title", selector: { text: {} } },
+  { name: "weather", selector: { entity: { domain: "weather", integration: "environment_canada" } } },
+  { name: "show_alerts", selector: { boolean: {} } },
+  { name: "show_feel", selector: { boolean: {} } },
+  { name: "show_air", selector: { boolean: {} } },
+  { name: "show_details", selector: { boolean: {} } },
+  { name: "show_summary", selector: { boolean: {} } },
+  THEME_SELECT,
+  TEXT_SIZE,
+];
+const CANADA_LABELS = {
+  title: "Titre (Météo canadienne par défaut)",
+  weather: "Emplacement : prévision Environnement Canada (vide = la première)",
+  show_alerts: "Alertes météo (avertissements, veilles, avis…)",
+  show_feel: "Refroidissement éolien et humidex",
+  show_air: "Cote air santé et indice UV",
+  show_details: "Détails (vent, pression, humidité…)",
+  show_summary: "Prévision du jour en texte",
+  theme: "Couleurs de la carte",
+  text_size: "Taille du texte (%)",
+};
 const makeEditor = (schema, labels, defaults) => class extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
@@ -4287,6 +4513,8 @@ if (typeof customElements !== "undefined") {
   define("meteo-plage-card-editor", makeEditor(PLAGE_SCHEMA, PLAGE_LABELS, PLAGE_DEFAULTS));
   define("meteo-montagne-card", MeteoMontagneCard);
   define("meteo-montagne-card-editor", makeEditor(MONTAGNE_SCHEMA, MONTAGNE_LABELS, MONTAGNE_DEFAULTS));
+  define("meteo-canada-card", MeteoCanadaCard);
+  define("meteo-canada-card-editor", makeEditor(CANADA_SCHEMA, CANADA_LABELS, CANADA_DEFAULTS));
   define("meteo-bolides-card", MeteoBolidesCard);
   define("meteo-bolides-card-editor", makeEditor(BOLIDES_SCHEMA, BOLIDES_LABELS, BOLIDES_DEFAULTS));
   window.customCards = window.customCards || [];
@@ -4303,6 +4531,7 @@ if (typeof customElements !== "undefined") {
     { type: "meteo-marine-card", name: "Carte Météo : marine", description: "Zones en mer : vent en nœuds et force Beaufort, rafales, mer et houle, visibilité, pression, courant, avis de grand frais, prévisions heure par heure." },
     { type: "meteo-plage-card", name: "Carte Météo : plage", description: "Plages en onglets : air, eau, UV, vent, vagues et houle, marée (pleines et basses mers), prévisions des prochains jours." },
     { type: "meteo-montagne-card", name: "Carte Météo : montagne", description: "Stations de ski et sommets : températures au pied et au sommet, isotherme 0 °C, neige fraîche et au sol, prévisions, risque d'avalanche (ha-serac)." },
+    { type: "meteo-canada-card", name: "Carte Météo : Canada", description: "Environnement Canada : alertes (avertissements, veilles, avis), refroidissement éolien et humidex, cote air santé, indice UV, détails et prévision du jour." },
     { type: "meteo-seismes-card", name: "Carte Météo : séismes", description: "Séismes autour de chez vous et dans le monde, sur une boussole et en liste (EMSC, USGS, ou intégrations USGS et GDACS)." },
   ]) if (!window.customCards.some((c) => c.type === card.type)) window.customCards.push({ ...card, preview: true });
   console.info(`%c METEO-CARD %c ${CARD_VERSION} `, "background:#96d21f;color:#1a2434;font-weight:700", "background:#1d93e3;color:#fff");

@@ -44,6 +44,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Air, pollens et eau** | `custom:meteo-air-card` | **Qualité de l'air** et polluants (Atmo France), **pollens** avec niveau et concentration, **vigilance sécheresse** (VigiEau) |
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
 | **EcoWatt** | `custom:meteo-ecowatt-card` | **Risque de coupures d'électricité** : signal EcoWatt de RTE aujourd'hui, demain et après-demain, **heure par heure** (cases cliquables), avec la France à la couleur du jour choisi (MyElectricalData ou RTE EcoWatt) |
+| **Canada** | `custom:meteo-canada-card` | **Environnement Canada** : **alertes** (avertissements, veilles, avis, bulletins) avec leur couleur et leur heure de fin, **refroidissement éolien** et **humidex** avec le risque, **cote air santé (CAS)**, **indice UV**, détails et prévision du jour |
 | **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Montagne** | `custom:meteo-montagne-card` | **Stations de ski et sommets** en onglets : température **au pied et au sommet**, **isotherme 0 °C**, **neige fraîche** (24 h passées, 72 h à venir), **neige au sol**, prévisions, et **risque d'avalanche** du bulletin Météo-France (avec [ha-serac](https://github.com/atacamalabs/ha-serac)) |
@@ -95,6 +96,10 @@ Elles ont le même style que la [Carte Enedis Linky New](https://github.com/Marl
 Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, tabbed-card, card-mod, meteofrance-weather-card, compass-card, tempometer-gauge-card, rain-gauge-card, uv-index-card, sun-card, button-card, bar-card, auto-entities, popup-card…
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
+
+## Nouveautés de la 3.15.0
+
+- **Nouvelle carte Canada** (`custom:meteo-canada-card`) pour l'intégration **Environnement Canada** : alertes météo, refroidissement éolien l'hiver et humidex l'été avec le niveau de risque, cote air santé, indice UV, détails et prévision du jour. Voir [Carte Canada](#carte-canada).
 
 ## Nouveautés de la 3.14.0
 
@@ -434,6 +439,37 @@ Les capteurs `sensor.myelectricaldata_ecowatt_j0`, `_j1` et `_j2` de l'export Ho
 | `show_home` | Votre maison sur la carte de France | `false` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+## Carte Canada
+
+```yaml
+type: custom:meteo-canada-card
+```
+
+Pour l'intégration officielle **Environnement Canada** (**Paramètres › Appareils et services › Ajouter une intégration › Environnement Canada**). Choisissez le **français** à l'ajout : les conditions, les alertes et la prévision arrivent alors en français. Tous les capteurs sont trouvés tout seuls.
+
+- **En-tête** : température, condition actuelle, maximum, minimum et probabilité de précipitations.
+- **Alertes météo** : une ligne par alerte en cours (avertissement, veille, avis, bulletin), avec sa **couleur réelle** (jaune, orange, rouge), depuis quand et jusqu'à quand. Les alertes levées sont rappelées en vert. Sans alerte : « Aucune alerte en vigueur ». Comme dans la carte Météo, la couleur et l'heure de fin viennent de l'action `environment_canada.get_alerts` (voir [Alertes Environnement Canada](#alertes-environnement-canada)).
+- **Ressenti** : le **refroidissement éolien** l'hiver, avec le risque et le temps avant les engelures (échelle d'Environnement Canada : modéré dès −10, élevé dès −28, très élevé dès −40, grave dès −48, extrêmement grave dès −55), et l'**humidex** l'été (inconfort dès 30, grand inconfort dès 40, danger dès 46).
+- **Air et soleil** : la **cote air santé** (1 à 10+, risque faible, modéré, élevé ou très élevé, aux couleurs officielles) et l'**indice UV** (faible à extrême).
+- **Détails** : vent et rafales, pression et tendance, humidité, point de rosée, visibilité, normales de saison.
+- **Prévision** : le résumé du jour en texte.
+
+Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configurés, choisissez-en un avec `weather`.
+
+| Option | Rôle | Défaut |
+| --- | --- | --- |
+| `title` | Titre | `Météo canadienne` |
+| `weather` | Lieu : l'entité météo Environnement Canada de ce lieu | le premier lieu |
+| `show_alerts` | Alertes météo | `true` |
+| `show_feel` | Refroidissement éolien et humidex | `true` |
+| `show_air` | Cote air santé et indice UV | `true` |
+| `show_details` | Détails (vent, pression, humidité…) | `true` |
+| `show_summary` | Prévision du jour en texte | `true` |
+| `theme` | Couleurs de la carte | `v2` |
+| `text_size` | Taille du texte, en % (80 à 160) | `100` |
+
+Pour les prévisions par heure et par jour, ajoutez la carte **Météo** avec la même entité météo (`custom:meteo-card`).
 
 ## Carte Crues et rivières
 
