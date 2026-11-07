@@ -4,7 +4,7 @@
 //   chargé par la carte seulement quand une carte interactive s'affiche.
 // Les bibliothèques sont reprises telles que publiées sur npm (versions fixées dans package.json).
 import { build } from "esbuild";
-import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -35,4 +35,6 @@ await build({
   legalComments: "inline",
   banner: { js: "/* Carte Météo : Leaflet (BSD-2-Clause), MapLibre GL JS (BSD-3-Clause), maplibre-gl-leaflet (ISC). Licences dans les commentaires ci-dessous. */" },
 });
+// worker de MapLibre 6 (fichier autonome), sans la ligne de carte des sources : aucune requête inutile
+writeFileSync("dist/meteo-card-maps-worker.js", readFileSync(require.resolve("maplibre-gl/dist/maplibre-gl-worker.mjs"), "utf8").replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n"));
 console.log("dist/ construit");
