@@ -100,6 +100,7 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 ## Nouveautés de la 3.15.0
 
 - **Nouvelle carte Canada** (`custom:meteo-canada-card`) pour l'intégration **Environnement Canada** : alertes météo, refroidissement éolien l'hiver et humidex l'été avec le niveau de risque, cote air santé, indice UV, détails et prévision du jour. Voir [Carte Canada](#carte-canada).
+- **Sécurité** : MapLibre GL, qui dessine les fonds de carte des cartes Séismes, Feux de forêt, Crues et Bolides, passe en version 6.15.0. Cette version corrige une faille critique (GHSA-jrc7-96c5-q579).
 
 ## Nouveautés de la 3.14.0
 
