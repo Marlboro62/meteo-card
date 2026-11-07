@@ -181,7 +181,7 @@ Si la carte n'apparaît pas encore dans la recherche de HACS, ajoutez le dépôt
 
 ### Manuellement
 
-1. Téléchargez les deux fichiers du dossier [`dist`](https://github.com/Marlboro62/meteo-card/tree/main/dist) : `meteo-card.js` et `meteo-card-maps.js` (les bibliothèques des cartes interactives). Copiez-les ensemble dans `/config/www/`.
+1. Téléchargez les fichiers du dossier [`dist`](https://github.com/Marlboro62/meteo-card/tree/main/dist) : `meteo-card.js`, `meteo-card-maps.js` et `meteo-card-maps-worker.js` (les bibliothèques des cartes interactives), avec le dossier `icons`. Copiez-les ensemble dans `/config/www/`.
 2. **Paramètres → Tableaux de bord → ⋮ → Ressources → Ajouter une ressource** :
    - URL : `/local/meteo-card.js`
    - Type : **Module JavaScript**
