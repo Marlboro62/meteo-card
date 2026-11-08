@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.16.0";
+const CARD_VERSION = "3.16.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1808,9 +1808,18 @@ class MeteoAirCard extends MeteoBase {
     const isLevel = (id) => !/numeri|numeric/.test(id) && WATER.some(([re]) => re.test(st[id].state));
     const waters = c.water ? [].concat(c.water)
       : ids.filter((id) => (reg[id]?.platform === "vigieau" && /alert|niveau/.test(id)) || /(^sensor\.|_)alert_level$|secheresse/.test(id)).filter(isLevel);
-    // usages interdits : capteurs binaires VigiEau à « off » (non autorisé), sans doublon entre types d'eau
-    const bans = [...new Set(Object.keys(st).filter((id) => id.startsWith("binary_sensor.") && reg[id]?.platform === "vigieau" && st[id].state === "off")
-      .map((id) => String(st[id].attributes?.friendly_name || id).replace(/^vigieau\s+.*?\s+(aep|sou|sup)\s+/i, "").replace(/\s+autoris.*$/i, "").trim()))];
+    // usages interdits : capteurs binaires VigiEau à « off » (non autorisé), un badge par usage (AEP, SOU et SUP réunis).
+    // Le plus sévère est gardé : « Interdiction » (rouge) passe avant une interdiction partielle (orange :
+    // sauf exception, sur plage horaire, réduction de prélèvement…). Un clic ouvre la fiche de l'entité.
+    const sev = (r) => /^interdiction$/i.test(String(r || "").trim()) || !r ? 2 : 1;
+    const byName = new Map();
+    for (const id of Object.keys(st).filter((x) => x.startsWith("binary_sensor.") && reg[x]?.platform === "vigieau" && st[x].state === "off")) {
+      const name = String(st[id].attributes?.friendly_name || id).replace(/^vigieau\s+.*?\s+(aep|sou|sup)\s+/i, "").replace(/\s+autoris.*$/i, "").trim();
+      const restriction = String(st[id].attributes?.restriction || "").trim();
+      const prev = byName.get(name);
+      if (!prev || sev(restriction) > sev(prev.restriction)) byName.set(name, { name, id, restriction, partial: sev(restriction) < 2 });
+    }
+    const bans = [...byName.values()];
     return { air, pollen, pollutants, plants, waters, bans };
   }
 
@@ -1829,7 +1838,7 @@ class MeteoAirCard extends MeteoBase {
     const c = this._config;
     const f = this._find();
     const ids = [f.air, f.pollen, ...f.waters, ...f.pollutants, ...f.plants.flatMap((p) => [p.level, p.concentration])];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|") + `|${f.bans.join(",")}`;
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => this._st(id)?.state).join("|") + `|${f.bans.map((b) => `${b.id}:${b.restriction}`).join(",")}`;
     if (sig === this._sig) return;
     this._sig = sig;
     const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${esc(icon)}" style="color:${safeColor(a.color)}"></ha-icon>
@@ -1867,7 +1876,7 @@ class MeteoAirCard extends MeteoBase {
       const top = levels.reduce((a, b) => ((b.lv ?? -1) > (a.lv ?? -1) ? b : a));
       const lv = top.lv, col = lv === null ? ATMO_COLOR[0] : WATER_COLOR[lv];
       const detail = levels.length > 1 ? `<div class="wl">${levels.map((l) => `<span class="w-i" data-entity="${esc(l.id)}" style="--pc:${l.lv === null ? ATMO_COLOR[0] : WATER_COLOR[l.lv]}">${esc(l.type || l.id)}<b>${esc(l.label)}</b></span>`).join("")}</div>` : "";
-      const bans = f.bans.length ? `<div class="wl">${f.bans.map((b) => `<span class="w-b"><ha-icon icon="mdi:water-off"></ha-icon>${esc(b)}</span>`).join("")}</div>` : "";
+      const bans = f.bans.length ? `<div class="wl">${f.bans.map((b) => `<span class="w-b${b.partial ? " part" : ""}" data-entity="${esc(b.id)}" title="${esc(b.restriction || "Interdiction")}"><ha-icon icon="${b.partial ? "mdi:water-alert" : "mdi:water-off"}"></ha-icon>${esc(b.name)}${b.partial && b.restriction ? `<small>${esc(b.restriction)}</small>` : ""}</span>`).join("")}</div>` : "";
       parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(top.id)}"><ha-icon icon="mdi:water-alert" style="color:${col}"></ha-icon>
         <div class="pol-t"><span>Vigilance sécheresse${top.area ? ` · ${esc(top.area)}` : ""}</span><b style="color:${col}">${esc(top.label)}${lv !== null ? ` (${lv})` : ""}</b></div>
         ${lv !== null ? `<div class="pol-r"><div class="wbar">${[0, 1, 2, 3, 4].map((i) => `<i style="background:${WATER_COLOR[i]};opacity:${i <= lv ? 1 : 0.25}"></i>`).join("")}</div></div>` : ""}</div>${detail}${bans}`);
@@ -3846,6 +3855,10 @@ svg .pl.on { fill: #f7c948; }
 .w-b { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 7px; border-radius: 999px; font-size: .74rem;
   background: color-mix(in srgb, #ee4a4a 10%, var(--med-surface)); border: 1px solid color-mix(in srgb, #ee4a4a 45%, transparent); }
 .w-b ha-icon { --mdc-icon-size: 14px; color: #ee4a4a; }
+.w-b[data-entity] { cursor: pointer; }
+.w-b small { opacity: .75; margin-left: 2px; }
+.w-b.part { background: color-mix(in srgb, #f5a524 10%, var(--med-surface)); border-color: color-mix(in srgb, #f5a524 50%, transparent); }
+.w-b.part ha-icon { color: #f5a524; }
 .mt { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); }
 .mt > ha-icon { --mdc-icon-size: 30px; flex: none; }
 .mt-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }

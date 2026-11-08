@@ -377,7 +377,7 @@ type: custom:meteo-air-card
 - **Pollens** : indice pollens et une tuile par plante (ambroisie, armoise, aulne, bouleau, graminées, olivier) avec son niveau et sa concentration en µg/m³.
 - **Eau** : vigilance sécheresse, de « Pas de restriction » à « Crise », avec la zone et une barre à 5 niveaux.
 
-Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée. Seules les valeurs du jour sont affichées (les capteurs Atmo France du lendemain, « …-J+1 », sont ignorés). VigiEau : un niveau par type d'eau (eau potable, eaux souterraines, eaux superficielles) et les usages interdits.
+Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée. Seules les valeurs du jour sont affichées (les capteurs Atmo France du lendemain, « …-J+1 », sont ignorés). VigiEau : un niveau par type d'eau (eau potable, eaux souterraines, eaux superficielles) et un badge par usage interdit : **rouge** pour une interdiction, **orange** pour une interdiction partielle (sauf exception, sur plage horaire, réduction de prélèvement…), avec le détail. Un clic sur un badge ouvre la fiche de l'usage, avec le texte complet de la restriction.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
