@@ -451,7 +451,8 @@ Pour l'intégration officielle **Environnement Canada** (**Paramètres › Appar
 
 - **En-tête** : température, condition actuelle, maximum, minimum et probabilité de précipitations.
 - **Alertes météo** : une ligne par alerte en cours (avertissement, veille, avis, bulletin), avec sa **couleur réelle** (jaune, orange, rouge), depuis quand et jusqu'à quand. Les alertes levées sont rappelées en vert. Sans alerte : « Aucune alerte en vigueur ». Comme dans la carte Météo, la couleur et l'heure de fin viennent de l'action `environment_canada.get_alerts` (voir [Alertes Environnement Canada](#alertes-environnement-canada)).
-- **Ressenti** : le **refroidissement éolien** l'hiver, avec le risque et le temps avant les engelures (échelle d'Environnement Canada : modéré dès −10, élevé dès −28, très élevé dès −40, grave dès −48, extrêmement grave dès −55), et l'**humidex** l'été (inconfort dès 30, grand inconfort dès 40, danger dès 46).
+- **Prochaines heures** et **Prévisions** : les prévisions par heure (8 heures par défaut, jusqu'à 24) et par jour (7 jours) d'Environnement Canada, présentées comme dans la carte Météo : icône, température, minimum et maximum, probabilité de précipitations.
+- **Ressenti** : le **refroidissement éolien** l'hiver, avec le risque et le temps avant les engelures (échelle d'Environnement Canada : modéré dès −10, élevé dès −28, très élevé dès −40, grave dès −48, extrêmement grave dès −55), et l'**humidex** l'été (inconfort dès 30, grand inconfort dès 40, danger dès 46). Environnement Canada ne les publie que quand ils ont un sens : entre les saisons, leur état est « inconnu » et la section n'apparaît pas.
 - **Air et soleil** : la **cote air santé** (1 à 10+, risque faible, modéré, élevé ou très élevé, aux couleurs officielles) et l'**indice UV** (faible à extrême).
 - **Détails** : vent et rafales, pression et tendance, humidité, point de rosée, visibilité, normales de saison.
 - **Prévision** : le résumé du jour en texte.
@@ -463,6 +464,10 @@ Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configuré
 | `title` | Titre | `Météo canadienne` |
 | `weather` | Lieu : l'entité météo Environnement Canada de ce lieu | le premier lieu |
 | `show_alerts` | Alertes météo | `true` |
+| `show_hourly` | Prévisions par heure | `true` |
+| `hours` | Nombre d'heures affichées (1 à 24) | `8` |
+| `show_daily` | Prévisions par jour | `true` |
+| `days` | Nombre de jours affichés (1 à 7) | `7` |
 | `show_feel` | Refroidissement éolien et humidex | `true` |
 | `show_air` | Cote air santé et indice UV | `true` |
 | `show_details` | Détails (vent, pression, humidité…) | `true` |

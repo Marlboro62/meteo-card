@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.15.1";
+const CARD_VERSION = "3.16.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1880,7 +1880,7 @@ class MeteoAirCard extends MeteoBase {
 
 /* ------------------------------------------------- carte Météo canadienne */
 
-const CANADA_DEFAULTS = { title: "", show_alerts: true, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
+const CANADA_DEFAULTS = { title: "", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
 /** Clés des capteurs de l'intégration (translation_key), et la fin de leur identifiant en repli. */
 const CA_KEYS = ["condition", "dewpoint", "high_temp", "humidex", "low_temp", "normal_high", "normal_low", "pop", "pressure", "tendency", "text_summary",
   "timestamp", "uv_index", "visibility", "wind_bearing", "wind_chill", "wind_dir", "wind_gust", "aqhi", ...Object.keys(EC_KINDS)];
@@ -1938,6 +1938,12 @@ class MeteoCanadaCard extends MeteoBase {
     out.humidity = c.humidity || byClass("humidity") || sensors.find((id) => /_humidity$/.test(id));
     out.wind_speed = c.wind_speed || byClass("wind_speed") || sensors.find((id) => /_wind_speed$/.test(id));
     return out;
+  }
+
+  /** Prévisions affichées : par heure puis par jour (options show_hourly et show_daily). */
+  _types() {
+    const c = this._config;
+    return [c.show_hourly !== false && "hourly", c.show_daily !== false && "daily"].filter(Boolean);
   }
 
   /** Alertes d'un capteur : attributs alert_1, alert_time_1… */
@@ -2005,6 +2011,13 @@ class MeteoCanadaCard extends MeteoBase {
       }
     }
 
+    // prévisions par heure et par jour d'Environnement Canada, comme la carte Météo (weather/subscribe_forecast)
+    const w0 = this._st(f.weather);
+    const feat = num(w0?.attributes?.supported_features);
+    const types = !f.weather ? [] : this._types().filter((ty) => feat === null || (feat & { daily: 1, hourly: 2 }[ty]));
+    this._keepSubs(types.map((ty) => `${f.weather}|${ty}`));
+    for (const ty of types) parts.push(this._forecast(w0 || { attributes: {} }, { weather: f.weather }, ty, this._forecastOf(f.weather, ty)));
+
     // ressenti : refroidissement éolien l'hiver, humidex l'été
     if (c.show_feel !== false) {
       const wc = v("wind_chill"), hx = v("humidex");
@@ -2067,7 +2080,8 @@ class MeteoCanadaCard extends MeteoBase {
 }
 
 // lecture des alertes Environnement Canada : les mêmes fonctions que la carte Météo
-for (const m of ["_ecSig", "_ecFetch", "_ecVigilance"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
+// prévisions : le même rendu que la carte Météo (colonnes, icônes, barres de température)
+for (const m of ["_ecSig", "_ecFetch", "_ecVigilance", "_forecast", "_wicon"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
 
 /* ---------------------------------------------------------- carte Éclairs */
 
@@ -4426,6 +4440,10 @@ const CANADA_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "weather", selector: { entity: { domain: "weather", integration: "environment_canada" } } },
   { name: "show_alerts", selector: { boolean: {} } },
+  { name: "show_hourly", selector: { boolean: {} } },
+  { name: "hours", selector: { number: { min: 1, max: 24, mode: "box" } } },
+  { name: "show_daily", selector: { boolean: {} } },
+  { name: "days", selector: { number: { min: 1, max: 7, mode: "box" } } },
   { name: "show_feel", selector: { boolean: {} } },
   { name: "show_air", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
@@ -4437,6 +4455,10 @@ const CANADA_LABELS = {
   title: "Titre (Météo canadienne par défaut)",
   weather: "Emplacement : prévision Environnement Canada (vide = la première)",
   show_alerts: "Alertes météo (avertissements, veilles, avis…)",
+  show_hourly: "Prévisions par heure",
+  hours: "Nombre d'heures affichées",
+  show_daily: "Prévisions par jour",
+  days: "Nombre de jours affichés (7 au plus)",
   show_feel: "Refroidissement éolien et humidex",
   show_air: "Cote air santé et indice UV",
   show_details: "Détails (vent, pression, humidité…)",
