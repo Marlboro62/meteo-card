@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.16.1-beta.1";
+const CARD_VERSION = "3.16.1-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1812,8 +1812,12 @@ class MeteoAirCard extends MeteoBase {
     // Le plus sévère est gardé : « Interdiction » (rouge) passe avant une interdiction partielle (orange :
     // sauf exception, sur plage horaire, réduction de prélèvement…). Un clic ouvre la fiche de l'entité.
     const sev = (r) => /^interdiction$/i.test(String(r || "").trim()) || !r ? 2 : 1;
+    // restriction en vigueur : usage à « off », ou restriction qui n'est pas « sans restriction ». Une interdiction
+    // sur plage horaire repasse à « on » hors de ses heures : elle reste affichée (en orange).
+    const FREE = /^(aucune restriction|pas de restriction|autoris[ée] sauf exception|sensibilisation)$/i;
+    const restricted = (x) => st[x].state === "off" || (st[x].attributes?.restriction && !FREE.test(String(st[x].attributes.restriction).trim()));
     const byName = new Map();
-    for (const id of Object.keys(st).filter((x) => x.startsWith("binary_sensor.") && reg[x]?.platform === "vigieau" && st[x].state === "off")) {
+    for (const id of Object.keys(st).filter((x) => x.startsWith("binary_sensor.") && reg[x]?.platform === "vigieau" && restricted(x))) {
       const name = String(st[id].attributes?.friendly_name || id).replace(/^vigieau\s+.*?\s+(aep|sou|sup)\s+/i, "").replace(/\s+autoris.*$/i, "").trim();
       const restriction = String(st[id].attributes?.restriction || "").trim();
       const prev = byName.get(name);
