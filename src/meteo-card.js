@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.16.1-beta.2";
+const CARD_VERSION = "3.16.1-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1893,7 +1893,7 @@ class MeteoAirCard extends MeteoBase {
 
 /* ------------------------------------------------- carte Météo canadienne */
 
-const CANADA_DEFAULTS = { title: "", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
+const CANADA_DEFAULTS = { title: "", icons: "animated", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
 /** Clés des capteurs de l'intégration (translation_key), et la fin de leur identifiant en repli. */
 const CA_KEYS = ["condition", "dewpoint", "high_temp", "humidex", "low_temp", "normal_high", "normal_low", "pop", "pressure", "tendency", "text_summary",
   "timestamp", "uv_index", "visibility", "wind_bearing", "wind_chill", "wind_dir", "wind_gust", "aqhi", ...Object.keys(EC_KINDS)];
@@ -1995,7 +1995,7 @@ class MeteoCanadaCard extends MeteoBase {
     const icol = (wst && COND[wst.state]?.[2]) || "#8fa0b8";
     if (t !== null || cond) {
       parts.push(`<div class="ca-hero" data-entity="${esc(f.weather || f.temperature || "")}">
-        <ha-icon icon="${esc(icon)}" style="color:${safeColor(icol)}"></ha-icon>
+        ${this._wicon(wst?.state, new Date(), "ca-hi", true, `<ha-icon icon="${esc(icon)}" style="color:${safeColor(icol)}"></ha-icon>`)}
         <div class="ca-ht"><b>${t !== null ? `${fmt(t, 1)} °C` : "—"}</b><span>${esc(cond)}</span></div>
         <div class="ca-hl">${hi !== null ? `<span><ha-icon icon="mdi:arrow-up"></ha-icon>${fmt(hi, 0)}°</span>` : ""}${lo !== null ? `<span><ha-icon icon="mdi:arrow-down"></ha-icon>${fmt(lo, 0)}°</span>` : ""}
           ${v("pop") !== null ? `<span><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(v("pop"), 0)} %</span>` : ""}</div>
@@ -4043,6 +4043,8 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .ew-lg { margin: 8px 14px 0; } .ew-msg { margin-top: 8px; }
 .ca-hero { display: flex; align-items: center; gap: 14px; margin: 4px 14px 0; padding: 10px 12px; border-radius: 14px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; flex-wrap: wrap; }
 .ca-hero > ha-icon { --mdc-icon-size: 46px; }
+img.wi-img.ca-hi { width: 72px; height: 72px; margin: -12px -8px -12px -10px; }
+svg.wi.ca-hi { width: 56px; height: 56px; flex: none; }
 .ca-ht { display: flex; flex-direction: column; } .ca-ht b { font-size: 1.9rem; line-height: 1.1; } .ca-ht span { font-size: .84rem; color: var(--med-muted); }
 .ca-hl { margin-left: auto; display: flex; gap: 10px; font-size: .84rem; color: var(--med-muted); } .ca-hl span { display: inline-flex; align-items: center; gap: 2px; } .ca-hl ha-icon { --mdc-icon-size: 16px; }
 .ca-als, .ca-col { display: grid; gap: 6px; }
@@ -4465,6 +4467,10 @@ const CANADA_SCHEMA = [
   { name: "show_air", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_summary", selector: { boolean: {} } },
+  { name: "icons", selector: { select: { mode: "dropdown", options: [
+    { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
+    { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
+    { value: "mdi", label: "Icônes Material Design (MDI)" }] } } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -4475,6 +4481,7 @@ const CANADA_LABELS = {
   show_hourly: "Prévisions par heure",
   hours: "Nombre d'heures affichées",
   show_daily: "Prévisions par jour",
+  icons: "Icônes météo (temps actuel et prévisions)",
   days: "Nombre de jours affichés (7 au plus)",
   show_feel: "Refroidissement éolien et humidex",
   show_air: "Cote air santé et indice UV",

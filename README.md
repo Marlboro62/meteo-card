@@ -468,6 +468,7 @@ Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configuré
 | `hours` | Nombre d'heures affichées (1 à 24) | `8` |
 | `show_daily` | Prévisions par jour | `true` |
 | `days` | Nombre de jours affichés (1 à 7) | `7` |
+| `icons` | Icônes météo du temps actuel et des prévisions : `animated` (amCharts animées), `static`, `drawn`, `drawn_static` ou `mdi` | `animated` |
 | `show_feel` | Refroidissement éolien et humidex | `true` |
 | `show_air` | Cote air santé et indice UV | `true` |
 | `show_details` | Détails (vent, pression, humidité…) | `true` |
