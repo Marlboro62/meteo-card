@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.16.1";
+const CARD_VERSION = "3.17.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1893,7 +1893,7 @@ class MeteoAirCard extends MeteoBase {
 
 /* ------------------------------------------------- carte Météo canadienne */
 
-const CANADA_DEFAULTS = { title: "", icons: "animated", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, theme: "v2" };
+const CANADA_DEFAULTS = { title: "", icons: "animated", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, show_sky: true, theme: "v2" };
 /** Clés des capteurs de l'intégration (translation_key), et la fin de leur identifiant en repli. */
 const CA_KEYS = ["condition", "dewpoint", "high_temp", "humidex", "low_temp", "normal_high", "normal_low", "pop", "pressure", "tendency", "text_summary",
   "timestamp", "uv_index", "visibility", "wind_bearing", "wind_chill", "wind_dir", "wind_gust", "aqhi", ...Object.keys(EC_KINDS)];
@@ -1972,7 +1972,11 @@ class MeteoCanadaCard extends MeteoBase {
     const c = this._config;
     const f = this._find();
     const ids = f ? Object.values(f).filter(Boolean) : [];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|");
+    // soleil, saison, lune, zodiaque : mêmes capteurs que la carte Météo (détectés ou choisis)
+    const sky = c.show_sky !== false ? detect(this._hass, c) : null;
+    const skyIds = sky ? [sky.season, sky.moon, sky.zodiac, "sun.sun", c.sun] : [];
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + [...ids, ...skyIds].map((id) => { const s = this._st(id); return s ? `${s.state}|${s.last_updated}` : "-"; }).join("|")
+      + `|${new Date().getDate()}|${new Date().getHours()}`;
     if (sig === this._sig) return;
     this._sig = sig;
     if (!f) {
@@ -2085,16 +2089,26 @@ class MeteoCanadaCard extends MeteoBase {
     const sum = s("text_summary");
     if (c.show_summary !== false && sum) parts.push(`<div class="sec">Prévision</div><div class="ca-sum" data-entity="${esc(f.text_summary)}">${esc(sum)}</div>`);
 
+    // soleil (lever, coucher), saison, lune, zodiaque : la rangée de la carte Météo
+    if (sky) parts.push(`<div class="sec">Soleil et lune</div>` + this._sky(sky));
+
     const ts = this._st(f.timestamp)?.state;
     const obs = ts && !isNaN(new Date(ts)) ? `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}` : "";
     const sub = [place, obs].filter(Boolean).join(" · ");
     this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", sub) + parts.join("") + `<div class="ca-src">Données : Environnement et Changement climatique Canada</div>`);
   }
+
+  /** Clic sur Soleil, Lever · coucher ou Lune : les fenêtres de la carte Météo. */
+  _action(act) {
+    if (act === "moon") this._openMoon();
+    else if (act === "astro") this._openAstro();
+  }
 }
 
 // lecture des alertes Environnement Canada : les mêmes fonctions que la carte Météo
 // prévisions : le même rendu que la carte Météo (colonnes, icônes, barres de température)
-for (const m of ["_ecSig", "_ecFetch", "_ecVigilance", "_forecast", "_wicon"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
+// soleil, saison, lune et zodiaque : la même rangée et les mêmes fenêtres que la carte Météo
+for (const m of ["_ecSig", "_ecFetch", "_ecVigilance", "_forecast", "_wicon", "_sky", "_moonKey", "_openMoon", "_openAstro"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
 
 /* ---------------------------------------------------------- carte Éclairs */
 
@@ -4467,6 +4481,7 @@ const CANADA_SCHEMA = [
   { name: "show_air", selector: { boolean: {} } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_summary", selector: { boolean: {} } },
+  { name: "show_sky", selector: { boolean: {} } },
   { name: "icons", selector: { select: { mode: "dropdown", options: [
     { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
     { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
@@ -4487,6 +4502,7 @@ const CANADA_LABELS = {
   show_air: "Cote air santé et indice UV",
   show_details: "Détails (vent, pression, humidité…)",
   show_summary: "Prévision du jour en texte",
+  show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };

@@ -456,6 +456,7 @@ Pour l'intégration officielle **Environnement Canada** (**Paramètres › Appar
 - **Air et soleil** : la **cote air santé** (1 à 10+, risque faible, modéré, élevé ou très élevé, aux couleurs officielles) et l'**indice UV** (faible à extrême).
 - **Détails** : vent et rafales, pression et tendance, humidité, point de rosée, visibilité, normales de saison.
 - **Prévision** : le résumé du jour en texte.
+- **Soleil et lune** : la rangée de la carte Météo, avec le soleil (au-dessus ou sous l'horizon), l'heure du lever et du coucher, la saison, la phase de la lune et le signe du zodiaque. Un clic sur le soleil ouvre la fenêtre Soleil et lune, un clic sur la lune les phases de la lune. Saison, lune et zodiaque viennent des mêmes capteurs que la carte Météo (intégrations Saison, Lune et Zodiaque), sinon la saison et la lune sont calculées d'après la date.
 
 Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configurés, choisissez-en un avec `weather`.
 
@@ -473,6 +474,7 @@ Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configuré
 | `show_air` | Cote air santé et indice UV | `true` |
 | `show_details` | Détails (vent, pression, humidité…) | `true` |
 | `show_summary` | Prévision du jour en texte | `true` |
+| `show_sky` | Soleil (lever, coucher), saison, lune et zodiaque | `true` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
