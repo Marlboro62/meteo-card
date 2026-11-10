@@ -205,7 +205,7 @@ moon_image: /local/images/lune.svg
 earth_image: /local/images/terre.svg
 ```
 
-L'option `moon_image` fonctionne aussi dans la carte Météo (tuile Lune). Vous pouvez utiliser vos propres photos (PNG, JPG ou SVG) : une pleine lune et une Terre bien centrées, sur fond transparent ou noir. Les crédits des photos fournies sont dans la section [Licence](#licence).
+L'option `moon_image` fonctionne aussi dans la carte Météo et la carte Canada (tuile Lune), et `earth_image` dans leur fenêtre des phases. Vous pouvez utiliser vos propres photos (PNG, JPG ou SVG) : une pleine lune et une Terre bien centrées, sur fond transparent ou noir. Les crédits des photos fournies sont dans la section [Licence](#licence).
 
 ## Intégrations Home Assistant à installer
 
@@ -475,6 +475,8 @@ Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configuré
 | `show_details` | Détails (vent, pression, humidité…) | `true` |
 | `show_summary` | Prévision du jour en texte | `true` |
 | `show_sky` | Soleil (lever, coucher), saison, lune et zodiaque | `true` |
+| `moon_image` | Photo d'une **pleine lune** pour la tuile Lune et la fenêtre des phases (ex. `/local/images/lune.svg`), assombrie selon la phase du jour : voir [Photos de la lune et de la Terre](#photos-de-la-lune-et-de-la-terre-facultatif) | — |
+| `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.svg`) | — |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 

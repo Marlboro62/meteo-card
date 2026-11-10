@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.17.0-beta.2";
+const CARD_VERSION = "3.17.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4482,6 +4482,8 @@ const CANADA_SCHEMA = [
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_summary", selector: { boolean: {} } },
   { name: "show_sky", selector: { boolean: {} } },
+  { name: "moon_image", selector: { text: {} } },
+  { name: "earth_image", selector: { text: {} } },
   { name: "icons", selector: { select: { mode: "dropdown", options: [
     { value: "animated", label: "Animées (amCharts, comme la carte Météo-France)" }, { value: "static", label: "Statiques (amCharts)" },
     { value: "drawn", label: "Dessinées par la carte, temps actuel animé" }, { value: "drawn_static", label: "Dessinées par la carte, sans animation" },
@@ -4503,6 +4505,8 @@ const CANADA_LABELS = {
   show_details: "Détails (vent, pression, humidité…)",
   show_summary: "Prévision du jour en texte",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
+  moon_image: "Photo de pleine lune pour la tuile Lune et les phases (facultatif, ex. /local/images/lune.svg)",
+  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
