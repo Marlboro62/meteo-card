@@ -182,13 +182,21 @@ function hassFor() {
     connection: { subscribeMessage(cb, msg) {
       const send = () => {
         const sc = SCEN[scen], mount = msg.entity_id === "weather.station_montagne";
+        // ville canadienne fictive : prévisions d'hiver, cohérentes avec le temps actuel (−18 °C, neige)
+        const ca = msg.entity_id === "weather.ville_erable";
+        const CA_DAYS = ["snowy", "snowy", "cloudy", "partlycloudy", "sunny", "partlycloudy", "snowy"];
         const fc = msg.forecast_type === "hourly"
           ? Array.from({ length: 24 }, (_, i) => ({ datetime: new Date(Math.ceil(Date.now() / HOUR) * HOUR + i * HOUR).toISOString(),
             condition: i > 3 && new Date(Date.now() + i * HOUR).getHours() >= 21 ? "clear-night" : sc.fc[0].condition,
             temperature: (mount ? sc.attrs.temperature - 14 : sc.attrs.temperature) - i * 0.4 + Math.sin(i / 3), precipitation: i < 3 && scen === "pluie" ? 1.2 - i * 0.4 : 0,
             precipitation_probability: sc.fc[0].precipitation_probability, wind_speed: i < 2 ? 0 : sc.attrs.wind_speed + (i % 3) * 2, wind_gust_speed: sc.attrs.wind_gust_speed - i * 2, humidity: Math.min(98, sc.attrs.humidity + i * 2), wind_bearing: sc.attrs.wind_bearing + i * 3 }))
           : sc.fc.map((d) => mount ? { ...d, temperature: d.temperature - 14, templow: d.templow - 12, condition: d.condition === "rainy" ? "snowy" : d.condition } : d);
-        cb({ type: msg.forecast_type, forecast: fc });
+        const caFc = !ca ? null : msg.forecast_type === "hourly"
+          ? fc.map((h, i) => ({ ...h, condition: i < 6 ? "snowy" : "cloudy", temperature: -18.4 - i * 0.3 + Math.sin(i / 3),
+            precipitation: i < 5 ? 0.4 : 0, precipitation_probability: i < 5 ? 70 : 30 }))
+          : fc.map((d, i) => ({ ...d, condition: CA_DAYS[i % 7], temperature: [-14, -16, -11, -8, -9, -6, -10][i % 7], templow: [-24, -26, -21, -17, -19, -14, -15][i % 7],
+            precipitation: [10, 4, 0, 0, 0, 0, 3][i % 7], precipitation_probability: [70, 60, 20, 10, 0, 20, 60][i % 7] }));
+        cb({ type: msg.forecast_type, forecast: caFc || fc });
       };
       listeners.push(send); setTimeout(send, 30);
       return Promise.resolve(() => listeners.splice(listeners.indexOf(send), 1));
