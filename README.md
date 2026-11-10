@@ -455,8 +455,8 @@ Pour l'intégration officielle **Environnement Canada** (**Paramètres › Appar
 - **Ressenti** : le **refroidissement éolien** l'hiver, avec le risque et le temps avant les engelures (échelle d'Environnement Canada : modéré dès −10, élevé dès −28, très élevé dès −40, grave dès −48, extrêmement grave dès −55), et l'**humidex** l'été (inconfort dès 30, grand inconfort dès 40, danger dès 46). Environnement Canada ne les publie que quand ils ont un sens : entre les saisons, leur état est « inconnu » et la section n'apparaît pas.
 - **Air et soleil** : la **cote air santé** (1 à 10+, risque faible, modéré, élevé ou très élevé, aux couleurs officielles) et l'**indice UV** (faible à extrême).
 - **Détails** : vent et rafales, pression et tendance, humidité, point de rosée, visibilité, normales de saison.
-- **Prévision** : le résumé du jour en texte.
 - **Soleil et lune** : la rangée de la carte Météo, avec le soleil (au-dessus ou sous l'horizon), l'heure du lever et du coucher, la saison, la phase de la lune et le signe du zodiaque. Un clic sur le soleil ouvre la fenêtre Soleil et lune, un clic sur la lune les phases de la lune. Saison, lune et zodiaque viennent des mêmes capteurs que la carte Météo (intégrations Saison, Lune et Zodiaque), sinon la saison et la lune sont calculées d'après la date.
+- **Prévision** : le résumé du jour en texte, en dernier.
 
 Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configurés, choisissez-en un avec `weather`.
 

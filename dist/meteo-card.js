@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.17.0-beta.1";
+const CARD_VERSION = "3.17.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2085,12 +2085,12 @@ class MeteoCanadaCard extends MeteoBase {
       if (tiles) parts.push(`<div class="sec">Détails</div><div class="plants">${tiles}</div>`);
     }
 
-    // résumé du jour
-    const sum = s("text_summary");
-    if (c.show_summary !== false && sum) parts.push(`<div class="sec">Prévision</div><div class="ca-sum" data-entity="${esc(f.text_summary)}">${esc(sum)}</div>`);
-
     // soleil (lever, coucher), saison, lune, zodiaque : la rangée de la carte Météo
     if (sky) parts.push(`<div class="sec">Soleil et lune</div>` + this._sky(sky));
+
+    // résumé du jour, en dernier
+    const sum = s("text_summary");
+    if (c.show_summary !== false && sum) parts.push(`<div class="sec">Prévision</div><div class="ca-sum" data-entity="${esc(f.text_summary)}">${esc(sum)}</div>`);
 
     const ts = this._st(f.timestamp)?.state;
     const obs = ts && !isNaN(new Date(ts)) ? `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}` : "";
