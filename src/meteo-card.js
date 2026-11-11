@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.17.0";
+const CARD_VERSION = "3.18.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1893,7 +1893,7 @@ class MeteoAirCard extends MeteoBase {
 
 /* ------------------------------------------------- carte Météo canadienne */
 
-const CANADA_DEFAULTS = { title: "", icons: "animated", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, show_sky: true, theme: "v2" };
+const CANADA_DEFAULTS = { title: "", icons: "animated", show_alerts: true, show_hourly: true, show_daily: true, hours: 8, days: 7, show_feel: true, show_air: true, show_details: true, show_summary: true, show_sky: true, show_clock: true, timezone: "America/Toronto", theme: "v2" };
 /** Clés des capteurs de l'intégration (translation_key), et la fin de leur identifiant en repli. */
 const CA_KEYS = ["condition", "dewpoint", "high_temp", "humidex", "low_temp", "normal_high", "normal_low", "pop", "pressure", "tendency", "text_summary",
   "timestamp", "uv_index", "visibility", "wind_bearing", "wind_chill", "wind_dir", "wind_gust", "aqhi", ...Object.keys(EC_KINDS)];
@@ -1915,9 +1915,59 @@ const humidexRisk = (v) => (v < 30 ? ["Confortable", "#5fcf8a", ""]
     : v < 46 ? ["Grand inconfort", "#ff8c33", "Évitez les efforts, buvez souvent."]
       : ["Danger", "#ee4a4a", "Coup de chaleur possible : restez au frais."]);
 
+/** Fuseaux horaires du Canada pour l'horloge (option timezone ; « local » : heure de Home Assistant). */
+const CA_ZONES = [
+  ["America/St_Johns", "Terre-Neuve (HNT)"], ["America/Halifax", "Atlantique (HNA) : Nouvelle-Écosse, Nouveau-Brunswick, Î.-P.-É."],
+  ["America/Toronto", "Est (HNE) : Québec, Ontario"], ["America/Winnipeg", "Centre (HNC) : Manitoba"],
+  ["America/Regina", "Saskatchewan (HNC, sans heure d'été)"], ["America/Edmonton", "Rocheuses (HNR) : Alberta, T.N.-O."],
+  ["America/Vancouver", "Pacifique (HNP) : Colombie-Britannique"], ["America/Whitehorse", "Yukon"], ["local", "Heure de Home Assistant"],
+];
+const caZone = (tz) => (!tz || tz === "local" ? undefined : tz);
+
 class MeteoCanadaCard extends MeteoBase {
   static get defaults() {
     return CANADA_DEFAULTS;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // horloge numérique : seule l'heure est mise à jour chaque seconde, pas toute la carte
+    clearInterval(this._clockTimer);
+    this._clockTimer = setInterval(() => this._tickClock(), 1000);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this._clockTimer);
+  }
+
+  /** Heure et date dans le fuseau choisi (America/Toronto par défaut). */
+  _clockParts() {
+    const tz = caZone(this._config?.timezone), now = new Date();
+    try {
+      return {
+        time: now.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).replace(/\s*h\s*/, ":"),
+        sec: now.toLocaleTimeString("fr-CA", { second: "2-digit", timeZone: tz }).padStart(2, "0").slice(-2),
+        date: now.toLocaleDateString("fr-CA", { weekday: "short", day: "numeric", month: "short", timeZone: tz }).replace(/^./, (x) => x.toUpperCase()),
+      };
+    } catch (e) {
+      return { time: now.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit", hour12: false }).replace(/\s*h\s*/, ":"), sec: "", date: "" };
+    }
+  }
+
+  _clockHtml() {
+    if (this._config?.show_clock === false) return "";
+    const c = this._clockParts(), zone = CA_ZONES.find(([z]) => z === (this._config.timezone || "America/Toronto"))?.[1] || this._config.timezone;
+    return `<div class="ca-clock" title="${esc(`Heure locale · ${zone}`)}"><div class="ca-time"><b>${esc(c.time)}</b><small>${esc(c.sec)}</small></div><span>${esc(c.date)}</span></div>`;
+  }
+
+  _tickClock() {
+    const el = this.shadowRoot?.querySelector(".ca-clock");
+    if (!el) return;
+    const c = this._clockParts();
+    el.querySelector("b").textContent = c.time;
+    el.querySelector("small").textContent = c.sec;
+    el.querySelector("span").textContent = c.date;
   }
 
   static getConfigElement() {
@@ -1980,7 +2030,7 @@ class MeteoCanadaCard extends MeteoBase {
     if (sig === this._sig) return;
     this._sig = sig;
     if (!f) {
-      this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", "")
+      this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", "", this._clockHtml())
         + `<div class="empty"><b>Environnement Canada introuvable</b><span>Ajoutez l'intégration Environnement Canada dans Paramètres › Appareils et services, en choisissant le français.</span></div>`);
       return;
     }
@@ -2093,9 +2143,14 @@ class MeteoCanadaCard extends MeteoBase {
     if (c.show_summary !== false && sum) parts.push(`<div class="sec">Prévision</div><div class="ca-sum" data-entity="${esc(f.text_summary)}">${esc(sum)}</div>`);
 
     const ts = this._st(f.timestamp)?.state;
-    const obs = ts && !isNaN(new Date(ts)) ? `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}` : "";
+    // heure d'observation dans le même fuseau que l'horloge
+    let obs = "";
+    if (ts && !isNaN(new Date(ts))) {
+      try { obs = `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit", timeZone: caZone(c.timezone) })}`; }
+      catch (e) { obs = `Observé à ${new Date(ts).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })}`; }
+    }
     const sub = [place, obs].filter(Boolean).join(" · ");
-    this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", sub) + parts.join("") + `<div class="ca-src">Données : Environnement et Changement climatique Canada</div>`);
+    this._card(this._head("mdi:weather-snowy-heavy", "#ee4a4a", c.title || "Météo canadienne", sub, this._clockHtml()) + parts.join("") + `<div class="ca-src">Données : Environnement et Changement climatique Canada</div>`);
   }
 
   /** Clic sur Soleil, Lever · coucher ou Lune : les fenêtres de la carte Météo. */
@@ -3596,6 +3651,11 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .title { font-size: 1.15rem; font-weight: 700; letter-spacing: .2px; }
 .sub { font-size: .78rem; color: var(--med-muted); }
+.ca-clock { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ca-time { display: flex; align-items: baseline; gap: 2px; }
+.ca-time b { font-size: 1.7rem; font-weight: 700; letter-spacing: .02em; }
+.ca-time small { font-size: .82rem; font-weight: 600; color: var(--med-muted); min-width: 1.3em; }
+.ca-clock span { font-size: .74rem; color: var(--med-muted); margin-top: 2px; }
 .pill { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
   background: var(--med-surface); border: 1px solid var(--med-line); font-size: .78rem; }
 .pill-l { color: var(--med-muted); }
@@ -4472,6 +4532,8 @@ const MONTAGNE_LABELS = {
 const CANADA_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "weather", selector: { entity: { domain: "weather", integration: "environment_canada" } } },
+  { name: "show_clock", selector: { boolean: {} } },
+  { name: "timezone", selector: { select: { mode: "dropdown", options: CA_ZONES.map(([value, label]) => ({ value, label })) } } },
   { name: "show_alerts", selector: { boolean: {} } },
   { name: "show_hourly", selector: { boolean: {} } },
   { name: "hours", selector: { number: { min: 1, max: 24, mode: "box" } } },
@@ -4494,6 +4556,8 @@ const CANADA_SCHEMA = [
 const CANADA_LABELS = {
   title: "Titre (Météo canadienne par défaut)",
   weather: "Emplacement : prévision Environnement Canada (vide = la première)",
+  show_clock: "Horloge numérique dans l'en-tête",
+  timezone: "Fuseau horaire de l'horloge et de l'heure d'observation (Est par défaut)",
   show_alerts: "Alertes météo (avertissements, veilles, avis…)",
   show_hourly: "Prévisions par heure",
   hours: "Nombre d'heures affichées",
