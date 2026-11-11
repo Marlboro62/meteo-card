@@ -97,6 +97,12 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.18.0
+
+- **Carte Canada : horloge numérique** dans l'en-tête, à droite du titre (heures, minutes, secondes et date), à l'heure du Canada. Le fuseau se choisit avec `timezone` (Est par défaut) et l'horloge se masque avec `show_clock: false`.
+- **Carte Canada : tout à l'heure du Canada** : l'heure d'observation, les prévisions par heure et par jour et les dates des alertes suivent le même fuseau que l'horloge, et non plus l'heure du navigateur.
+- **Carte Canada : maximum et minimum du jour** en couleur, l'un sous l'autre, comme la carte Météo.
+
 ## Nouveautés de la 3.15.0
 
 - **Nouvelle carte Canada** (`custom:meteo-canada-card`) pour l'intégration **Environnement Canada** : alertes météo, refroidissement éolien l'hiver et humidex l'été avec le niveau de risque, cote air santé, indice UV, détails et prévision du jour. Voir [Carte Canada](#carte-canada).
