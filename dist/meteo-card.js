@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.18.0-beta.2";
+const CARD_VERSION = "3.18.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2064,8 +2064,8 @@ class MeteoCanadaCard extends MeteoBase {
       parts.push(`<div class="ca-hero" data-entity="${esc(f.weather || f.temperature || "")}">
         ${this._wicon(wst?.state, new Date(), "ca-hi", true, `<ha-icon icon="${esc(icon)}" style="color:${safeColor(icol)}"></ha-icon>`)}
         <div class="ca-ht"><b>${t !== null ? `${fmt(t, 1)} °C` : "—"}</b><span>${esc(cond)}</span></div>
-        <div class="ca-hl">${hi !== null ? `<span><ha-icon icon="mdi:arrow-up"></ha-icon>${fmt(hi, 0)}°</span>` : ""}${lo !== null ? `<span><ha-icon icon="mdi:arrow-down"></ha-icon>${fmt(lo, 0)}°</span>` : ""}
-          ${v("pop") !== null ? `<span><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(v("pop"), 0)} %</span>` : ""}</div>
+        ${v("pop") !== null ? `<div class="ca-pop"><ha-icon icon="mdi:umbrella-outline"></ha-icon>${fmt(v("pop"), 0)} %</div>` : ""}
+        ${hi !== null || lo !== null ? `<div class="n-hl ca-hl">${hi !== null ? `<span class="hi">↑ ${fmt(hi, 0)}°</span>` : ""}${lo !== null ? `<span class="lo">↓ ${fmt(lo, 0)}°</span>` : ""}</div>` : ""}
       </div>`);
     }
 
@@ -4133,7 +4133,10 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 img.wi-img.ca-hi { width: 72px; height: 72px; margin: -12px -8px -12px -10px; }
 svg.wi.ca-hi { width: 56px; height: 56px; flex: none; }
 .ca-ht { display: flex; flex-direction: column; } .ca-ht b { font-size: 1.9rem; line-height: 1.1; } .ca-ht span { font-size: .84rem; color: var(--med-muted); }
-.ca-hl { margin-left: auto; display: flex; gap: 10px; font-size: .84rem; color: var(--med-muted); } .ca-hl span { display: inline-flex; align-items: center; gap: 2px; } .ca-hl ha-icon { --mdc-icon-size: 16px; }
+/* maximum et minimum du jour, comme la carte Météo : l'un sous l'autre, en couleur */
+.ca-hl { margin-left: 0; font-size: 1.05rem; }
+.ca-pop { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: .84rem; color: var(--med-muted); } .ca-pop ha-icon { --mdc-icon-size: 16px; }
+.ca-hero > .ca-hl:only-of-type, .ca-ht + .ca-hl { margin-left: auto; }
 .ca-als, .ca-col { display: grid; gap: 6px; }
 .ca-al { display: flex; align-items: center; gap: 10px; margin: 0 12px; padding: 9px 12px; border-radius: 12px; cursor: pointer;
   background: color-mix(in srgb, var(--pc) 12%, var(--med-surface)); border: 1px solid color-mix(in srgb, var(--pc) 60%, transparent); }
