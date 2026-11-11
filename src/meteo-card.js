@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.18.0-beta.1";
+const CARD_VERSION = "3.18.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1081,9 +1081,17 @@ class MeteoCard extends MeteoBase {
       wind: on.wind && has("wind_speed"), dir: on.dir && has("wind_speed"),
       // rafales : ligne affichée seulement si au moins une colonne a des rafales supérieures au vent moyen
       gust: on.gust && fc.some((d) => num(d.wind_gust_speed) > Math.max(0, num(d.wind_speed) ?? 0)) };
+    // fuseau des prévisions : celui de la carte Canada (option timezone), sinon celui du navigateur
+    const tz = this._fcZone ? this._fcZone() : undefined;
     const days = fc.map((d, i) => {
-      const dt = new Date(d.datetime);
-      const name = hourly ? dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      let dt = new Date(d.datetime);
+      const name0 = hourly ? dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : null;
+      // jour de la semaine et quantième dans ce fuseau
+      if (tz && !hourly) {
+        const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(dt).map((x) => [x.type, x.value]));
+        dt = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), 12);
+      }
+      const name = hourly ? name0
         : type === "twice_daily" ? `${DAYS_FR[dt.getDay()]} ${d.is_daytime === false ? "nuit" : "jour"}` : i === 0 ? "Auj." : `${DAYS_FR[dt.getDay()]} ${dt.getDate()}`;
       const [lab, icon, color] = condOf(d.condition);
       const hi = num(d.temperature), lo = num(d.templow);
@@ -1955,6 +1963,11 @@ class MeteoCanadaCard extends MeteoBase {
     }
   }
 
+  /** Fuseau des prévisions par heure et par jour : le même que l'horloge. */
+  _fcZone() {
+    try { const tz = caZone(this._config?.timezone); if (tz) new Intl.DateTimeFormat("fr", { timeZone: tz }); return tz; } catch (e) { return undefined; }
+  }
+
   _clockHtml() {
     if (this._config?.show_clock === false) return "";
     const c = this._clockParts(), zone = CA_ZONES.find(([z]) => z === (this._config.timezone || "America/Toronto"))?.[1] || this._config.timezone;
@@ -2063,7 +2076,7 @@ class MeteoCanadaCard extends MeteoBase {
       if (Object.keys(ec).length) {
         this._ecFetch(ec);
         const vg = this._ecVigilance(ec);
-        const when = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleString("fr-CA", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""; };
+        const when = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleString("fr-CA", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: this._fcZone() }) : ""; };
         const rows = (vg?.active || []).map((a) => {
           const col = a.info ? INFO_COLOR : LEVEL_COLOR[Math.max(1, a.level)];
           const meta = [a.label, a.since ? `depuis ${when(a.since)}` : "", a.until ? `jusqu'à ${when(a.until)}` : ""].filter(Boolean).join(" · ");

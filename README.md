@@ -476,7 +476,7 @@ Un clic sur une ligne ouvre la fiche du capteur. Avec plusieurs lieux configuré
 | `show_summary` | Prévision du jour en texte | `true` |
 | `show_sky` | Soleil (lever, coucher), saison, lune et zodiaque | `true` |
 | `show_clock` | Horloge numérique dans l'en-tête, à droite du titre (heures, minutes, secondes et date) | `true` |
-| `timezone` | Fuseau de l'horloge et de l'heure d'observation : `America/St_Johns`, `America/Halifax`, `America/Toronto`, `America/Winnipeg`, `America/Regina`, `America/Edmonton`, `America/Vancouver`, `America/Whitehorse`, ou `local` (heure de Home Assistant) | `America/Toronto` |
+| `timezone` | Fuseau de l'horloge, de l'heure d'observation, des prévisions et des alertes : `America/St_Johns`, `America/Halifax`, `America/Toronto`, `America/Winnipeg`, `America/Regina`, `America/Edmonton`, `America/Vancouver`, `America/Whitehorse`, ou `local` (heure de Home Assistant) | `America/Toronto` |
 | `moon_image` | Photo d'une **pleine lune** pour la tuile Lune et la fenêtre des phases (ex. `/local/images/lune.svg`), assombrie selon la phase du jour : voir [Photos de la lune et de la Terre](#photos-de-la-lune-et-de-la-terre-facultatif) | — |
 | `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.svg`) | — |
 | `theme` | Couleurs de la carte | `v2` |
