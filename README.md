@@ -511,6 +511,7 @@ radius: 25          # stations à moins de 25 km de chez vous
 | `max_items` | Nombre de stations affichées | `6` |
 | `direct` | Sans intégration, lire Hub'Eau depuis le navigateur | `true` |
 | `show_map`, `map_height`, `tiles_url` | Carte interactive : affichage, hauteur (px), autre fond | `true`, `300`, OpenFreeMap |
+| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
@@ -562,6 +563,7 @@ Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou
 | `radius` | Distance (km) qui place un feu au bord de la boussole | automatique |
 | `max_items` | Nombre de feux listés | `6` |
 | `show_map` | Carte interactive des feux | `true` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |
 | `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `compass_image` | Image au centre de la boussole | — |
@@ -593,6 +595,7 @@ radius: 1000          # km autour de chez vous
 | `max_items` | Nombre de séismes listés | `6` |
 | `direct` | Sans intégration, lire les flux EMSC et USGS depuis le navigateur | `true` |
 | `show_map` | Carte interactive des séismes | `true` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |
 | `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `latitude`, `longitude` | Lieu de référence | coordonnées de Home Assistant |
