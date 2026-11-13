@@ -644,6 +644,7 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `min_energy` | Énergie d'impact minimale au départ (kt) : `0`, `1`, `10` | `0` |
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous les filtres la montre ou la cache, et la carte s'en souvient | `false` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
