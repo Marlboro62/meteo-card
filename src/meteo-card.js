@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.19.0-beta.1";
+const CARD_VERSION = "3.19.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3593,9 +3593,10 @@ class MeteoBolidesCard extends MeteoBase {
     body += `<div class="sky bts">${tile(last, "mdi:clock-outline", "Dernier", dfull(last?.date || new Date()), last ? ago(last.days) : "")}
       ${tile(near, "mdi:home-map-marker", "Le plus proche", near ? `${fmt(near.dist)} km` : "", near ? dfull(near.date) : "")}
       ${tile(big, "mdi:flash-alert", "Le plus puissant", big ? kt(big.impact) : "", big ? dfull(big.date) : "")}</div>
-      <div class="wl bf"><span class="mt-l">Période</span>${chips("period", BOLIDE_PERIODS, this._period)}<span class="mt-l">Énergie</span>${chips("energy", BOLIDE_ENERGY, this._energy)}</div>`;
+      <div class="wl bf"><span class="mt-l">Période</span>${chips("period", BOLIDE_PERIODS, this._period)}<span class="mt-l">Énergie</span>${chips("energy", BOLIDE_ENERGY, this._energy)}</div>${this._mapToggle()}`;
     this._card(body);
-    this._mapUpdate(list, hasHome ? home : null);
+    if (this._mapOpen()) this._mapUpdate(list, hasHome ? home : null);
+    else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
   }
 
   /** Carte Leaflet : créée une fois dans la zone « keep », marqueurs recréés à chaque changement de données ou de filtre. */
@@ -4499,6 +4500,7 @@ const BOLIDES_SCHEMA = [
   { name: "period", selector: { select: { mode: "dropdown", options: BOLIDE_PERIODS.map(([value, label]) => ({ value, label })) } } },
   { name: "min_energy", selector: { select: { mode: "dropdown", options: BOLIDE_ENERGY.map(([value, label]) => ({ value: String(value), label })) } } },
   { name: "show_home", selector: { boolean: {} } },
+  { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 200, max: 800, step: 20, mode: "slider", unit_of_measurement: "px" } } },
   THEME_SELECT,
   TEXT_SIZE,
@@ -4509,6 +4511,7 @@ const BOLIDES_LABELS = {
   period: "Période affichée au départ",
   min_energy: "Énergie minimale affichée au départ",
   show_home: "Afficher votre maison sur la carte",
+  map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
