@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.18.0";
+const CARD_VERSION = "3.19.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -521,6 +521,12 @@ class MeteoBase extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
       const act = ev.target.closest?.("[data-act]");
+      if (act?.dataset.act === "maptoggle") {
+        // carte interactive masquée ou affichée, mémorisé par carte
+        this._mapShow = !this._mapOpen();
+        try { localStorage.setItem(this._mapKey(), JSON.stringify(this._mapShow)); } catch (e) { /* stockage indisponible */ }
+        this._sig = null; this._render(); return;
+      }
       if (act) { this._action(act.dataset.act, act); return; }
       const el = ev.target.closest?.("[data-entity]");
       if (!el) return;
@@ -588,6 +594,26 @@ class MeteoBase extends HTMLElement {
   /** Les abonnements qui ne servent plus (autre onglet, autre entité) sont fermés. */
   _keepSubs(keys) {
     for (const [k, s] of Object.entries(this._subs || {})) if (!keys.includes(k)) { s.unsub?.(); delete this._subs[k]; }
+  }
+
+  /** Carte interactive affichée ou masquée par le bouton : choix mémorisé, sinon option map_hidden (masquée au départ). */
+  _mapOpen() {
+    if (this._mapShow === undefined) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(this._mapKey()) || "null"); } catch (e) { /* stockage indisponible */ }
+      this._mapShow = typeof saved === "boolean" ? saved : this._config.map_hidden !== true;
+    }
+    return this._mapShow;
+  }
+
+  _mapKey() {
+    return `meteo-card:map:${this.localName}:${this._config.title || ""}`;
+  }
+
+  /** Bouton « Masquer la carte » / « Afficher la carte », sous la liste. */
+  _mapToggle() {
+    const open = this._mapOpen();
+    return `<button class="map-tg" data-act="maptoggle" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:map-minus" : "mdi:map-plus"}"></ha-icon>${open ? "Masquer la carte" : "Afficher la carte"}</button>`;
   }
 
   /** Seul le contenu est redessiné : la zone « keep » (carte Windy, fenêtre des phases) n'est pas recréée. */
@@ -2388,7 +2414,7 @@ class MeteoSeismesCard extends MeteoBase {
     const tiles = `<div class="sky qk-t">${tile(close, "mdi:home-map-marker", "Le plus proche", close ? `${km(close.dist)} · M ${fmt(close.mag, 1)}` : "")}
       ${tile(big, "mdi:chart-bell-curve", "Le plus fort", big ? `M ${fmt(big.mag, 1)} · ${km(big.dist)}` : "")}
       ${tile(world[0], "mdi:earth", "Dans le monde", world[0] ? `M ${fmt(world[0].mag, 1)}` : "")}</div>`;
-    const mapOn = c.show_map !== false && !!home;
+    const mapAvail = c.show_map !== false && !!home, mapOn = mapAvail && this._mapOpen();
     const shown = [...near.slice(0, Math.max(1, Number(c.max_items) || 6)), ...world.slice(0, 3)];
     const row = (q) => {
       // avec la carte, un clic centre la carte sur le séisme (la fiche s'ouvre depuis sa bulle) ; sinon il ouvre la fiche
@@ -2403,7 +2429,8 @@ class MeteoSeismesCard extends MeteoBase {
     body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
       + (near.length ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
       + (world.length ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
-      + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`;
+      + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`
+      + (mapAvail ? this._mapToggle() : "");
     this._card(body);
     if (mapOn) this._mapUpdate(shown, near, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -2534,7 +2561,7 @@ class MeteoFeuxCard extends MeteoBase {
       ${tile(strongest?.id || s.frp, "mdi:heat-wave", strongest ? strongest.band[1] : "#8fa0b8", strongest?.frp !== null && strongest?.frp !== undefined ? `${fmt(strongest.frp, strongest.frp < 10 ? 1 : 0)} MW · ${strongest.band[0]}` : null, "Le plus intense")}
       ${tile(s.pass, "mdi:satellite-variant", "#1d93e3", passTxt, `Prochain passage${pass?.attributes?.satellite_name || pass?.attributes?.satellite ? ` · ${esc(SAT_FR(pass.attributes.satellite_name || pass.attributes.satellite))}` : ""}`)}
     </div>`;
-    const mapOn = c.show_map !== false && home.length === 2;
+    const mapAvail = c.show_map !== false && home.length === 2, mapOn = mapAvail && this._mapOpen();
     const row = (f, i) => `<div class="qk-r" ${mapOn ? `data-act="fly" data-i="${i}" role="button" tabindex="0"` : `data-entity="${esc(f.id)}"`}><span class="qk-m" style="background:${f.band[1]}${/^#ff(0000|4d00)$/.test(f.band[1]) ? ";color:#fff" : ""}">${f.frp === null ? "?" : fmt(f.frp, f.frp < 10 ? 1 : 0)}</span>
       <span class="qk-p"><b>${f.place ? `${f.placeKm !== null ? `${km(f.placeKm)} de ` : "Près de "}${esc(f.place)}` : "Feu détecté"}</b>
         <small>${km(f.dist)}${f.az !== null ? ` ${compass16(f.az)}` : ""}${f.t ? ` · ${agoTxt(now - f.t)}` : ""}${f.conf ? ` · confiance ${f.conf}` : ""}${f.sats.length > 1 ? ` · ${f.sats.length} satellites` : ""}</small>
@@ -2544,7 +2571,8 @@ class MeteoFeuxCard extends MeteoBase {
     const body = head + `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
       + (list.length ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>`
         : `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`)
-      + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`;
+      + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`
+      + (mapAvail ? this._mapToggle() : "");
     this._card(body);
     if (mapOn) this._mapUpdate(list, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -2742,7 +2770,7 @@ class MeteoCruesCard extends MeteoBase {
       if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
       return;
     }
-    const mapOn = c.show_map !== false && !!home;
+    const mapAvail = c.show_map !== false && !!home, mapOn = mapAvail && this._mapOpen();
     const m = (v) => `${fmt(v, Math.abs(v) < 10 ? 2 : 1)} m`;
     const cm = (v) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${fmt(Math.abs(v * 100))} cm`;
     const row = (s, i) => `<div class="rv-r" ${mapOn && s.lat !== null ? `data-act="fly" data-i="${i}" role="button" tabindex="0"` : s.ents?.h ? `data-entity="${esc(s.ents.h)}"` : ""}>
@@ -2751,7 +2779,7 @@ class MeteoCruesCard extends MeteoBase {
       <div class="rv-h"><b>${s.h === null ? "—" : m(s.h)}</b><small style="color:${s.trend[1]}"><ha-icon icon="${s.trend[2]}"></ha-icon>${s.d24 === null ? s.trend[0] : `${cm(s.d24)} en 24 h`}</small>
         ${s.q !== null ? `<small>${fmt(s.q, s.q < 10 ? 2 : s.q < 100 ? 1 : 0)} m³/s</small>` : ""}</div></div>`;
     body += `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>
-      <div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`;
+      <div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>${mapAvail ? this._mapToggle() : ""}`;
     this._card(body);
     if (mapOn) this._mapUpdate(list, home);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -4063,6 +4091,10 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .qk-p small { font-size: .72rem; color: var(--med-muted); }
 .qk-l { flex: none; font-size: .7rem; color: var(--med-muted); }
 .qk-src { margin: 8px 18px 0; font-size: .68rem; color: var(--med-muted); text-align: right; }
+.map-tg { all: unset; cursor: pointer; display: flex; align-items: center; gap: 6px; width: fit-content; margin: 10px 14px 0 auto; padding: 5px 12px;
+  border-radius: 999px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); font-size: .78rem; font-weight: 600; --mdc-icon-size: 16px; }
+.map-tg:hover { color: var(--primary-text-color, inherit); }
+.map-tg:focus-visible { outline: 2px solid var(--med-accent, #1d93e3); }
 .mt-n { font-size: .66rem; color: var(--med-muted); margin-top: 2px; }
 .av { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 12px; }
 .av-c { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; }
@@ -4378,6 +4410,7 @@ const SEISMES_SCHEMA = [
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "direct", selector: { boolean: {} } },
   { name: "show_map", selector: { boolean: {} } },
+  { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
   { name: "compass_image", selector: { text: {} } },
   THEME_SELECT,
@@ -4392,6 +4425,7 @@ const SEISMES_LABELS = {
   max_items: "Nombre de séismes listés",
   direct: "Sans intégration, lire les flux EMSC et USGS depuis le navigateur",
   show_map: "Carte interactive des séismes",
+  map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
   compass_image: "Image au centre de la boussole",
   theme: "Couleurs de la carte",
@@ -4402,6 +4436,7 @@ const FEUX_SCHEMA = [
   { name: "radius", selector: { number: { min: 0, max: 500, step: 10, mode: "box", unit_of_measurement: "km" } } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "show_map", selector: { boolean: {} } },
+  { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
   { name: "compass_image", selector: { text: {} } },
   THEME_SELECT,
@@ -4412,6 +4447,7 @@ const FEUX_LABELS = {
   radius: "Distance au bord de la boussole (0 = automatique)",
   max_items: "Nombre de feux listés",
   show_map: "Carte interactive des feux",
+  map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
   compass_image: "Image au centre de la boussole",
   theme: "Couleurs de la carte",
@@ -4424,6 +4460,7 @@ const CRUES_SCHEMA = [
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "direct", selector: { boolean: {} } },
   { name: "show_map", selector: { boolean: {} } },
+  { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
   THEME_SELECT,
   TEXT_SIZE,
@@ -4435,6 +4472,7 @@ const CRUES_LABELS = {
   max_items: "Nombre de stations affichées",
   direct: "Sans intégration, lire Hub'Eau depuis le navigateur",
   show_map: "Carte interactive des stations",
+  map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
