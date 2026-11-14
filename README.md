@@ -97,6 +97,10 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.19.0
+
+- **Carte interactive repliable** sur les cartes Crues et rivières, Séismes, Feux de forêt et Bolides : le bouton « Masquer la carte » / « Afficher la carte » sous la liste la cache ou la montre, et chaque carte s'en souvient. Masquée, la carte n'est pas chargée. Option `map_hidden: true` pour la masquer au premier affichage.
+
 ## Nouveautés de la 3.18.0
 
 - **Carte Canada : horloge numérique** dans l'en-tête, à droite du titre (heures, minutes, secondes et date), à l'heure du Canada. Le fuseau se choisit avec `timezone` (Est par défaut) et l'horloge se masque avec `show_clock: false`.
