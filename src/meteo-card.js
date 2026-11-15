@@ -28,7 +28,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.20.0-beta.1";
+const CARD_VERSION = "3.20.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1800,10 +1800,12 @@ const ATMO = ["Indisponible", "Bon", "Moyen", "Dégradé", "Mauvais", "Très mau
 const ATMO_POLLEN = ["Indisponible", "Très faible", "Faible", "Modéré", "Élevé", "Très élevé", "Extrêmement élevé"];
 const ATMO_COLOR = ["#8fa0b8", "#50f0e6", "#50ccaa", "#f0e641", "#ff5050", "#960032", "#872181", "#888888"];
 const POLLUTANTS = [
-  [/dioxyde_d_azote|_no2(_|$)/, "NO₂", "Dioxyde d'azote"], [/dioxyde_de_soufre|_so2(_|$)/, "SO₂", "Dioxyde de soufre"],
-  [/[._]ozone|_o3(_|$)/, "O₃", "Ozone"], [/pm_?10/, "PM10", "Particules < 10 µm"], [/pm_?2_?5/, "PM2,5", "Particules < 2,5 µm"],
+  [/dioxyde_d_azote|_no2(_|$)/, "NO₂", "Dioxyde d'azote", "no2"], [/dioxyde_de_soufre|_so2(_|$)/, "SO₂", "Dioxyde de soufre", "so2"],
+  [/[._]ozone|_o3(_|$)/, "O₃", "Ozone", "o3"], [/pm_?10/, "PM10", "Particules < 10 µm", "pm10"], [/pm_?2_?5/, "PM2,5", "Particules < 2,5 µm", "pm25"],
 ];
 const ATMO_PLANTS = [["ambroisie", "Ambroisie"], ["armoise", "Armoise"], ["aulne", "Aulne"], ["bouleau", "Bouleau"], ["gramin", "Graminées"], ["olivier", "Olivier"]];
+/** Option d'icône de chaque plante (icon_<clé>). */
+const PLANT_ICON_KEY = { ambroisie: "ambroisie", armoise: "armoise", aulne: "aulne", bouleau: "bouleau", gramin: "graminees", olivier: "olivier" };
 /** Sécheresse (VigiEau) : niveau de restriction. */
 const WATER = [[/crise/i, 4, "Crise"], [/renforc/i, 3, "Alerte renforcée"], [/alerte/i, 2, "Alerte"], [/vigilance/i, 1, "Vigilance"], [/aucun|pas de|normal|none/i, 0, "Pas de restriction"]];
 const WATER_COLOR = ["#5fcf8a", "#f7c948", "#ff8c33", "#ee4a4a", "#b3172f"];
@@ -1861,8 +1863,8 @@ class MeteoAirCard extends MeteoBase {
     return { air, pollen, pollutants, plants, waters, bans };
   }
 
-  /** Icône d'un capteur : celle choisie par l'utilisateur (paramètres de l'entité, ou icon: dans la configuration
-   *  des pollens), sinon celle de la carte. */
+  /** Icône d'un capteur : celle choisie dans la carte (options icon_…, ou icon: d'une plante), sinon celle
+   *  des paramètres de l'entité, sinon celle de la carte. */
   _icon(id, fallback, own) {
     return own || (id && this._hass.entities?.[id]?.icon) || fallback;
   }
@@ -1882,10 +1884,10 @@ class MeteoAirCard extends MeteoBase {
     const c = this._config;
     const f = this._find();
     const ids = [f.air, f.pollen, ...f.waters, ...f.pollutants, ...f.plants.flatMap((p) => [p.level, p.concentration])];
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|` + ids.map((id) => `${this._st(id)?.state}~${this._hass.entities?.[id]?.icon || ""}`).join("|") + `|${f.bans.map((b) => `${b.id}:${b.restriction}`).join(",")}`;
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Object.keys(c).filter((k) => k.startsWith("icon_")).map((k) => c[k]).join(",")}|` + ids.map((id) => `${this._st(id)?.state}~${this._hass.entities?.[id]?.icon || ""}`).join("|") + `|${f.bans.map((b) => `${b.id}:${b.restriction}`).join(",")}`;
     if (sig === this._sig) return;
     this._sig = sig;
-    const bar = (id, icon, title, a, max) => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${esc(this._icon(id, icon))}" style="color:${safeColor(a.color)}"></ha-icon>
+    const bar = (id, icon, title, a, max, own = "") => !a ? "" : `<div class="pol" data-entity="${esc(id)}"><ha-icon icon="${esc(this._icon(id, icon, own))}" style="color:${safeColor(a.color)}"></ha-icon>
       <div class="pol-t"><span>${esc(title)}</span><b style="color:${safeColor(a.color)}">${esc(a.label)}${a.lv !== null ? ` (${a.lv})` : ""}</b></div>
       ${a.lv !== null ? `<div class="pol-r"><div class="rbar"><i style="width:${Math.min(100, (a.lv / max) * 100).toFixed(0)}%;background:${safeColor(a.color)}"></i></div><b>${a.lv}/${max}</b></div>` : ""}</div>`;
     const tile = (id, icon, name, a, extra = "", own = "") => `<div class="pl-t" data-entity="${esc(id)}" style="--pc:${a ? safeColor(a.color, ATMO_COLOR[0]) : ATMO_COLOR[0]}">
@@ -1894,9 +1896,9 @@ class MeteoAirCard extends MeteoBase {
     if (c.show_air !== false && (f.air || f.pollutants.length)) {
       const tiles = f.pollutants.map((id) => {
         const p = POLLUTANTS.find(([re]) => re.test(id));
-        return tile(id, "mdi:molecule", p ? p[1] : this._st(id)?.attributes?.friendly_name || id, this._atmo(id));
+        return tile(id, "mdi:molecule", p ? p[1] : this._st(id)?.attributes?.friendly_name || id, this._atmo(id), "", p ? c[`icon_${p[3]}`] : "");
       }).join("");
-      parts.push(`<div class="sec">Qualité de l'air</div>${bar(f.air, "mdi:air-filter", "Indice Atmo", this._atmo(f.air), 6)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
+      parts.push(`<div class="sec">Qualité de l'air</div>${bar(f.air, "mdi:air-filter", "Indice Atmo", this._atmo(f.air), 6, c.icon_air)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
     }
     if (c.show_pollens !== false && (f.pollen || f.plants.length)) {
       const tiles = f.plants.map((p) => {
@@ -1904,9 +1906,11 @@ class MeteoAirCard extends MeteoBase {
         const cv = this._num(p.concentration), unit = this._st(p.concentration)?.attributes?.unit_of_measurement || "µg/m³";
         if (!c.show_all_pollens && a && a.lv !== null && a.lv <= 1 && !(cv > 0)) return "";
         const name = p.name || ATMO_PLANTS.find(([k]) => String(p.level || p.concentration).includes(k))?.[1] || this._st(p.level || p.concentration)?.attributes?.friendly_name || p.level;
-        return tile(p.level || p.concentration, this._icon(p.concentration, pollenIcon(name)), name, a, cv !== null ? `<div class="pl-c">${fmt(cv, 1)} ${esc(unit)}</div>` : "", p.icon);
+        const plant = ATMO_PLANTS.find(([k, n]) => String(p.level || p.concentration || "").includes(k) || n === name);
+        const own = p.icon || (plant ? c[`icon_${PLANT_ICON_KEY[plant[0]]}`] : "");
+        return tile(p.level || p.concentration, this._icon(p.concentration, pollenIcon(name)), name, a, cv !== null ? `<div class="pl-c">${fmt(cv, 1)} ${esc(unit)}</div>` : "", own);
       }).join("");
-      parts.push(`<div class="sec">Pollens</div>${bar(f.pollen, "mdi:flower-pollen-outline", "Indice pollens", this._atmo(f.pollen, true), 6)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
+      parts.push(`<div class="sec">Pollens</div>${bar(f.pollen, "mdi:flower-pollen-outline", "Indice pollens", this._atmo(f.pollen, true), 6, c.icon_pollen)}${tiles ? `<div class="plants">${tiles}</div>` : ""}`);
     }
     if (c.show_water !== false && f.waters.length) {
       const TYPES = [[/_aep_|-aep\b|aep/i, "Eau potable"], [/_sou_|-sou\b|sou/i, "Eaux souterraines"], [/_sup_|-sup\b|sup/i, "Eaux superficielles"]];
@@ -1921,7 +1925,7 @@ class MeteoAirCard extends MeteoBase {
       const lv = top.lv, col = lv === null ? ATMO_COLOR[0] : WATER_COLOR[lv];
       const detail = levels.length > 1 ? `<div class="wl">${levels.map((l) => `<span class="w-i" data-entity="${esc(l.id)}" style="--pc:${l.lv === null ? ATMO_COLOR[0] : WATER_COLOR[l.lv]}">${esc(l.type || l.id)}<b>${esc(l.label)}</b></span>`).join("")}</div>` : "";
       const bans = f.bans.length ? `<div class="wl">${f.bans.map((b) => `<span class="w-b${b.partial ? " part" : ""}" data-entity="${esc(b.id)}" title="${esc(b.restriction || "Interdiction")}"><ha-icon icon="${b.partial ? "mdi:water-alert" : "mdi:water-off"}"></ha-icon>${esc(b.name)}${b.partial && b.restriction ? `<small>${esc(b.restriction)}</small>` : ""}</span>`).join("")}</div>` : "";
-      parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(top.id)}"><ha-icon icon="${esc(this._icon(top.id, "mdi:water-alert"))}" style="color:${col}"></ha-icon>
+      parts.push(`<div class="sec">Eau</div><div class="pol" data-entity="${esc(top.id)}"><ha-icon icon="${esc(this._icon(top.id, "mdi:water-alert", c.icon_water))}" style="color:${col}"></ha-icon>
         <div class="pol-t"><span>Vigilance sécheresse${top.area ? ` · ${esc(top.area)}` : ""}</span><b style="color:${col}">${esc(top.label)}${lv !== null ? ` (${lv})` : ""}</b></div>
         ${lv !== null ? `<div class="pol-r"><div class="wbar">${[0, 1, 2, 3, 4].map((i) => `<i style="background:${WATER_COLOR[i]};opacity:${i <= lv ? 1 : 0.25}"></i>`).join("")}</div></div>` : ""}</div>${detail}${bans}`);
     }
@@ -4382,10 +4386,17 @@ const AIR_SCHEMA = [
   { name: "show_pollens", selector: { boolean: {} } },
   { name: "show_all_pollens", selector: { boolean: {} } },
   { name: "show_water", selector: { boolean: {} } },
+  // icônes au choix : vide = icône des paramètres de l'entité, sinon celle de la carte
+  { type: "expandable", flatten: true, title: "Icônes (vide = icône de l'entité ou de la carte)", schema: [{ type: "grid", name: "", schema: [
+    "air", "no2", "so2", "o3", "pm10", "pm25", "pollen", "ambroisie", "armoise", "aulne", "bouleau", "graminees", "olivier", "water",
+  ].map((k) => ({ name: `icon_${k}`, selector: { icon: {} } })) }] },
   THEME_SELECT,
   TEXT_SIZE,
 ];
 const AIR_LABELS = {
+  icon_air: "Indice Atmo", icon_no2: "NO₂", icon_so2: "SO₂", icon_o3: "O₃", icon_pm10: "PM10", icon_pm25: "PM2,5",
+  icon_pollen: "Indice pollens", icon_ambroisie: "Ambroisie", icon_armoise: "Armoise", icon_aulne: "Aulne", icon_bouleau: "Bouleau",
+  icon_graminees: "Graminées", icon_olivier: "Olivier", icon_water: "Vigilance sécheresse",
   title: "Titre (Air, pollens et eau par défaut)",
   air: "Qualité de l'air globale (vide = Atmo France détecté)",
   pollen: "Qualité globale des pollens (vide = détectée)",
