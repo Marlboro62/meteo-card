@@ -389,7 +389,7 @@ type: custom:meteo-air-card
 
 Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée. Seules les valeurs du jour sont affichées (les capteurs Atmo France du lendemain, « …-J+1 », sont ignorés). VigiEau : un niveau par type d'eau (eau potable, eaux souterraines, eaux superficielles) et un badge par usage interdit : **rouge** pour une interdiction, **orange** pour une interdiction partielle (sauf exception, sur plage horaire, réduction de prélèvement…), avec le détail. Un clic sur un badge ouvre la fiche de l'usage, avec le texte complet de la restriction. Une interdiction sur plage horaire reste affichée en dehors de ses heures. **Attention** : l'intégration VigiEau désactive par défaut la plupart des usages (12 sur 17). Pour les voir tous, activez leurs entités dans **Paramètres › Appareils et services › VigiEau › Entités** (filtre « Désactivées »).
 
-**Icônes** : une icône changée dans les paramètres d'une entité (**Paramètres › Appareils et services › Entités ›** le capteur **› ⚙ › Icône**) remplace celle de la carte, pour l'indice Atmo, les polluants, les pollens et la vigilance sécheresse. Dans `pollens`, `icon` fixe aussi l'icône d'une plante.
+**Icônes** : chaque icône se choisit dans l'éditeur (volet « Icônes ») ou en YAML avec les options `icon_…` ci-dessous. Sans option, la carte prend l'icône changée dans les paramètres de l'entité (**Paramètres › Appareils et services › Entités ›** le capteur **› ⚙ › Icône**), sinon la sienne. Dans `pollens`, `icon` fixe aussi l'icône d'une plante.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
@@ -401,6 +401,9 @@ Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout
 | `water` | Vigilance sécheresse (VigiEau), un capteur ou une liste | détectée |
 | `show_air`, `show_pollens`, `show_water` | Afficher chaque partie | `true` |
 | `show_all_pollens` | Afficher aussi les pollens à « très faible » | `true` |
+| `icon_air`, `icon_pollen`, `icon_water` | Icône de l'indice Atmo, de l'indice pollens, de la vigilance sécheresse | icône de l'entité ou de la carte |
+| `icon_no2`, `icon_so2`, `icon_o3`, `icon_pm10`, `icon_pm25` | Icône de chaque polluant | icône de l'entité ou `mdi:molecule` |
+| `icon_ambroisie`, `icon_armoise`, `icon_aulne`, `icon_bouleau`, `icon_graminees`, `icon_olivier` | Icône de chaque plante | icône de l'entité ou de la carte |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
