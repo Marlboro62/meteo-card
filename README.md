@@ -389,13 +389,15 @@ type: custom:meteo-air-card
 
 Les capteurs des intégrations **Atmo France** et **VigiEau** sont trouvés tout seuls ; chaque partie sans capteur est masquée. Seules les valeurs du jour sont affichées (les capteurs Atmo France du lendemain, « …-J+1 », sont ignorés). VigiEau : un niveau par type d'eau (eau potable, eaux souterraines, eaux superficielles) et un badge par usage interdit : **rouge** pour une interdiction, **orange** pour une interdiction partielle (sauf exception, sur plage horaire, réduction de prélèvement…), avec le détail. Un clic sur un badge ouvre la fiche de l'usage, avec le texte complet de la restriction. Une interdiction sur plage horaire reste affichée en dehors de ses heures. **Attention** : l'intégration VigiEau désactive par défaut la plupart des usages (12 sur 17). Pour les voir tous, activez leurs entités dans **Paramètres › Appareils et services › VigiEau › Entités** (filtre « Désactivées »).
 
+**Icônes** : une icône changée dans les paramètres d'une entité (**Paramètres › Appareils et services › Entités ›** le capteur **› ⚙ › Icône**) remplace celle de la carte, pour l'indice Atmo, les polluants, les pollens et la vigilance sécheresse. Dans `pollens`, `icon` fixe aussi l'icône d'une plante.
+
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `title` | Titre | `Air, pollens et eau` |
 | `air` | Qualité de l'air globale (`sensor.qualite_globale_…`) | détectée |
 | `pollutants` | Liste des capteurs de polluants | détectés |
 | `pollen` | Qualité globale des pollens (`sensor.qualite_globale_pollen_…`) | détectée |
-| `pollens` | Liste de `{ name, level, concentration }` | détectés |
+| `pollens` | Liste de `{ name, level, concentration, icon }` | détectés |
 | `water` | Vigilance sécheresse (VigiEau), un capteur ou une liste | détectée |
 | `show_air`, `show_pollens`, `show_water` | Afficher chaque partie | `true` |
 | `show_all_pollens` | Afficher aussi les pollens à « très faible » | `true` |
