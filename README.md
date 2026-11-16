@@ -97,7 +97,7 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
-## Nouveautés de la 3.21.0 (bêta)
+## Nouveautés de la 3.21.0
 
 - **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, rien ne change : position de Home Assistant. Merci à @jco49620 pour l'idée.
 
