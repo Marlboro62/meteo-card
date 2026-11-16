@@ -19,6 +19,7 @@
  *   alert: sensor.xx_weather_alert    (facultatif : vigilance Météo-France détectée)
  *   ec_alerts: [sensor.ville_alertes, …]  (facultatif : alertes Environnement Canada détectées)
  *   entities: [weather.a, weather.b]  (facultatif : plusieurs villes en onglets)
+ *     (ou une ligne par ville : entity, name, alert, latitude, longitude, elevation : soleil calculé pour la ville)
  *   forecasts: [hourly, daily]        (facultatif : plusieurs prévisions l'une sous l'autre)
  *
  *   type: custom:meteo-ciel-card      (tout est détecté ; voir le README pour les options)
@@ -28,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.20.0";
+const CARD_VERSION = "3.21.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -279,8 +280,9 @@ const sunTimes = (date, lat, lng, elevation = 0) => {
  * pris dans sun.sun, sinon calculés (ceux du jour, ou du lendemain une fois passés).
  * riseTomorrow / setTomorrow : l'heure affichée est celle du lendemain.
  */
-const nextSunTimes = (hass, now, lat, lng) => {
-  const elev = hass?.config?.elevation, a = hass?.states?.["sun.sun"]?.attributes || {};
+const nextSunTimes = (hass, now, lat, lng, place = null) => {
+  // lieu donné (ville d'un onglet) : son altitude, et pas les heures de sun.sun, qui sont celles du domicile
+  const elev = place ? place.elevation : hass?.config?.elevation, a = place && !place.home ? {} : hass?.states?.["sun.sun"]?.attributes || {};
   const today = sunTimes(now, lat, lng, elev), tomorrow = sunTimes(new Date(now.getTime() + DAYMS), lat, lng, elev);
   const pick = (attr, k) => {
     const d = a[attr] ? new Date(a[attr]) : null;
@@ -295,9 +297,9 @@ const nextSunTimes = (hass, now, lat, lng) => {
  * Heures du soleil d'après sun.sun quand il les donne pour le même jour (prochain lever ou coucher),
  * sinon calculées : la carte affiche alors exactement les heures de Home Assistant.
  */
-const sunTimesHA = (hass, date, lat, lng) => {
-  const st = sunTimes(date, lat, lng, hass?.config?.elevation);
-  const a = hass?.states?.["sun.sun"]?.attributes || {};
+const sunTimesHA = (hass, date, lat, lng, place = null) => {
+  const st = sunTimes(date, lat, lng, place ? place.elevation : hass?.config?.elevation);
+  const a = place && !place.home ? {} : hass?.states?.["sun.sun"]?.attributes || {};
   const sameDay = (iso) => {
     const d = iso ? new Date(iso) : null;
     return d && !isNaN(d) && d.toDateString() === new Date(date).toDateString() ? d : null;
@@ -415,8 +417,8 @@ const AMCHARTS = {
 };
 
 /** Nuit à un instant donné : le soleil est sous l'horizon (calculé d'après les coordonnées). */
-const isNight = (date, hass) => {
-  const lat = num(hass?.config?.latitude), lon = num(hass?.config?.longitude);
+const isNight = (date, hass, place = null) => {
+  const lat = place ? place.lat : num(hass?.config?.latitude), lon = place ? place.lon : num(hass?.config?.longitude);
   if (lat === null || lon === null) return false;
   return position("sun", date, lat, lon).el < -0.833;
 };
@@ -499,6 +501,23 @@ const RAIN_COLOR = ["var(--med-line)", "#7cc4f5", "#1d93e3", "#0b5fa8"];
 
 /** Une ville : chaîne « weather.… » ou objet { entity, name, alert }. */
 const cityOf = (x) => (typeof x === "string" ? { entity: x } : x && typeof x === "object" ? x : {});
+
+/**
+ * Lieu des calculs du soleil et de la lune : premières coordonnées données (ville de l'onglet, puis carte),
+ * sinon celles de Home Assistant. home : même lieu que Home Assistant, dont les heures de sun.sun sont valables.
+ * elevation : altitude donnée, sinon celle de Home Assistant pour le domicile, sinon 0.
+ */
+const placeOf = (hass, ...srcs) => {
+  const cfg = hass?.config || {}, hLat = num(cfg.latitude), hLon = num(cfg.longitude), hEl = num(cfg.elevation) ?? 0;
+  for (const s of srcs) {
+    const lat = num(s?.latitude), lon = num(s?.longitude);
+    if (lat === null || lon === null) continue;
+    const el = num(s.elevation);
+    const home = hLat !== null && hLon !== null && Math.abs(lat - hLat) < 1e-4 && Math.abs(lon - hLon) < 1e-4 && (el === null || el === hEl);
+    return { lat, lon, elevation: el ?? (home ? hEl : 0), home };
+  }
+  return hLat === null || hLon === null ? null : { lat: hLat, lon: hLon, elevation: hEl, home: true };
+};
 
 /** Stockage local (onglet choisi, etc.) sans erreur en navigation privée. */
 const store = {
@@ -787,10 +806,16 @@ class MeteoCard extends MeteoBase {
     }
     const pick = (k) => (c[k] !== undefined ? { [k]: c[k] } : {});
     this._astroEl.setConfig({ ...pick("theme"), ...pick("moon"), ...pick("season"), ...pick("zodiac"), ...pick("moon_image"), ...pick("earth_image"),
-      ...pick("text_size"), ...(c.astro && typeof c.astro === "object" ? c.astro : {}) });
+      ...pick("text_size"), ...this._astroPlace(), ...(c.astro && typeof c.astro === "object" ? c.astro : {}) });
     this._astroEl.hass = this._hass;
     this._dlgAstro.className = `dlg dlg-astro ${themeClass(c.theme, this._hass)}`;
     if (typeof this._dlgAstro.showModal === "function") this._dlgAstro.showModal(); else this._dlgAstro.setAttribute("open", "");
+  }
+
+  /** Coordonnées de la ville affichée pour la fenêtre Soleil et lune (rien pour le domicile de Home Assistant). */
+  _astroPlace() {
+    const p = this._place;
+    return p && !p.home ? { latitude: p.lat, longitude: p.lon, elevation: p.elevation } : {};
   }
 
   _tabKey() {
@@ -805,6 +830,8 @@ class MeteoCard extends MeteoBase {
     if (this._tab === undefined) this._tab = Number(store.get(this._tabKey())) || 0;
     const ti = Math.min(this._tab, cities.length - 1);
     const city = cities[ti];
+    // coordonnées de la ville (soleil, nuit des icônes), sinon de la carte, sinon de Home Assistant
+    this._place = placeOf(this._hass, city, c);
     // la première ville profite de la détection automatique (vigilance, saison, lune…)
     const ent = detect(this._hass, { ...c, ...(city.entity ? { entity: city.entity } : {}), ...(city.alert ? { alert: city.alert } : ti > 0 ? { alert: "-" } : {}) });
     if (ent.alert === "-") ent.alert = null;
@@ -821,7 +848,7 @@ class MeteoCard extends MeteoBase {
     const w = this._st(ent.weather);
     const al = this._st(ent.alert);
     const rel = related(this._hass, ent.weather);
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${w?.last_updated}|${al?.last_updated}|` +
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${JSON.stringify(this._place)}|${w?.last_updated}|${al?.last_updated}|` +
       [ent.season, ent.moon, ent.zodiac, city.rain_rate || (ti === 0 ? c.rain_rate : null), ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
       `|${Object.values(ent.ec || {}).map((id) => this._st(id)?.last_updated).join(",")}|${this._ecRes?.sig || ""}`;
     if (sig === this._sig) return;
@@ -1166,7 +1193,7 @@ class MeteoCard extends MeteoBase {
     const mode = this._config.icons || "animated";
     if (mode === "mdi") return mdi;
     // prévision par jour (pas d'heure) : toujours l'icône de jour, sauf « nuit claire »
-    const night = cond === "clear-night" || (date ? isNight(date, this._hass) : false);
+    const night = cond === "clear-night" || (date ? isNight(date, this._hass, this._place) : false);
     const am = AMCHARTS[cond];
     if ((mode === "animated" || mode === "static") && am) {
       const base = String(this._config.icons_path || AMCHARTS_URL).replace(/\/?$/, "/");
@@ -1178,7 +1205,9 @@ class MeteoCard extends MeteoBase {
 
   _sky(ent) {
     const now = new Date(), c = this._config;
-    const south = Number(this._hass?.config?.latitude) < 0;
+    // lieu de la ville affichée (latitude, longitude, elevation de l'onglet), sinon celui de Home Assistant
+    const place = this._place || placeOf(this._hass, c);
+    const south = place ? place.lat < 0 : false;
     const sRaw = String(this._st(ent.season)?.state || "").toLowerCase();
     const season = SEASON[sRaw] || SEASON[seasonOfDate(now, south)];
     const mKey = moonKeyOf(this._st(ent.moon)?.state);
@@ -1197,10 +1226,10 @@ class MeteoCard extends MeteoBase {
       return `<div class="sky-t"${tap(id, act)}>${visual}<div class="k-v">${esc(value)}</div><div class="k-l">${esc(label)}</div></div>`;
     };
     // soleil : au-dessus ou sous l'horizon, lever et coucher du jour (calculés d'après les coordonnées)
-    const lat = num(this._hass?.config?.latitude), lon = num(this._hass?.config?.longitude);
     const sunSt = this._st("sun.sun")?.state;
-    const sunI = SUN_ICON[sunSt] || (lat !== null && lon !== null ? SUN_ICON[isNight(now, this._hass) ? "below_horizon" : "above_horizon"] : null);
-    const st = lat !== null && lon !== null ? nextSunTimes(this._hass, now, lat, lon) : null;
+    // sun.sun ne vaut que pour le domicile : ailleurs, soleil levé ou couché calculé pour la ville
+    const sunI = (place?.home !== false && SUN_ICON[sunSt]) || (place ? SUN_ICON[isNight(now, this._hass, place) ? "below_horizon" : "above_horizon"] : null);
+    const st = place ? nextSunTimes(this._hass, now, place.lat, place.lon, place) : null;
     // case Soleil : capteur choisi (option sun, pour son image et son « plus d'infos »), sinon sun.sun
     const sunId = c.sun && usableState(this._st(c.sun)) ? c.sun : sunSt ? "sun.sun" : null;
     const seasonId = usableState(this._st(ent.season)) ? ent.season : null;
@@ -1599,7 +1628,8 @@ class MeteoAstroCard extends MeteoBase {
   }
 
   _sun([lat, lon], now) {
-    const st = sunTimesHA(this._hass, now, lat, lon), y = sunTimes(new Date(now.getTime() - DAYMS), lat, lon, this._hass?.config?.elevation);
+    const place = placeOf(this._hass, this._config);
+    const st = sunTimesHA(this._hass, now, lat, lon, place), y = sunTimes(new Date(now.getTime() - DAYMS), lat, lon, place ? place.elevation : this._hass?.config?.elevation);
     const sp = position("sun", now, lat, lon), mp = position("moon", now, lat, lon);
     const ent = detect(this._hass, this._config), rel = related(this._hass, ent.weather);
     const uv = this._num(this._config.uv || rel.uv) ?? num(this._st(ent.weather)?.attributes?.uv_index);
@@ -2212,7 +2242,7 @@ class MeteoCanadaCard extends MeteoBase {
 // lecture des alertes Environnement Canada : les mêmes fonctions que la carte Météo
 // prévisions : le même rendu que la carte Météo (colonnes, icônes, barres de température)
 // soleil, saison, lune et zodiaque : la même rangée et les mêmes fenêtres que la carte Météo
-for (const m of ["_ecSig", "_ecFetch", "_ecVigilance", "_forecast", "_wicon", "_sky", "_moonKey", "_openMoon", "_openAstro"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
+for (const m of ["_ecSig", "_ecFetch", "_ecVigilance", "_forecast", "_wicon", "_sky", "_moonKey", "_openMoon", "_openAstro", "_astroPlace"]) MeteoCanadaCard.prototype[m] = MeteoCard.prototype[m];
 
 /* ---------------------------------------------------------- carte Éclairs */
 
@@ -4218,6 +4248,9 @@ const SCHEMA = [
     alert: { label: "Vigilance (facultatif, capteur de vigilance Météo-France ou équivalent)", selector: { entity: { domain: "sensor" } } },
     ec_alerts: { label: "Alertes Environnement Canada (facultatif, détectées)", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
     rain_rate: { label: "Intensité de pluie mesurée, en mm/h (facultatif, station météo)", selector: { entity: { domain: "sensor" } } },
+    latitude: { label: "Latitude de la ville (facultatif : lever et coucher du soleil ; vide = Home Assistant)", selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
+    longitude: { label: "Longitude de la ville (facultatif)", selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } } },
+    elevation: { label: "Altitude de la ville, en m (facultatif)", selector: { number: { min: -500, max: 9000, step: 1, mode: "box", unit_of_measurement: "m" } } },
   } } } },
   { name: "title", selector: { text: {} } },
   { name: "alert", selector: { entity: { domain: "sensor", integration: "meteo_france" } } },

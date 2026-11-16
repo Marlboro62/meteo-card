@@ -97,6 +97,10 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.21.0 (bêta)
+
+- **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, rien ne change : position de Home Assistant. Merci à @jco49620 pour l'idée.
+
 ## Nouveautés de la 3.19.0
 
 - **Carte interactive repliable** sur les cartes Crues et rivières, Séismes, Feux de forêt et Bolides : le bouton « Masquer la carte » / « Afficher la carte » sous la liste la cache ou la montre, et chaque carte s'en souvient. Masquée, la carte n'est pas chargée. Option `map_hidden: true` pour la masquer au premier affichage.
@@ -256,12 +260,12 @@ type: custom:meteo-card
 - **Alertes Environnement Canada** (Canada) : une ligne par alerte en cours, avec son type (avertissement, veille, avis, bulletin), son titre et son heure de fin, et une pastille « Alertes » dans l'en-tête. Voir [Alertes Environnement Canada](#alertes-environnement-canada).
 - **Prévisions** par heure, par jour ou jour et nuit, **l'une sous l'autre** si vous le souhaitez, avec les **mêmes lignes pour les heures et les jours** : température, minimale, pluie en mm (0 mm compris), risque de pluie, humidité, vent, **rafales en rouge** et direction. Seules les lignes que votre intégration fournit sont affichées.
 - **Soleil, saison, lune, zodiaque** : soleil au-dessus ou sous l'horizon, heures de lever et de coucher, saison, phase de lune et signe.
-- **Plusieurs villes** : des onglets en haut de la carte ; la carte retient l'onglet choisi.
+- **Plusieurs villes** : des onglets en haut de la carte ; la carte retient l'onglet choisi. Avec ses coordonnées, chaque ville a ses propres heures de lever et de coucher du soleil.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `entity` | Entité météo (`weather.…`) | Météo-France, sinon la première trouvée |
-| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts }` | — |
+| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts, rain_rate, latitude, longitude, elevation }`. `latitude` et `longitude` : lieu du soleil de la ville (lever, coucher, Soleil et lune) ; `elevation` : son altitude en mètres, facultative | — |
 | `title` | Titre (une seule ville) | `Météo` |
 | `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
@@ -287,6 +291,26 @@ type: custom:meteo-card
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant : icônes, sélections, boussoles et flèches du vent prennent la `primary-color` du thème ; la pluie et le froid restent bleus) | `v2` |
 | `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
+
+Trois villes, chacune avec ses heures de lever et de coucher du soleil :
+
+```yaml
+type: custom:meteo-card
+entities:
+  - entity: weather.ville_a
+    name: Ville A
+  - entity: weather.ville_b
+    name: Ville B
+    latitude: 43.6646
+    longitude: 7.1481
+  - entity: weather.ville_c
+    name: Ville C
+    latitude: 44.8297
+    longitude: 4.5822
+    elevation: 420
+```
+
+La première ville sans coordonnées prend celles de Home Assistant.
 
 ### Alertes Environnement Canada
 
@@ -369,7 +393,7 @@ type: custom:meteo-astro-card
 | `moon_image` | Photo d'une **pleine lune** (PNG, JPG ou SVG, ex. `/local/images/lune.png`) : la carte l'assombrit selon la phase du jour, à la place de la lune dessinée (voir [Licence](#licence) pour la photo utilisée en exemple) | — |
 | `earth_image` | Photo de la Terre au centre de la fenêtre des phases (ex. `/local/images/terre.png`), à la place de la Terre dessinée (voir [Licence](#licence)) | — |
 | `compass_image` | Image au centre de la boussole | — |
-| `latitude`, `longitude` | Lieu des calculs | coordonnées de Home Assistant |
+| `latitude`, `longitude`, `elevation` | Lieu des calculs et son altitude en mètres (`elevation` : celle de Home Assistant pour le domicile, sinon 0) | coordonnées de Home Assistant |
 | `kp_entity`, `aurora_entity` | Capteurs d'indice Kp et de probabilité d'aurore à utiliser à la place de ceux détectés | détectés |
 | `show_sun`, `show_moon`, `show_cycles`, `show_meteors`, `show_space`, `show_pollens` | Afficher chaque partie | `true` |
 | `theme` | Couleurs de la carte | `v2` |
