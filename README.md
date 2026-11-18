@@ -265,7 +265,7 @@ type: custom:meteo-card
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `entity` | Entité météo (`weather.…`) | Météo-France, sinon la première trouvée |
-| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts, rain_rate, latitude, longitude, elevation }`. `latitude` et `longitude` : lieu du soleil de la ville (lever, coucher, Soleil et lune) ; `elevation` : son altitude en mètres, facultative | — |
+| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts, rain_rate, rain_hour, latitude, longitude, elevation }`. `latitude` et `longitude` : lieu du soleil de la ville (lever, coucher, Soleil et lune) ; `elevation` : son altitude en mètres, facultative | — |
 | `title` | Titre (une seule ville) | `Météo` |
 | `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
@@ -287,6 +287,7 @@ type: custom:meteo-card
 | `sky_tap` | Clic sur les cases Soleil, Lever · coucher et Lune : `popup` ouvre la carte **Soleil et lune** (soleil) ou la fenêtre des **phases de la lune** (lune), `more-info` ouvre la fiche de l'entité | `popup` |
 | `astro` | Réglages de la carte Soleil et lune ouverte au clic (mêmes options que `custom:meteo-astro-card`, ex. `show_pollens: false`) | thème, lune, saison et images de la carte Météo |
 | `entity_pictures` | Afficher l'image des capteurs soleil, saison, lune et zodiaque (attribut `entity_picture`, PNG, JPG ou SVG animé) à la place des icônes. `moon_image` reste prioritaire pour la lune | `true` |
+| `rain_hour` | Capteur Météo-France de la **pluie dans l'heure** (`sensor.<ville>_next_rain`), trouvé seul pour chaque ville (même appareil ou même nom que l'entité météo). Une ville sans ce capteur (ville étrangère, autre intégration) n'affiche pas la barre. Aussi par ville dans `entities` (`rain_entity` est accepté), `none` pour ne pas l'afficher | détecté |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant : icônes, sélections, boussoles et flèches du vent prennent la `primary-color` du thème ; la pluie et le froid restent bleus) | `v2` |

@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.21.0";
+const CARD_VERSION = "3.21.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -487,10 +487,21 @@ const related = (hass, weather) => {
   };
 };
 
-/** Capteur Météo-France « pluie dans l'heure » (attribut 1_hour_forecast) de la ville. */
-const rainHourOf = (hass, weather, given) => {
+/** Capteur Météo-France « pluie dans l'heure » (attribut 1_hour_forecast) de la ville.
+ *  Indiqué (rain_hour, ou rain_entity) : celui-là ; « none » : aucun. Sinon, celui de la même ville (même appareil
+ *  que l'entité météo, ou même préfixe : weather.ville → sensor.ville_…). Avec plusieurs villes, une ville sans capteur
+ *  à elle (ville étrangère, autre intégration) n'en reprend pas un autre ; avec une seule ville, le seul capteur
+ *  trouvé reste repris, comme avant. */
+const rainHourOf = (hass, weather, given, single = true) => {
+  if (given === "none" || given === false) return null;
   if (given) return given;
   const ids = Object.keys(hass?.states || {}).filter((id) => id.startsWith("sensor.") && hass.states[id].attributes?.["1_hour_forecast"]);
+  const reg = hass?.entities || {};
+  const dev = reg[weather]?.device_id;
+  const obj = String(weather || "").split(".")[1] || "";
+  const own = ids.find((id) => (dev && reg[id]?.device_id === dev) || (obj && id.startsWith(`sensor.${obj}_`)));
+  if (own) return own;
+  if (!single) return null;
   if (ids.length < 2) return ids[0];
   const tail = String(weather || "").split("_").pop();
   return ids.find((id) => tail && id.includes(tail)) || ids[0];
@@ -848,7 +859,10 @@ class MeteoCard extends MeteoBase {
     const w = this._st(ent.weather);
     const al = this._st(ent.alert);
     const rel = related(this._hass, ent.weather);
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${ti}|${JSON.stringify(this._place)}|${w?.last_updated}|${al?.last_updated}|` +
+    // pluie dans l'heure de la ville affichée (rain_entity accepté comme autre nom de rain_hour)
+    const rainGiven = city.rain_hour ?? city.rain_entity ?? (ti === 0 ? c.rain_hour ?? c.rain_entity : null);
+    this._rainId = rainHourOf(this._hass, ent.weather, rainGiven, cities.length < 2);
+    const sig = `${c.theme}|${this._rainId}|${this._hass.themes?.darkMode}|${ti}|${JSON.stringify(this._place)}|${w?.last_updated}|${al?.last_updated}|` +
       [ent.season, ent.moon, ent.zodiac, city.rain_rate || (ti === 0 ? c.rain_rate : null), ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
       `|${Object.values(ent.ec || {}).map((id) => this._st(id)?.last_updated).join(",")}|${this._ecRes?.sig || ""}`;
     if (sig === this._sig) return;
@@ -864,7 +878,7 @@ class MeteoCard extends MeteoBase {
       body = `<div class="empty"><b>Aucune entité météo</b><span>Ajoutez une intégration météo (Météo-France, Met.no…) ou choisissez l'entité dans l'éditeur de la carte.</span></div>`;
     } else {
       body = (neon ? this._neonHead(w, al, ent, city) : this._header(w, al, ent, city)) + this._now(w, ent, neon) + (c.show_details !== false ? this._details(w, rel, city.rain_rate || (ti === 0 ? c.rain_rate : null)) : "") +
-        (c.show_rain_hour !== false ? this._rainHour(rainHourOf(this._hass, ent.weather, city.rain_hour || (ti === 0 ? c.rain_hour : null))) : "") +
+        (c.show_rain_hour !== false && this._rainId ? this._rainHour(this._rainId) : "") +
         (c.show_alert !== false ? this._alerts(al, ent) : "") +
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
     }
@@ -935,7 +949,7 @@ class MeteoCard extends MeteoBase {
     if (rr !== null) items.push([rate, "mdi:weather-pouring", "Intensité",
       `${fmt(rr, rr > 0 && rr < 10 ? 1 : 0)} ${this._st(rate).attributes?.unit_of_measurement || "mm/h"}`]); // échappé avec la valeur, à l'affichage
     // l'heure de la prochaine pluie est déjà dans la barre « pluie dans l'heure » quand elle est affichée
-    const hourBar = this._config.show_rain_hour !== false && this._st(rainHourOf(this._hass, w.entity_id, this._config.rain_hour))?.attributes?.["1_hour_forecast"];
+    const hourBar = this._config.show_rain_hour !== false && this._st(this._rainId)?.attributes?.["1_hour_forecast"];
     const nr = hourBar ? null : this._st(rel.next_rain);
     if (nr && nr.state !== "unknown" && nr.state !== "unavailable") {
       const d = new Date(nr.state);
