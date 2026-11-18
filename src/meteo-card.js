@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.21.1-beta.1";
+const CARD_VERSION = "3.21.1-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -530,6 +530,40 @@ const placeOf = (hass, ...srcs) => {
   return hLat === null || hLon === null ? null : { lat: hLat, lon: hLon, elevation: hEl, home: true };
 };
 
+/**
+ * Coordonnées d'une ville Météo-France, trouvées seules quand la carte n'en a pas : nom de la ville (appareil de
+ * l'entité, ou son nom) cherché dans le géocodage d'Open-Meteo (gratuit, sans clé), en France, dans le département
+ * de la vigilance quand il est connu. Résultat gardé dans le navigateur ; null tant qu'il n'est pas connu.
+ */
+const GEO_MEM = {};
+const geoCity = (hass, weather, alert) => {
+  const reg = hass?.entities?.[weather];
+  if (!reg || reg.platform !== "meteo_france") return null;
+  const dev = reg.device_id ? hass.devices?.[reg.device_id] : null;
+  // « Pélussin », « Pélussin - Loire (42) » : la ville seule, et son département s'il est écrit
+  const raw = String(dev?.name_by_user || dev?.name || hass.states[weather]?.attributes?.friendly_name || "");
+  const name = raw.split(/\s+[-–]\s+|\s*\(/)[0].replace(/m[ée]t[ée]o[\s-]*france|forecast for city|pr[ée]visions?/gi, "").trim();
+  if (!/\p{L}{2,}/u.test(name)) return null;
+  const dept = (/\((\d{2,3}|2[AB])\)/.exec(raw) || /_((?:\d{2,3}|2[ab]))_weather_alert$/.exec(String(alert || "")) || [])[1]?.toUpperCase() || "";
+  const key = `meteo-card:geo:${name.toLowerCase()}|${dept}`;
+  if (key in GEO_MEM) return GEO_MEM[key];
+  const kept = store.get(key);
+  if (kept && typeof kept === "object") return (GEO_MEM[key] = kept);
+  GEO_MEM[key] = null;  // une seule recherche à la fois
+  fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10&language=fr&countryCode=FR`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      const list = (j?.results || []).filter((x) => num(x.latitude) !== null && num(x.longitude) !== null);
+      const pick = (dept && list.find((x) => (x.postcodes || []).some((pc) => String(pc).startsWith(dept.replace(/^2[AB]$/, "20")))))
+        || (!dept || list.length === 1 ? list[0] : null);
+      if (!pick) return;
+      GEO_MEM[key] = { latitude: pick.latitude, longitude: pick.longitude, elevation: num(pick.elevation) ?? 0, name: pick.name };
+      store.set(key, GEO_MEM[key]);
+    })
+    .catch(() => { /* géocodage injoignable : coordonnées de Home Assistant */ });
+  return null;
+};
+
 /** Stockage local (onglet choisi, etc.) sans erreur en navigation privée. */
 const store = {
   get(k) { try { return JSON.parse(window.localStorage.getItem(k) || "null"); } catch (e) { return null; } },
@@ -841,11 +875,12 @@ class MeteoCard extends MeteoBase {
     if (this._tab === undefined) this._tab = Number(store.get(this._tabKey())) || 0;
     const ti = Math.min(this._tab, cities.length - 1);
     const city = cities[ti];
-    // coordonnées de la ville (soleil, nuit des icônes), sinon de la carte, sinon de Home Assistant
-    this._place = placeOf(this._hass, city, c);
     // la première ville profite de la détection automatique (vigilance, saison, lune…)
     const ent = detect(this._hass, { ...c, ...(city.entity ? { entity: city.entity } : {}), ...(city.alert ? { alert: city.alert } : ti > 0 ? { alert: "-" } : {}) });
     if (ent.alert === "-") ent.alert = null;
+    // coordonnées de la ville (soleil, nuit des icônes), sinon de la carte, sinon celles de la ville Météo-France
+    // (trouvées seules), sinon de Home Assistant
+    this._place = placeOf(this._hass, city, c, geoCity(this._hass, ent.weather, ent.alert || city.alert || c.alert));
     // alertes Environnement Canada : indiquées, ou détectées quand il n'y a pas de vigilance Météo-France
     const ecGiven = city.ec_alerts || (ti === 0 ? c.ec_alerts : null);
     ent.ec = ecGiven || !ent.alert ? ecSensorsOf(this._hass, ent.weather, ecGiven, ti === 0) : null;

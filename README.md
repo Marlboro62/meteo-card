@@ -99,7 +99,7 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 
 ## Nouveautés de la 3.21.0
 
-- **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, rien ne change : position de Home Assistant. Merci à @jco49620 pour l'idée.
+- **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, une ville **Météo-France** trouve seule les siennes (nom de la ville cherché dans le géocodage gratuit d'Open-Meteo, dans le département de la vigilance quand il est connu) ; pour les autres intégrations, position de Home Assistant. Merci à @jco49620 pour l'idée et à @jfvole-gif pour le signalement.
 
 ## Nouveautés de la 3.19.0
 
