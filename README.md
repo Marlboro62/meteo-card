@@ -104,7 +104,7 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 
 ## Nouveautés de la 3.21.0
 
-- **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, une ville **Météo-France** trouve seule les siennes (nom de la ville cherché dans le géocodage gratuit d'Open-Meteo, dans le département de la vigilance quand il est connu) ; pour les autres intégrations, position de Home Assistant. Merci à @jco49620 pour l'idée et à @jfvole-gif pour le signalement.
+- **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa **zone** de Home Assistant (`zone: zone.dubai`), ou sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, la carte prend celles de l'entité météo quand elle en porte ; une ville **Météo-France** trouve seule les siennes (nom de la ville cherché dans le géocodage gratuit d'Open-Meteo, dans le département de la vigilance quand il est connu) ; pour les autres intégrations, position de Home Assistant. Merci à @jco49620 pour l'idée et à @jfvole-gif pour le signalement.
 
 ## Nouveautés de la 3.19.0
 
@@ -270,7 +270,7 @@ type: custom:meteo-card
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `entity` | Entité météo (`weather.…`) | Météo-France, sinon la première trouvée |
-| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts, rain_rate, rain_hour, latitude, longitude, elevation }`. `latitude` et `longitude` : lieu du soleil de la ville (lever, coucher, Soleil et lune) ; `elevation` : son altitude en mètres, facultative | — |
+| `entities` | Plusieurs villes en onglets : `weather.…`, ou `{ entity, name, alert, ec_alerts, rain_rate, rain_hour, zone, latitude, longitude, elevation }`. `zone` (une zone de Home Assistant), ou `latitude` et `longitude` : lieu du soleil de la ville (lever, coucher, Soleil et lune) ; `elevation` : son altitude en mètres, facultative | — |
 | `title` | Titre (une seule ville) | `Météo` |
 | `icon` | Icône à côté du titre | `mdi:weather-partly-cloudy` |
 | `alert` | Capteur de vigilance Météo-France (`sensor.…_weather_alert`) | détecté |
@@ -314,9 +314,12 @@ entities:
     latitude: 44.8297
     longitude: 4.5822
     elevation: 420
+  - entity: weather.ville_d
+    name: Ville D
+    zone: zone.ville_d
 ```
 
-La première ville sans coordonnées prend celles de Home Assistant.
+La première ville sans coordonnées prend celles de Home Assistant. La quatrième prend celles de sa zone, créée dans Paramètres › Zones.
 
 ### Alertes Environnement Canada
 

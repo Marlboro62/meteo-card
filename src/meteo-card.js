@@ -19,7 +19,7 @@
  *   alert: sensor.xx_weather_alert    (facultatif : vigilance Météo-France détectée)
  *   ec_alerts: [sensor.ville_alertes, …]  (facultatif : alertes Environnement Canada détectées)
  *   entities: [weather.a, weather.b]  (facultatif : plusieurs villes en onglets)
- *     (ou une ligne par ville : entity, name, alert, latitude, longitude, elevation : soleil calculé pour la ville)
+ *     (ou une ligne par ville : entity, name, alert, zone ou latitude, longitude, elevation : soleil calculé pour la ville)
  *   forecasts: [hourly, daily]        (facultatif : plusieurs prévisions l'une sous l'autre)
  *
  *   type: custom:meteo-ciel-card      (tout est détecté ; voir le README pour les options)
@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.21.1";
+const CARD_VERSION = "3.22.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -531,6 +531,16 @@ const placeOf = (hass, ...srcs) => {
 };
 
 /**
+ * Coordonnées d'une zone de Home Assistant (zone.dubai) ou de toute entité qui porte latitude et longitude
+ * dans ses attributs (traceur, entité météo de certaines intégrations). null si l'entité n'en a pas.
+ */
+const coordsOf = (hass, id) => {
+  const a = id ? hass?.states?.[id]?.attributes : null;
+  return a && num(a.latitude) !== null && num(a.longitude) !== null
+    ? { latitude: a.latitude, longitude: a.longitude, ...(num(a.elevation) !== null ? { elevation: a.elevation } : {}) } : null;
+};
+
+/**
  * Coordonnées d'une ville Météo-France, trouvées seules quand la carte n'en a pas : nom de la ville (appareil de
  * l'entité, ou son nom) cherché dans le géocodage d'Open-Meteo (gratuit, sans clé), en France, dans le département
  * de la vigilance quand il est connu. Résultat gardé dans le navigateur ; null tant qu'il n'est pas connu.
@@ -878,9 +888,10 @@ class MeteoCard extends MeteoBase {
     // la première ville profite de la détection automatique (vigilance, saison, lune…)
     const ent = detect(this._hass, { ...c, ...(city.entity ? { entity: city.entity } : {}), ...(city.alert ? { alert: city.alert } : ti > 0 ? { alert: "-" } : {}) });
     if (ent.alert === "-") ent.alert = null;
-    // coordonnées de la ville (soleil, nuit des icônes), sinon de la carte, sinon celles de la ville Météo-France
-    // (trouvées seules), sinon de Home Assistant
-    this._place = placeOf(this._hass, city, c, geoCity(this._hass, ent.weather, ent.alert || city.alert || c.alert));
+    // coordonnées de la ville (soleil, nuit des icônes) : données, sinon sa zone, sinon celles de la carte (ou de sa
+    // zone), sinon portées par l'entité météo, sinon celles de la ville Météo-France (trouvées seules), sinon de HA
+    this._place = placeOf(this._hass, city, coordsOf(this._hass, city.zone), c, coordsOf(this._hass, c.zone),
+      coordsOf(this._hass, ent.weather), geoCity(this._hass, ent.weather, ent.alert || city.alert || c.alert));
     // alertes Environnement Canada : indiquées, ou détectées quand il n'y a pas de vigilance Météo-France
     const ecGiven = city.ec_alerts || (ti === 0 ? c.ec_alerts : null);
     ent.ec = ecGiven || !ent.alert ? ecSensorsOf(this._hass, ent.weather, ecGiven, ti === 0) : null;
@@ -4297,7 +4308,8 @@ const SCHEMA = [
     alert: { label: "Vigilance (facultatif, capteur de vigilance Météo-France ou équivalent)", selector: { entity: { domain: "sensor" } } },
     ec_alerts: { label: "Alertes Environnement Canada (facultatif, détectées)", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
     rain_rate: { label: "Intensité de pluie mesurée, en mm/h (facultatif, station météo)", selector: { entity: { domain: "sensor" } } },
-    latitude: { label: "Latitude de la ville (facultatif : lever et coucher du soleil ; vide = Home Assistant)", selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
+    zone: { label: "Zone de la ville (facultatif : lever et coucher du soleil calculés à ses coordonnées)", selector: { entity: { domain: "zone" } } },
+    latitude: { label: "Latitude de la ville (facultatif, à la place de la zone ; vide = Home Assistant)", selector: { number: { min: -90, max: 90, step: 0.0001, mode: "box" } } },
     longitude: { label: "Longitude de la ville (facultatif)", selector: { number: { min: -180, max: 180, step: 0.0001, mode: "box" } } },
     elevation: { label: "Altitude de la ville, en m (facultatif)", selector: { number: { min: -500, max: 9000, step: 1, mode: "box", unit_of_measurement: "m" } } },
   } } } },
