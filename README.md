@@ -97,6 +97,11 @@ Une vue météo classique empile une quinzaine de cartes HACS : stack-in-card, t
 
 Ces cartes font la même chose avec **une seule ressource**, sans CSS à maintenir ni image de phases de lune à positionner à la main. La vue complète est prête dans [`exemples/vue-meteo.yaml`](https://github.com/Marlboro62/meteo-card/blob/main/exemples/vue-meteo.yaml).
 
+## Nouveautés de la 3.21.1
+
+- **Pluie dans l'heure** : avec plusieurs villes en onglets, chaque onglet prend le capteur de sa ville (`rain_hour`, ou `none` pour masquer la barre). Merci à @davidclaverie pour le signalement.
+- **Lever et coucher du soleil** de chaque ville Météo-France, sans avoir à indiquer de coordonnées. Merci à @jfvole-gif pour le signalement et les tests.
+
 ## Nouveautés de la 3.21.0
 
 - **Lever et coucher du soleil par ville** : dans `entities`, chaque ville peut avoir sa `latitude`, sa `longitude` et son `elevation` (altitude, facultative). La case Soleil, les heures de lever et de coucher, les icônes de nuit des prévisions et la carte **Soleil et lune** ouverte au clic sont alors calculées pour la ville de l'onglet. Sans coordonnées, une ville **Météo-France** trouve seule les siennes (nom de la ville cherché dans le géocodage gratuit d'Open-Meteo, dans le département de la vigilance quand il est connu) ; pour les autres intégrations, position de Home Assistant. Merci à @jco49620 pour l'idée et à @jfvole-gif pour le signalement.
