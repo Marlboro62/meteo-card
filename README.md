@@ -260,7 +260,7 @@ type: custom:meteo-card
 - **Maintenant** : température en grand, minimale et maximale du jour.
 - **Ressenti, vent, humidité, pression** : le vent avec sa direction (N, NE, E…), une flèche et les rafales. Sans ressenti fourni, la carte le calcule.
 - **Détails Météo-France** : nuages, risque de pluie, de gel, de neige, indice UV et heure de la prochaine pluie, lus dans les capteurs Météo-France de la ville.
-- **Pluie dans l'heure** (Météo-France) : une barre par tranche de 5 à 10 minutes, « Pas de pluie dans l'heure » ou « Pluie faible à 17:30 ».
+- **Pluie dans l'heure** (Météo-France) : une barre par tranche de 5 à 10 minutes, « Pas de pluie dans l'heure » ou « Pluie faible à 17:30 ». Une tranche sans valeur (« Pas de valeur ») est hachurée en gris.
 - **Vigilance Météo-France** : chaque phénomène actif avec son icône et sa couleur.
 - **Alertes Environnement Canada** (Canada) : une ligne par alerte en cours, avec son type (avertissement, veille, avis, bulletin), son titre et son heure de fin, et une pastille « Alertes » dans l'en-tête. Voir [Alertes Environnement Canada](#alertes-environnement-canada).
 - **Prévisions** par heure, par jour ou jour et nuit, **l'une sous l'autre** si vous le souhaitez, avec les **mêmes lignes pour les heures et les jours** : température, minimale, pluie en mm (0 mm compris), risque de pluie, humidité, vent, **rafales en rouge** et direction. Seules les lignes que votre intégration fournit sont affichées.
