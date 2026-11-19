@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.22.0-beta.1";
+const CARD_VERSION = "3.22.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -506,9 +506,12 @@ const rainHourOf = (hass, weather, given, single = true) => {
   const tail = String(weather || "").split("_").pop();
   return ids.find((id) => tail && id.includes(tail)) || ids[0];
 };
-const RAIN_LEVEL = [[/sec|aucune|dry/i, 0], [/faible|light/i, 1], [/mod[ée]r|moderate/i, 2], [/fort|heavy/i, 3]];
-const rainLevel = (v) => (RAIN_LEVEL.find(([re]) => re.test(String(v ?? ""))) || [, 1])[1];
+// -1 = pas de valeur (« Données indisponibles », vide, inconnu) : tranche vide, jamais comptée comme de la pluie
+const RAIN_LEVEL = [[/indisponible|unavailable|unknown|inconnu|^\s*-*\s*$/i, -1], [/sec|aucune|dry/i, 0],
+  [/faible|light/i, 1], [/mod[ée]r|moderate/i, 2], [/fort|heavy/i, 3], [/pluie|averse|neige|gr[êe]le|rain|snow|shower/i, 1]];
+const rainLevel = (v) => (RAIN_LEVEL.find(([re]) => re.test(v == null ? "" : String(v))) || [, -1])[1];
 const RAIN_COLOR = ["var(--med-line)", "#7cc4f5", "#1d93e3", "#0b5fa8"];
+const rainColor = (lvl) => (lvl < 0 ? "transparent" : RAIN_COLOR[lvl]);
 
 /** Une ville : chaîne « weather.… » ou objet { entity, name, alert }. */
 const cityOf = (x) => (typeof x === "string" ? { entity: x } : x && typeof x === "object" ? x : {});
@@ -967,10 +970,12 @@ class MeteoCard extends MeteoBase {
     const start = isNaN(ref) ? new Date() : ref;
     const segs = steps.map(([m, v], i) => {
       const end = i + 1 < steps.length ? steps[i + 1][0] : 60;
-      return `<span style="flex:${Math.max(1, end - m)};background:${RAIN_COLOR[rainLevel(v)]}" title="${hm(new Date(start.getTime() + m * 6e4))} : ${esc(v)}"></span>`;
+      return `<span style="flex:${Math.max(1, end - m)};background:${rainColor(rainLevel(v))}" title="${hm(new Date(start.getTime() + m * 6e4))} : ${esc(v ?? "pas de valeur")}"></span>`;
     }).join("");
     const first = steps.find(([, v]) => rainLevel(v) > 0);
-    const text = !first ? "Pas de pluie dans l'heure"
+    // aucune tranche avec une valeur : capteur pas encore mis à jour
+    const noData = steps.every(([, v]) => rainLevel(v) < 0);
+    const text = noData ? "Pluie dans l'heure : pas encore de données" : !first ? "Pas de pluie dans l'heure"
       : first[0] === 0 ? `${steps[0][1]} en ce moment` : `${first[1]} à ${hm(new Date(start.getTime() + first[0] * 6e4))}`;
     const ticks = [10, 20, 30, 40, 50].map((m) => `<i style="left:${(m / 60) * 100}%">${m}</i>`).join("");
     return `<div class="rh" data-entity="${esc(id)}"><div class="rh-h"><span>${hm(start)}</span><b>${esc(text)}</b><span>${hm(new Date(start.getTime() + 36e5))}</span></div>
