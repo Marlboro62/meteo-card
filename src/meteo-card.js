@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.22.0-beta.2";
+const CARD_VERSION = "3.22.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -511,7 +511,9 @@ const RAIN_LEVEL = [[/indisponible|unavailable|unknown|inconnu|^\s*-*\s*$/i, -1]
   [/faible|light/i, 1], [/mod[ée]r|moderate/i, 2], [/fort|heavy/i, 3], [/pluie|averse|neige|gr[êe]le|rain|snow|shower/i, 1]];
 const rainLevel = (v) => (RAIN_LEVEL.find(([re]) => re.test(v == null ? "" : String(v))) || [, -1])[1];
 const RAIN_COLOR = ["var(--med-line)", "#7cc4f5", "#1d93e3", "#0b5fa8"];
-const rainColor = (lvl) => (lvl < 0 ? "transparent" : RAIN_COLOR[lvl]);
+// tranche sans valeur : fines hachures grises en diagonale, distinctes du « Temps sec »
+const RAIN_NONE = "repeating-linear-gradient(135deg, var(--med-line) 0 2px, transparent 2px 5px)";
+const rainColor = (lvl) => (lvl < 0 ? RAIN_NONE : RAIN_COLOR[lvl]);
 
 /** Une ville : chaîne « weather.… » ou objet { entity, name, alert }. */
 const cityOf = (x) => (typeof x === "string" ? { entity: x } : x && typeof x === "object" ? x : {});
