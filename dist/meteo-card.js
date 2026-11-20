@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.22.0";
+const CARD_VERSION = "3.23.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -1649,9 +1649,16 @@ class MeteoAstroCard extends MeteoBase {
 
   /** Capteur principal de pollens et ses capteurs par plante :
    *  intégration « Pollens » (sensor.pollens_00, sensor.pollens_00_<plante>, sensor.pollens_00_risklevel)
-   *  ou « Pollen Information » (sensor.polleninformation_<lieu>_allergy_risk, sensor.polleninformation_<lieu>_<plante>). */
+   *  ou « Pollen Information » (sensor.polleninformation_<lieu>_allergy_risk, sensor.polleninformation_<lieu>_<plante>),
+   *  sinon Atmo France (sensor.qualite_globale_pollen_<ville>, sensor.niveau_<plante>_<ville>). */
   _pollens() {
     const c = this._config, ids = Object.keys(this._hass.states);
+    const src = String(c.pollen_source || "auto").toLowerCase();
+    // Atmo France (remplaçante de l'intégration Pollens, archivée) : prioritaire quand elle est installée
+    if (!c.pollens && !Array.isArray(c.pollen_entities) && src !== "pollens") {
+      const at = this._atmoPollens(ids);
+      if (at || src === "atmo_france") return at || { main: null, plants: [], risk: null };
+    }
     const main = c.pollens || ids.find((id) => /^sensor\.pollens_[0-9]{1,3}[ab]?$/i.test(id))
       || ids.find((id) => /^sensor\.polleninformation_.+_allergy_risk$/.test(id));
     const base = main ? main.replace(/_allergy_risk$/, "") : null;
@@ -1659,6 +1666,23 @@ class MeteoAstroCard extends MeteoBase {
       : base ? ids.filter((id) => id !== main && id.startsWith(`${base}_`) && !/_risk_?level$|_allergy_risk(_hourly)?$/.test(id)) : [];
     const risk = main ? ids.find((id) => id === `${main}_risklevel` || id === `${main}_risk_level`) : null;
     return { main, plants, risk };
+  }
+
+  /** Atmo France : indice pollens et, pour chaque plante, niveau (1 à 6) et concentration, du jour seulement
+   *  (les capteurs « …-J+1 » du lendemain sont ignorés). null si l'intégration n'est pas là. */
+  _atmoPollens(ids) {
+    const st = this._hass.states, reg = this._hass.entities || {};
+    const nextDay = (id) => /_j_?\d+(_\d+)?$/.test(id) || /-J\+\d/.test(String(st[id]?.attributes?.friendly_name || ""));
+    const atmo = ids.filter((id) => id.startsWith("sensor.") && !nextDay(id)
+      && (reg[id]?.platform === "atmofrance" || /^sensor\.(atmo_france_)?(qualite_globale_pollen|niveau_|concentration_)/.test(id)));
+    const main = atmo.find((id) => /qualite_globale_pollen/.test(id)) || null;
+    const plants = ATMO_PLANTS.map(([k, name]) => {
+      const level = atmo.find((id) => id.includes(`niveau_${k}`));
+      const conc = atmo.find((id) => id.includes(`concentration_${k}`));
+      return level ? { id: level, name, conc } : null;
+    }).filter(Boolean);
+    if (!main && !plants.length) return null;
+    return { main, plants: plants.map((x) => x.id), info: Object.fromEntries(plants.map((x) => [x.id, x])), risk: null, atmo: true };
   }
 
   _action(act) {
@@ -1678,7 +1702,7 @@ class MeteoAstroCard extends MeteoBase {
         .finally(() => { this._spaceAt = Date.now(); this._spaceBusy = false; this._sig = null; this._render(); });
     }
     const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${sun?.state}|${this._spaceAt}|` +
-      [ent.moon, ent.season, ent.zodiac, pol.main, pol.risk, ...pol.plants].map((id) => this._st(id)?.state).join("|");
+      [ent.moon, ent.season, ent.zodiac, pol.main, pol.risk, ...pol.plants, ...Object.values(pol.info || {}).map((x) => x.conc)].map((id) => this._st(id)?.state).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
     const xy = this._coords();
@@ -1865,6 +1889,7 @@ class MeteoAstroCard extends MeteoBase {
 
   _pollenHtml(pol) {
     const c = this._config;
+    if (pol.atmo) return this._atmoPollenHtml(pol);
     const main = this._st(pol.main);
     const lv = main ? pollenLevel(main.state) : null;
     const risk = this._num(pol.risk);
@@ -1884,6 +1909,35 @@ class MeteoAstroCard extends MeteoBase {
       .sort((a, b) => (b.l ?? 0) - (a.l ?? 0) || a.pname.localeCompare(b.pname, "fr"));
     const grid = plants.length ? `<div class="plants">${plants.map((p) => `<div class="pl-t" data-entity="${esc(p.id)}" style="--pc:${POLLEN_COLOR[p.l ?? 0]}">
       <ha-icon icon="${pollenIcon(p.pname)}"></ha-icon><div class="pl-n">${esc(p.pname)}</div><div class="pl-v">${p.l === null ? esc(p.raw) : POLLEN_LABEL[p.l]}</div></div>`).join("")}</div>`
+      : `<div class="fc-empty">Aucun pollen en circulation</div>`;
+    return `<div class="sec">Pollens</div>${headline}${grid}`;
+  }
+
+  /** Pollens d'Atmo France : indice de 1 (très faible) à 6 (extrêmement élevé), libellé et couleur officiels. */
+  _atmoPollenHtml(pol) {
+    const c = this._config;
+    const lvl = (id) => {
+      const st = this._st(id);
+      if (!st) return null;
+      const n = num(st.state), lv = n === null ? null : Math.max(0, Math.min(6, Math.round(n)));
+      const label = st.attributes?.["Libellé"] || st.attributes?.libelle || (lv === null ? st.state : ATMO_POLLEN[lv]);
+      return { lv, label: String(label), color: safeColor(st.attributes?.Couleur || st.attributes?.couleur, ATMO_COLOR[lv ?? 0]) };
+    };
+    const m = pol.main ? lvl(pol.main) : null;
+    const headline = m ? `<div class="pol" data-entity="${esc(pol.main)}"><ha-icon icon="mdi:flower-pollen-outline" style="color:${m.color}"></ha-icon>
+      <div class="pol-t"><span>Indice pollens</span><b style="color:${m.color}">${esc(m.label)}</b></div>
+      ${m.lv !== null ? `<div class="pol-r"><div class="rbar"><i style="width:${((m.lv / 6) * 100).toFixed(0)}%;background:${m.color}"></i></div><b>${m.lv}/6</b></div>` : ""}</div>` : "";
+    const plants = pol.plants.map((id) => {
+      const a = lvl(id);
+      if (!a) return null;
+      const cs = this._st(pol.info?.[id]?.conc), cv = num(cs?.state);
+      return { id, ...a, pname: pol.info?.[id]?.name || id, cv, unit: cs?.attributes?.unit_of_measurement || "µg/m³" };
+    })
+      // « très faible » (1) masqué, comme dans la carte Air, sauf avec show_all_pollens
+      .filter((p) => p && (c.show_all_pollens || (p.lv !== null && p.lv > 1) || p.cv > 0))
+      .sort((a, b) => (b.lv ?? 0) - (a.lv ?? 0) || a.pname.localeCompare(b.pname, "fr"));
+    const grid = plants.length ? `<div class="plants">${plants.map((p) => `<div class="pl-t" data-entity="${esc(p.id)}" style="--pc:${p.color}">
+      <ha-icon icon="${pollenIcon(p.pname)}"></ha-icon><div class="pl-n">${esc(p.pname)}</div><div class="pl-v">${esc(p.label)}</div>${p.cv > 0 ? `<div class="pl-c">${fmt(p.cv, 1)} ${esc(p.unit)}</div>` : ""}</div>`).join("")}</div>`
       : `<div class="fc-empty">Aucun pollen en circulation</div>`;
     return `<div class="sec">Pollens</div>${headline}${grid}`;
   }
@@ -4444,6 +4498,9 @@ const ASTRO_SCHEMA = [
   { name: "moon", selector: { entity: { domain: "sensor" } } },
   { name: "season", selector: { entity: { domain: "sensor" } } },
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
+  { name: "pollen_source", selector: { select: { mode: "dropdown", options: [
+    { value: "auto", label: "Automatique (Atmo France d'abord)" }, { value: "atmo_france", label: "Atmo France" },
+    { value: "pollens", label: "Pollens ou Pollen Information" }] } } },
   { name: "pollens", selector: { entity: { domain: "sensor" } } },
   { name: "compass_image", selector: { text: {} } },
   { name: "show_sun", selector: { boolean: {} } },
@@ -4463,6 +4520,7 @@ const ASTRO_LABELS = {
   moon: "Phase de lune (vide = détectée, sinon calculée)",
   season: "Saison (vide = détectée, sinon calculée)",
   zodiac: "Signe du zodiaque (vide = détecté)",
+  pollen_source: "Source des pollens",
   pollens: "Pollens : capteur du département (vide = détecté, intégration Pollens)",
   compass_image: "Image au centre de la boussole (ex. /local/images/maison.png)",
   show_sun: "Soleil (boussole, course du jour, heures)",
@@ -4471,7 +4529,7 @@ const ASTRO_LABELS = {
   show_meteors: "Étoiles filantes (prochaine pluie, pic, lune)",
   show_space: "Activité solaire et aurores (NOAA)",
   show_pollens: "Pollens",
-  show_all_pollens: "Afficher aussi les pollens à « nul »",
+  show_all_pollens: "Afficher aussi les pollens à « nul » (« très faible » avec Atmo France)",
   moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
   earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg)",
   theme: "Couleurs de la carte",
