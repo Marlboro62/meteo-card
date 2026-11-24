@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.1";
+const CARD_VERSION = "3.24.2-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3800,7 +3800,7 @@ class MeteoBolidesCard extends MeteoBase {
     body += `<div class="sky bts">${tile(last, "mdi:clock-outline", "Dernier", dfull(last?.date || new Date()), last ? ago(last.days) : "")}
       ${tile(near, "mdi:home-map-marker", "Le plus proche", near ? `${fmt(near.dist)} km` : "", near ? dfull(near.date) : "")}
       ${tile(big, "mdi:flash-alert", "Le plus puissant", big ? kt(big.impact) : "", big ? dfull(big.date) : "")}</div>
-      <div class="wl bf"><span class="mt-l">Période</span>${chips("period", BOLIDE_PERIODS, this._period)}<span class="mt-l">Énergie</span>${chips("energy", BOLIDE_ENERGY, this._energy)}</div>${this._mapToggle()}`;
+      <div class="wl bf"><div class="bg"><span class="mt-l">Période</span>${chips("period", BOLIDE_PERIODS, this._period)}</div><div class="bg"><span class="mt-l">Énergie</span>${chips("energy", BOLIDE_ENERGY, this._energy)}</div></div>${this._mapToggle()}`;
     this._card(body);
     if (this._mapOpen()) this._mapUpdate(list, hasHome ? home : null);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -4204,6 +4204,8 @@ svg .pl.on { fill: #f7c948; }
 ha-card.light .w-i b { filter: brightness(.75); }
 .bts .bt { cursor: pointer; }
 .bt-s { font-size: .64rem; color: var(--med-muted); margin-top: 1px; }
+.bf { column-gap: 14px; }
+.bf .bg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .bf .bc { cursor: pointer; font: inherit; font-size: .72rem; }
 .bf .bc.on { border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-accent, var(--med-blue)) 18%, var(--med-surface)); }
 .bm { position: relative; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
