@@ -110,7 +110,7 @@ Ces cartes font la même chose avec **une seule ressource**, sans CSS à mainten
 
 ## Nouveautés de la 3.19.0
 
-- **Carte interactive repliable** sur les cartes Crues et rivières, Séismes, Feux de forêt et Bolides : le bouton « Masquer la carte » / « Afficher la carte » sous la liste la cache ou la montre, et chaque carte s'en souvient. Masquée, la carte n'est pas chargée. Option `map_hidden: true` pour la masquer au premier affichage.
+- **Carte interactive repliable** sur les cartes Crues et rivières, Séismes, Feux de forêt et Bolides : le bouton « Carte » sous la liste la cache ou la montre, et chaque carte s'en souvient. Masquée, la carte n'est pas chargée. Option `map_hidden: true` pour la masquer au premier affichage.
 
 ## Nouveautés de la 3.18.0
 
@@ -555,9 +555,9 @@ radius: 25          # stations à moins de 25 km de chez vous
 | `stations` | Stations à suivre, par leur code Vigicrues (ex. `F700000103, F704000101`) | les plus proches |
 | `max_items` | Nombre de stations affichées | `6` |
 | `direct` | Sans intégration, lire Hub'Eau depuis le navigateur | `true` |
-| `show_stations` | Liste « Stations de mesure » affichée au départ ; le bouton « Masquer les stations » / « Afficher les stations », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
+| `show_stations` | Liste « Stations de mesure » affichée au départ ; le bouton « Stations », à côté du bouton « Carte », la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map`, `map_height`, `tiles_url` | Carte interactive : affichage, hauteur (px), autre fond | `true`, `300`, OpenFreeMap |
-| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |
 
@@ -608,9 +608,9 @@ Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou
 | `title` | Titre | `Feux de forêt` |
 | `radius` | Distance (km) qui place un feu au bord de la boussole | automatique |
 | `max_items` | Nombre de feux listés | `6` |
-| `show_fires` | Liste « Feux détectés » affichée au départ ; le bouton « Masquer les feux » / « Afficher les feux », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
+| `show_fires` | Liste « Feux détectés » affichée au départ ; le bouton « Feux », à côté du bouton « Carte », la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map` | Carte interactive des feux | `true` |
-| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |
 | `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `compass_image` | Image au centre de la boussole | — |
@@ -641,10 +641,10 @@ radius: 1000          # km autour de chez vous
 | `days` | Période (jours) | `7` |
 | `max_items` | Nombre de séismes listés | `6` |
 | `direct` | Sans intégration, lire les flux EMSC et USGS depuis le navigateur | `true` |
-| `show_near` | Liste « Autour de chez vous » affichée au départ ; le bouton « Masquer autour » / « Afficher autour », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
-| `show_world` | Liste « Dans le monde » affichée au départ ; le bouton « Masquer le monde » / « Afficher le monde » la montre ou la cache, et la carte s'en souvient | `true` |
+| `show_near` | Liste « Autour de chez vous » affichée au départ ; le bouton « Autour », à côté du bouton « Carte », la montre ou la cache, et la carte s'en souvient | `true` |
+| `show_world` | Liste « Dans le monde » affichée au départ ; le bouton « Monde » la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map` | Carte interactive des séismes | `true` |
-| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |
 | `tiles_url` | Autre fond de carte (modèle d'URL `{z}/{x}/{y}`) | OpenFreeMap |
 | `latitude`, `longitude` | Lieu de référence | coordonnées de Home Assistant |
@@ -693,7 +693,7 @@ La carte trouve ce capteur toute seule. Sans lui, elle essaie d'appeler l'API di
 | `min_energy` | Énergie d'impact minimale au départ (kt) : `0`, `1`, `10` | `0` |
 | `show_home` | Votre maison sur la carte | `true` |
 | `map_height` | Hauteur de la carte (px) | `320` |
-| `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous les filtres la montre ou la cache, et la carte s'en souvient | `false` |
+| `map_hidden` | Carte masquée au départ ; le bouton « Carte » sous les filtres la montre ou la cache, et la carte s'en souvient | `false` |
 | `tiles_url` | Autre fond de carte en images (modèle d'URL Leaflet `…/{z}/{x}/{y}.png`) | fonds vectoriels OpenStreetMap |
 | `theme` | Couleurs de la carte | `v2` |
 | `text_size` | Taille du texte, en % (80 à 160) | `100` |

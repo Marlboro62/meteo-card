@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.0-beta.3";
+const CARD_VERSION = "3.24.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -701,7 +701,9 @@ class MeteoBase extends HTMLElement {
   /** Bouton « Masquer la carte » / « Afficher la carte », sous la liste. */
   _mapToggle() {
     const open = this._mapOpen();
-    return `<button class="map-tg" data-act="maptoggle" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:map-minus" : "mdi:map-plus"}"></ha-icon>${open ? "Masquer la carte" : "Afficher la carte"}</button>`;
+    // libellé court (l'icône dit l'état) ; le texte complet en info-bulle
+    const tip = open ? "Masquer la carte" : "Afficher la carte";
+    return `<button class="map-tg" data-act="maptoggle" aria-expanded="${open}" title="${tip}" aria-label="${tip}"><ha-icon icon="${open ? "mdi:map-minus" : "mdi:map-plus"}"></ha-icon>Carte</button>`;
   }
 
   /** Liste affichée ou masquée par son bouton : choix mémorisé, sinon option show_<nom> (affichée par défaut). */
@@ -719,10 +721,11 @@ class MeteoBase extends HTMLElement {
     return `meteo-card:${name}:${this.localName}:${this._config.title || ""}`;
   }
 
-  /** Bouton « Masquer … » / « Afficher … » d'une liste, sur la ligne du bouton de la carte. */
-  _secToggle(name, show, hide) {
-    const open = this._secOpen(name);
-    return `<button class="map-tg" data-act="sectoggle" data-sec="${name}" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:eye-off-outline" : "mdi:eye-outline"}"></ha-icon>${open ? hide : show}</button>`;
+  /** Bouton court d'une liste (« Autour », « Stations »…), sur la ligne du bouton de la carte : l'œil dit l'état,
+   *  « Masquer … » / « Afficher … » en info-bulle. */
+  _secToggle(name, label, what) {
+    const open = this._secOpen(name), tip = `${open ? "Masquer" : "Afficher"} ${what}`;
+    return `<button class="map-tg" data-act="sectoggle" data-sec="${name}" aria-expanded="${open}" title="${tip}" aria-label="${tip}"><ha-icon icon="${open ? "mdi:eye-off-outline" : "mdi:eye-outline"}"></ha-icon>${label}</button>`;
   }
 
   /** Ligne des boutons (listes, puis carte), alignée à droite sous la carte. */
@@ -2624,8 +2627,8 @@ class MeteoSeismesCard extends MeteoBase {
     const max = Math.max(1, Number(c.max_items) || 6);
     const nearOn = this._secOpen("near"), worldOn = this._secOpen("world");
     // ligne des boutons : listes « Autour de chez vous » et « Dans le monde », puis la carte
-    const btns = (near.length ? this._secToggle("near", "Afficher autour", "Masquer autour") : "")
-      + (world.length ? this._secToggle("world", "Afficher le monde", "Masquer le monde") : "")
+    const btns = (near.length ? this._secToggle("near", "Autour", "la liste « Autour de chez vous »") : "")
+      + (world.length ? this._secToggle("world", "Monde", "la liste « Dans le monde »") : "")
       + (mapAvail ? this._mapToggle() : "");
     body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
       + (near.length && nearOn ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
@@ -2773,7 +2776,7 @@ class MeteoFeuxCard extends MeteoBase {
       + (!list.length ? `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`
         : this._secOpen("fires") ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>` : "")
       + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`
-      + this._tgRow((list.length ? this._secToggle("fires", "Afficher les feux", "Masquer les feux") : "") + (mapAvail ? this._mapToggle() : ""));
+      + this._tgRow((list.length ? this._secToggle("fires", "Feux", "la liste « Feux détectés »") : "") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -2981,7 +2984,7 @@ class MeteoCruesCard extends MeteoBase {
         ${s.q !== null ? `<small>${fmt(s.q, s.q < 10 ? 2 : s.q < 100 ? 1 : 0)} m³/s</small>` : ""}</div></div>`;
     body += (this._secOpen("stations") ? `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>` : "")
       + `<div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`
-      + this._tgRow(this._secToggle("stations", "Afficher les stations", "Masquer les stations") + (mapAvail ? this._mapToggle() : ""));
+      + this._tgRow(this._secToggle("stations", "Stations", "la liste « Stations de mesure »") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
