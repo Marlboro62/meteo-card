@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.25.0";
+const CARD_VERSION = "3.25.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4022,7 +4022,7 @@ ha-card.th-v2.light {
 </style>`;
 
 const METEO_STYLE = `<style>
-ha-card { display: block; padding-bottom: 14px; }
+ha-card { display: block; padding-bottom: 14px; isolation: isolate; }
 .b-ic { --mdc-icon-size: 32px; flex: none; }
 .now { display: flex; align-items: center; gap: 14px; padding: 6px 18px 4px; cursor: pointer; }
 .n-ic { --mdc-icon-size: 64px; flex: none; filter: drop-shadow(0 0 10px color-mix(in srgb, currentColor 35%, transparent)); }
@@ -4295,7 +4295,8 @@ ha-card.light .w-i b { filter: brightness(.75); }
 .bf .bg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .bf .bc { cursor: pointer; font: inherit; font-size: .72rem; }
 .bf .bc.on { border-color: color-mix(in srgb, var(--med-accent, var(--med-blue)) 70%, var(--med-line)); background: color-mix(in srgb, var(--med-accent, var(--med-blue)) 18%, var(--med-surface)); }
-.bm { position: relative; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
+/* calques Leaflet (z-index 400 à 1000) contenus dans la carte : ils ne passent plus au-dessus du bandeau d'édition du tableau de bord */
+.bm { position: relative; isolation: isolate; z-index: 0; margin: 10px 12px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--med-line); background: var(--med-surface); }
 /* !important : Leaflet pose position: relative en ligne s'il crée la carte avant que ce style s'applique
    (carte construite hors de la page par Home Assistant), et le cadre perdait alors sa taille */
 .bm-map { position: absolute !important; inset: 0; background: #0f1724; }
