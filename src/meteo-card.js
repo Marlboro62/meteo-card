@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.25.0-beta.3";
+const CARD_VERSION = "3.25.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4554,6 +4554,7 @@ const SCHEMA = [
     { value: "full", label: "Complètes : mm, risque de pluie, humidité, vent, rafales et direction, heure et jour" },
     { value: "compact", label: "Compactes : seulement les valeurs utiles" }] } } },
   { name: "moon_image", selector: { text: {} } },
+  { name: "earth_image", selector: { text: {} } },
   THEME_SELECT,
   TEXT_SIZE,
 ];
@@ -4587,6 +4588,7 @@ const LABELS = {
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
   moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg ou /media/local/lune.svg)",
+  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg ou /media/local/terre.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
