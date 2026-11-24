@@ -639,8 +639,8 @@ radius: 1000          # km autour de chez vous
 | `days` | Période (jours) | `7` |
 | `max_items` | Nombre de séismes listés | `6` |
 | `direct` | Sans intégration, lire les flux EMSC et USGS depuis le navigateur | `true` |
-| `show_near` | Liste « Autour de chez vous » (la boussole, les tuiles et la carte restent affichées) | `true` |
-| `show_world` | Liste « Dans le monde » (la tuile et la carte restent affichées) | `true` |
+| `show_near` | Liste « Autour de chez vous » affichée au départ ; le bouton « Masquer autour » / « Afficher autour », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
+| `show_world` | Liste « Dans le monde » affichée au départ ; le bouton « Masquer le monde » / « Afficher le monde » la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map` | Carte interactive des séismes | `true` |
 | `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |

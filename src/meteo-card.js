@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.0-beta.1";
+const CARD_VERSION = "3.24.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2483,6 +2483,12 @@ class MeteoSeismesCard extends MeteoBase {
     return document.createElement("meteo-seismes-card-editor");
   }
 
+  setConfig(config) {
+    // nouvelle configuration : l'état des listes est relu (choix mémorisé, sinon show_near / show_world)
+    this._secShow = {};
+    super.setConfig(config);
+  }
+
   getCardSize() {
     return 6;
   }
@@ -2587,19 +2593,46 @@ class MeteoSeismesCard extends MeteoBase {
         <span class="qk-l">${magLabel(q.mag)}</span></${tag}>`;
     };
     const max = Math.max(1, Number(c.max_items) || 6);
-    body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
-      + (near.length && c.show_near !== false ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
-      + (world.length && c.show_world !== false ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
-      + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`
+    const nearOn = this._secOpen("near"), worldOn = this._secOpen("world");
+    // ligne des boutons : listes « Autour de chez vous » et « Dans le monde », puis la carte
+    const secBtn = (name, open, show, hide) => `<button class="map-tg" data-act="sectoggle" data-sec="${name}" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:eye-off-outline" : "mdi:eye-outline"}"></ha-icon>${open ? hide : show}</button>`;
+    const btns = (near.length ? secBtn("near", nearOn, "Afficher autour", "Masquer autour") : "")
+      + (world.length ? secBtn("world", worldOn, "Afficher le monde", "Masquer le monde") : "")
       + (mapAvail ? this._mapToggle() : "");
+    body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
+      + (near.length && nearOn ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
+      + (world.length && worldOn ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
+      + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`
+      + (btns ? `<div class="tg-row">${btns}</div>` : "");
     this._card(body);
     if (mapOn) this._mapUpdate(shown, near, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
   }
 
+  /** Liste « near » ou « world » affichée ou masquée par son bouton : choix mémorisé, sinon option show_near / show_world. */
+  _secOpen(name) {
+    this._secShow = this._secShow || {};
+    if (this._secShow[name] === undefined) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(this._secKey(name)) || "null"); } catch (e) { /* stockage indisponible */ }
+      this._secShow[name] = typeof saved === "boolean" ? saved : this._config[`show_${name}`] !== false;
+    }
+    return this._secShow[name];
+  }
+
+  _secKey(name) {
+    return `meteo-card:${name}:${this.localName}:${this._config.title || ""}`;
+  }
+
   _action(act, el) {
     if (act === "fly") this._fly(Number(el.dataset.i));
     else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); }
+    else if (act === "sectoggle") {
+      const name = el.dataset.sec, open = !this._secOpen(name);
+      this._secShow[name] = open;
+      try { localStorage.setItem(this._secKey(name), JSON.stringify(open)); } catch (e) { /* stockage indisponible */ }
+      this._sig = null; this._render();
+    }
   }
 
   /** Carte interactive : séismes proches et forts séismes du monde, à la couleur et à la taille de leur magnitude. */
@@ -4257,6 +4290,8 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
   border-radius: 999px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); font-size: .78rem; font-weight: 600; --mdc-icon-size: 16px; }
 .map-tg:hover { color: var(--primary-text-color, inherit); }
 .map-tg:focus-visible { outline: 2px solid var(--med-accent, #1d93e3); }
+.tg-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin: 10px 14px 0; }
+.tg-row .map-tg { margin: 0; }
 .mt-n { font-size: .66rem; color: var(--med-muted); margin-top: 2px; }
 .av { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0 12px; }
 .av-c { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); cursor: pointer; min-width: 0; }
@@ -4603,8 +4638,8 @@ const SEISMES_LABELS = {
   days: "Période",
   max_items: "Nombre de séismes listés",
   direct: "Sans intégration, lire les flux EMSC et USGS depuis le navigateur",
-  show_near: "Liste « Autour de chez vous »",
-  show_world: "Liste « Dans le monde »",
+  show_near: "Liste « Autour de chez vous » affichée au départ (bouton pour la masquer)",
+  show_world: "Liste « Dans le monde » affichée au départ (bouton pour la masquer)",
   show_map: "Carte interactive des séismes",
   map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
