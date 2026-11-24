@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.25.0-beta.2";
+const CARD_VERSION = "3.25.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -624,6 +624,34 @@ class MeteoBase extends HTMLElement {
       const e = new Event("hass-more-info", { bubbles: true, composed: true });
       e.detail = { entityId: el.dataset.entity };
       this.dispatchEvent(e);
+    }));
+    // prévisions : glisser à la souris (clic maintenu + déplacement), comme la carte météo de Home Assistant ;
+    // au doigt, le défilement natif suffit
+    if (!this._drag) this.shadowRoot.addEventListener("pointerdown", (this._drag = (ev) => {
+      if (ev.pointerType !== "mouse" || ev.button !== 0) return;
+      const el = ev.target.closest?.(".fc");
+      if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+      ev.preventDefault(); // ni sélection de texte, ni glisser des icônes
+      const x0 = ev.clientX, s0 = el.scrollLeft;
+      let moved = false;
+      const move = (e) => {
+        if (!moved && Math.abs(e.clientX - x0) < 5) return;
+        moved = true;
+        el.classList.add("drag");
+        el.scrollLeft = s0 - (e.clientX - x0);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        el.classList.remove("drag");
+        if (!moved) return;
+        // le clic qui suit un glissement n'ouvre pas la fenêtre des prévisions
+        const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+        el.addEventListener("click", stop, { capture: true, once: true });
+        setTimeout(() => el.removeEventListener("click", stop, { capture: true }), 0);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
     }));
     this._render();
   }
@@ -4035,6 +4063,7 @@ ha-card.light .v-h, ha-card.light .v-p b { filter: brightness(.8); }
 ha-card.light .v-t small b { filter: brightness(.8); }
 .sec { margin: 14px 18px 6px; font-size: .82rem; color: var(--med-muted); }
 .fc { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(48px, 1fr); gap: 6px; margin: 0 12px; padding-bottom: 2px; cursor: pointer; overflow-x: auto; scrollbar-width: thin; }
+.fc.drag { cursor: grabbing; scroll-behavior: auto; }
 .fc-d { text-align: center; padding: 8px 2px 7px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
 .f-n { font-size: .72rem; color: var(--med-muted); text-transform: capitalize; white-space: nowrap; }
 .fc-d ha-icon { --mdc-icon-size: 26px; margin: 4px 0 2px; }
