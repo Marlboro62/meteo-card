@@ -555,6 +555,7 @@ radius: 25          # stations à moins de 25 km de chez vous
 | `stations` | Stations à suivre, par leur code Vigicrues (ex. `F700000103, F704000101`) | les plus proches |
 | `max_items` | Nombre de stations affichées | `6` |
 | `direct` | Sans intégration, lire Hub'Eau depuis le navigateur | `true` |
+| `show_stations` | Liste « Stations de mesure » affichée au départ ; le bouton « Masquer les stations » / « Afficher les stations », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map`, `map_height`, `tiles_url` | Carte interactive : affichage, hauteur (px), autre fond | `true`, `300`, OpenFreeMap |
 | `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `theme` | Couleurs de la carte | `v2` |
@@ -607,6 +608,7 @@ Un point chaud n'est pas toujours un feu de forêt : une usine, une torchère ou
 | `title` | Titre | `Feux de forêt` |
 | `radius` | Distance (km) qui place un feu au bord de la boussole | automatique |
 | `max_items` | Nombre de feux listés | `6` |
+| `show_fires` | Liste « Feux détectés » affichée au départ ; le bouton « Masquer les feux » / « Afficher les feux », à côté de celui de la carte, la montre ou la cache, et la carte s'en souvient | `true` |
 | `show_map` | Carte interactive des feux | `true` |
 | `map_hidden` | Carte masquée au départ ; le bouton « Afficher la carte » / « Masquer la carte » sous la liste la montre ou la cache, et la carte s'en souvient | `false` |
 | `map_height` | Hauteur de la carte (px) | `300` |

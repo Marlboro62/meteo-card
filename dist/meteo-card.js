@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.0-beta.2";
+const CARD_VERSION = "3.24.0-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -596,6 +596,8 @@ class MeteoBase extends HTMLElement {
   setConfig(config) {
     this._config = { ...this.constructor.defaults, ...(config || {}) };
     this._sig = null;
+    // nouvelle configuration : l'état des listes est relu (choix mémorisé, sinon option show_…)
+    this._secShow = {};
     this._unsubAll();
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (!this._clicks) this.shadowRoot.addEventListener("click", (this._clicks = (ev) => {
@@ -604,6 +606,13 @@ class MeteoBase extends HTMLElement {
         // carte interactive masquée ou affichée, mémorisé par carte
         this._mapShow = !this._mapOpen();
         try { localStorage.setItem(this._mapKey(), JSON.stringify(this._mapShow)); } catch (e) { /* stockage indisponible */ }
+        this._sig = null; this._render(); return;
+      }
+      if (act?.dataset.act === "sectoggle") {
+        // liste masquée ou affichée, mémorisé par carte
+        const name = act.dataset.sec, open = !this._secOpen(name);
+        this._secShow[name] = open;
+        try { localStorage.setItem(this._secKey(name), JSON.stringify(open)); } catch (e) { /* stockage indisponible */ }
         this._sig = null; this._render(); return;
       }
       if (act) { this._action(act.dataset.act, act); return; }
@@ -693,6 +702,32 @@ class MeteoBase extends HTMLElement {
   _mapToggle() {
     const open = this._mapOpen();
     return `<button class="map-tg" data-act="maptoggle" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:map-minus" : "mdi:map-plus"}"></ha-icon>${open ? "Masquer la carte" : "Afficher la carte"}</button>`;
+  }
+
+  /** Liste affichée ou masquée par son bouton : choix mémorisé, sinon option show_<nom> (affichée par défaut). */
+  _secOpen(name) {
+    this._secShow = this._secShow || {};
+    if (this._secShow[name] === undefined) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(this._secKey(name)) || "null"); } catch (e) { /* stockage indisponible */ }
+      this._secShow[name] = typeof saved === "boolean" ? saved : this._config[`show_${name}`] !== false;
+    }
+    return this._secShow[name];
+  }
+
+  _secKey(name) {
+    return `meteo-card:${name}:${this.localName}:${this._config.title || ""}`;
+  }
+
+  /** Bouton « Masquer … » / « Afficher … » d'une liste, sur la ligne du bouton de la carte. */
+  _secToggle(name, show, hide) {
+    const open = this._secOpen(name);
+    return `<button class="map-tg" data-act="sectoggle" data-sec="${name}" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:eye-off-outline" : "mdi:eye-outline"}"></ha-icon>${open ? hide : show}</button>`;
+  }
+
+  /** Ligne des boutons (listes, puis carte), alignée à droite sous la carte. */
+  _tgRow(btns) {
+    return btns ? `<div class="tg-row">${btns}</div>` : "";
   }
 
   /** Seul le contenu est redessiné : la zone « keep » (carte Windy, fenêtre des phases) n'est pas recréée. */
@@ -2483,12 +2518,6 @@ class MeteoSeismesCard extends MeteoBase {
     return document.createElement("meteo-seismes-card-editor");
   }
 
-  setConfig(config) {
-    // nouvelle configuration : l'état des listes est relu (choix mémorisé, sinon show_near / show_world)
-    this._secShow = {};
-    super.setConfig(config);
-  }
-
   getCardSize() {
     return 6;
   }
@@ -2595,44 +2624,22 @@ class MeteoSeismesCard extends MeteoBase {
     const max = Math.max(1, Number(c.max_items) || 6);
     const nearOn = this._secOpen("near"), worldOn = this._secOpen("world");
     // ligne des boutons : listes « Autour de chez vous » et « Dans le monde », puis la carte
-    const secBtn = (name, open, show, hide) => `<button class="map-tg" data-act="sectoggle" data-sec="${name}" aria-expanded="${open}"><ha-icon icon="${open ? "mdi:eye-off-outline" : "mdi:eye-outline"}"></ha-icon>${open ? hide : show}</button>`;
-    const btns = (near.length ? secBtn("near", nearOn, "Afficher autour", "Masquer autour") : "")
-      + (world.length ? secBtn("world", worldOn, "Afficher le monde", "Masquer le monde") : "")
+    const btns = (near.length ? this._secToggle("near", "Afficher autour", "Masquer autour") : "")
+      + (world.length ? this._secToggle("world", "Afficher le monde", "Masquer le monde") : "")
       + (mapAvail ? this._mapToggle() : "");
     body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
       + (near.length && nearOn ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
       + (world.length && worldOn ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
       + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`
-      + (btns ? `<div class="tg-row">${btns}</div>` : "");
+      + this._tgRow(btns);
     this._card(body);
     if (mapOn) this._mapUpdate(shown, near, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
   }
 
-  /** Liste « near » ou « world » affichée ou masquée par son bouton : choix mémorisé, sinon option show_near / show_world. */
-  _secOpen(name) {
-    this._secShow = this._secShow || {};
-    if (this._secShow[name] === undefined) {
-      let saved = null;
-      try { saved = JSON.parse(localStorage.getItem(this._secKey(name)) || "null"); } catch (e) { /* stockage indisponible */ }
-      this._secShow[name] = typeof saved === "boolean" ? saved : this._config[`show_${name}`] !== false;
-    }
-    return this._secShow[name];
-  }
-
-  _secKey(name) {
-    return `meteo-card:${name}:${this.localName}:${this._config.title || ""}`;
-  }
-
   _action(act, el) {
     if (act === "fly") this._fly(Number(el.dataset.i));
     else if (act === "full") { const w = this._keep?.querySelector(".bm"); if (document.fullscreenElement) document.exitFullscreen(); else w?.requestFullscreen?.(); }
-    else if (act === "sectoggle") {
-      const name = el.dataset.sec, open = !this._secOpen(name);
-      this._secShow[name] = open;
-      try { localStorage.setItem(this._secKey(name), JSON.stringify(open)); } catch (e) { /* stockage indisponible */ }
-      this._sig = null; this._render();
-    }
   }
 
   /** Carte interactive : séismes proches et forts séismes du monde, à la couleur et à la taille de leur magnitude. */
@@ -2679,7 +2686,7 @@ class MeteoSeismesCard extends MeteoBase {
 
 /* ------------------------------------------------------- carte Feux de forêt */
 
-const FEUX_DEFAULTS = { title: "Feux de forêt", radius: 0, max_items: 6, show_map: true, map_height: 300, theme: "v2" };
+const FEUX_DEFAULTS = { title: "Feux de forêt", radius: 0, max_items: 6, show_fires: true, show_map: true, map_height: 300, theme: "v2" };
 /** Intensité d'un feu (puissance radiative, intégration NASA FIRMS) : libellé et couleur de l'intégration. */
 const FIRE_BAND = { extreme: ["Extrême", "#ff0000"], high: ["Fort", "#ff4d00"], moderate: ["Modéré", "#ff7400"], low: ["Faible", "#ffc100"] };
 const FIRE_NONE = ["Inconnue", "#9e9e9e"];
@@ -2763,10 +2770,10 @@ class MeteoFeuxCard extends MeteoBase {
       <span class="qk-l">${f.band[0]}</span></div>`;
     const max = Math.max(1, Number(c.max_items) || 6);
     const body = head + `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
-      + (list.length ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>`
-        : `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`)
+      + (!list.length ? `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`
+        : this._secOpen("fires") ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>` : "")
       + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`
-      + (mapAvail ? this._mapToggle() : "");
+      + this._tgRow((list.length ? this._secToggle("fires", "Afficher les feux", "Masquer les feux") : "") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home, radius);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -2822,7 +2829,7 @@ class MeteoFeuxCard extends MeteoBase {
 
 /* ------------------------------------------------------------ carte Crues */
 
-const CRUES_DEFAULTS = { title: "Crues et rivières", radius: 25, max_items: 6, direct: true, show_map: true, map_height: 300, theme: "v2" };
+const CRUES_DEFAULTS = { title: "Crues et rivières", radius: 25, max_items: 6, direct: true, show_stations: true, show_map: true, map_height: 300, theme: "v2" };
 /** API publique Hub'Eau (hydrométrie en temps réel, mêmes stations que Vigicrues), sans clé. */
 const HUBEAU = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/";
 /** Tendance de la hauteur d'eau sur 24 h (mètres) : libellé, couleur, icône. */
@@ -2972,8 +2979,9 @@ class MeteoCruesCard extends MeteoBase {
       ${sparkSvg(s.series, s.trend[1])}
       <div class="rv-h"><b>${s.h === null ? "—" : m(s.h)}</b><small style="color:${s.trend[1]}"><ha-icon icon="${s.trend[2]}"></ha-icon>${s.d24 === null ? s.trend[0] : `${cm(s.d24)} en 24 h`}</small>
         ${s.q !== null ? `<small>${fmt(s.q, s.q < 10 ? 2 : s.q < 100 ? 1 : 0)} m³/s</small>` : ""}</div></div>`;
-    body += `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>
-      <div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>${mapAvail ? this._mapToggle() : ""}`;
+    body += (this._secOpen("stations") ? `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>` : "")
+      + `<div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`
+      + this._tgRow(this._secToggle("stations", "Afficher les stations", "Masquer les stations") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home);
     else if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
@@ -4651,6 +4659,7 @@ const FEUX_SCHEMA = [
   { name: "title", selector: { text: {} } },
   { name: "radius", selector: { number: { min: 0, max: 500, step: 10, mode: "box", unit_of_measurement: "km" } } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
+  { name: "show_fires", selector: { boolean: {} } },
   { name: "show_map", selector: { boolean: {} } },
   { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
@@ -4662,6 +4671,7 @@ const FEUX_LABELS = {
   title: "Titre (Feux de forêt par défaut)",
   radius: "Distance au bord de la boussole (0 = automatique)",
   max_items: "Nombre de feux listés",
+  show_fires: "Liste « Feux détectés » affichée au départ (bouton pour la masquer)",
   show_map: "Carte interactive des feux",
   map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
@@ -4675,6 +4685,7 @@ const CRUES_SCHEMA = [
   { name: "stations", selector: { text: {} } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "direct", selector: { boolean: {} } },
+  { name: "show_stations", selector: { boolean: {} } },
   { name: "show_map", selector: { boolean: {} } },
   { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
@@ -4687,6 +4698,7 @@ const CRUES_LABELS = {
   stations: "Stations à suivre (codes Vigicrues séparés par des virgules, vide = les plus proches)",
   max_items: "Nombre de stations affichées",
   direct: "Sans intégration, lire Hub'Eau depuis le navigateur",
+  show_stations: "Liste « Stations de mesure » affichée au départ (bouton pour la masquer)",
   show_map: "Carte interactive des stations",
   map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
