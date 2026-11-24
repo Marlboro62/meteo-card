@@ -226,7 +226,7 @@ moon_image: /local/images/lune.svg
 earth_image: /local/images/terre.svg
 ```
 
-L'option `moon_image` fonctionne aussi dans la carte Météo et la carte Canada (tuile Lune), et `earth_image` dans leur fenêtre des phases. Vous pouvez utiliser vos propres photos (PNG, JPG ou SVG) : une pleine lune et une Terre bien centrées, sur fond transparent ou noir. Les crédits des photos fournies sont dans la section [Licence](#licence).
+L'option `moon_image` fonctionne aussi dans la carte Météo et la carte Canada (tuile Lune), et `earth_image` dans leur fenêtre des phases. Vous pouvez utiliser vos propres photos (PNG, JPG ou SVG) : une pleine lune et une Terre bien centrées, sur fond transparent ou noir. Les photos peuvent aussi être déposées dans **Mon média** (`/media/local/lune.svg`) : la carte demande alors à Home Assistant une adresse signée, et n'essaie de charger l'image qu'une fois son adresse complète. Les crédits des photos fournies sont dans la section [Licence](#licence).
 
 ## Intégrations Home Assistant à installer
 
