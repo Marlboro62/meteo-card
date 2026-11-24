@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.25.0-beta.1";
+const CARD_VERSION = "3.25.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -588,6 +588,9 @@ const store = {
 /* -------------------------------------------------------------- base commune */
 
 /** Base des cartes : thème, clic vers la fiche d'une entité, abonnements aux prévisions. */
+/** Adresses signées par Home Assistant pour les images de « Mon média » (/media/…), partagées entre les cartes. */
+const SIGNED = new Map();
+
 class MeteoBase extends HTMLElement {
   static getStubConfig() {
     return {};
@@ -627,7 +630,29 @@ class MeteoBase extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // la photo de la Terre ne sert que dans la fenêtre des phases : son adresse est préparée d'avance
+    if (this._config?.earth_image) this._img(this._config.earth_image);
     this._render();
+  }
+
+  /** Adresse d'une image choisie dans les options (moon_image, earth_image, icons_path), ou "" si elle ne doit pas être chargée.
+   *  Rien tant que l'adresse n'est pas complète (saisie en cours dans l'éditeur). Les fichiers de « Mon média » (/media/…)
+   *  exigent une adresse signée par Home Assistant : chargés tels quels, chaque affichage compte comme une connexion refusée
+   *  et peut faire bannir l'adresse IP (issue #65). */
+  _img(url) {
+    const u = String(url || "").trim().replace(/^media-source:\/\/media_source\//i, "/media/");
+    if (!/\.(svg|png|jpe?g|webp|gif|avif)$/i.test(u)) return "";
+    if (!/^\/(media|api)\//i.test(u)) return u;
+    const hit = SIGNED.get(u);
+    if (hit?.busy) { if (!hit.waiting.has(this)) { hit.waiting.add(this); hit.busy.then(() => { this._sig = null; this._render(); }); } return hit.url; }
+    if (hit && Date.now() - hit.at < 432e5) return hit.url;
+    if (typeof this._hass?.callWS !== "function") return hit?.url || "";
+    const busy = this._hass.callWS({ type: "auth/sign_path", path: u, expires: 86400 })
+      .then((r) => (typeof r?.path === "string" && r.path.startsWith("/") ? r.path : ""), () => "")
+      .then((signed) => { SIGNED.set(u, { url: signed, at: Date.now() }); });
+    SIGNED.set(u, { url: hit?.url || "", at: 0, busy, waiting: new Set([this]) });
+    busy.then(() => { this._sig = null; this._render(); });
+    return hit?.url || "";
   }
 
   connectedCallback() {
@@ -1302,8 +1327,8 @@ class MeteoCard extends MeteoBase {
     const am = AMCHARTS[cond];
     if ((mode === "animated" || mode === "static") && am) {
       const base = String(this._config.icons_path || AMCHARTS_URL).replace(/\/?$/, "/");
-      const name = (night && am[1]) || am[0];
-      return `<img class="wi-img ${cls}" src="${esc(base + name + (mode === "static" ? "-static" : ""))}.svg" alt="" loading="lazy" decoding="async">`;
+      const name = (night && am[1]) || am[0], src = this._img(`${base}${name}${mode === "static" ? "-static" : ""}.svg`);
+      if (src) return `<img class="wi-img ${cls}" src="${esc(src)}" alt="" loading="lazy" decoding="async">`;
     }
     return weatherSvg(cond, night, mode === "drawn" && anim, cls);
   }
@@ -1343,7 +1368,7 @@ class MeteoCard extends MeteoBase {
       ${st ? `<div class="sky-t"${tap(sunSt ? "sun.sun" : null, "astro")}><ha-icon icon="mdi:weather-sunset" style="color:${SUN_C}"></ha-icon>
         <div class="k-v"><span class="sr"${st.riseTomorrow ? ` title="Demain"` : ""}>↑ ${hm(st.rise)}</span> <span class="ss"${st.setTomorrow ? ` title="Demain"` : ""}>↓ ${hm(st.set)}</span></div><div class="k-l">${st.riseTomorrow && st.setTomorrow ? "Lever · coucher demain" : st.riseTomorrow ? "Lever demain · coucher" : "Lever · coucher"}</div></div>` : ""}
       ${tile(seasonId, season[1], season[2], season[0], "Saison")}
-      ${c.moon_image ? `<div class="sky-t"${tap(moonId, "moon")}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, c.moon_image)}</svg>
+      ${this._img(c.moon_image) ? `<div class="sky-t"${tap(moonId, "moon")}><svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(moonIllum(now).phase, 20, 0, 0, this._img(c.moon_image))}</svg>
         <div class="k-v">${esc(moon[0])}</div><div class="k-l">Lune</div></div>` : tile(moonId, moon[1], "#d9e2f2", moon[0], "Lune", "moon")}
       ${ZODIAC[zRaw] ? tile(ent.zodiac, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
     </div>`;
@@ -1792,7 +1817,7 @@ class MeteoAstroCard extends MeteoBase {
   _moonRow([lat, lon], now) {
     const mt = moonTimes(now, lat, lon), mp = position("moon", now, lat, lon), il = moonIllum(now);
     const cell = (l, v) => `<div class="tm"><span>${l}</span><b>${v}</b></div>`;
-    return `<div class="sec">Lune</div><div class="mrow"><button class="mbtn" data-act="moon" aria-label="Phases de la lune"><svg viewBox="-22 -22 44 44">${moonSvg(il.phase, 20, 0, 0, this._config.moon_image)}</svg></button>
+    return `<div class="sec">Lune</div><div class="mrow"><button class="mbtn" data-act="moon" aria-label="Phases de la lune"><svg viewBox="-22 -22 44 44">${moonSvg(il.phase, 20, 0, 0, this._img(this._config.moon_image))}</svg></button>
       <div class="tms">${cell("Lever", hm(mt.rise))}${cell("Coucher", hm(mt.set))}${cell("Éclairée", `${fmt(il.fraction * 100)} %`)}${cell("Azimut", `${fmt(mp.az)}°`)}${cell("Élévation", `${fmt(mp.el, 1)}°`)}</div></div>`;
   }
 
@@ -1814,7 +1839,7 @@ class MeteoAstroCard extends MeteoBase {
     const when = days <= 0 ? "pic cette nuit !" : days === 1 ? "pic demain soir" : `pic dans ${days} jours`;
     const nt = xy ? meteorNight(next, xy[0], xy[1]) : null;
     const MC = ["#5fcf8a", "#f7c948", "#ff8c33"];
-    const moon = nt?.visible ? `<div class="mt-m" title="Lune lors du pic : éclairée à ${fmt(nt.fraction * 100)} %"><svg viewBox="-22 -22 44 44">${moonSvg(nt.phase, 20, 0, 0, this._config.moon_image)}</svg>
+    const moon = nt?.visible ? `<div class="mt-m" title="Lune lors du pic : éclairée à ${fmt(nt.fraction * 100)} %"><svg viewBox="-22 -22 44 44">${moonSvg(nt.phase, 20, 0, 0, this._img(this._config.moon_image))}</svg>
       <span style="color:${MC[nt.moon[0]]}">${nt.moon[1]}</span></div>` : "";
     const detail = !nt ? "" : nt.visible
       ? `≈ <b>${fmt(nt.rate)}</b>/h vers ${nt.t.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · radiant à ${fmt(nt.alt)}°`
@@ -1880,7 +1905,7 @@ class MeteoAstroCard extends MeteoBase {
     const tile = (attr, icon, color, value, label, svg) =>
       `<div class="sky-t" ${attr}>${svg || `<ha-icon icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`}<div class="k-v">${esc(value)}</div><div class="k-l">${label}</div></div>`;
     return `<div class="sky">
-      ${tile(`data-act="moon" role="button" tabindex="0"`, "", "", MOON[mk][0], "Lune", `<svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(il.phase, 20, 0, 0, this._config.moon_image)}</svg>`)}
+      ${tile(`data-act="moon" role="button" tabindex="0"`, "", "", MOON[mk][0], "Lune", `<svg viewBox="-22 -22 44 44" class="k-m">${moonSvg(il.phase, 20, 0, 0, this._img(this._config.moon_image))}</svg>`)}
       ${sunI ? tile(`data-entity="sun.sun"`, sunI[1], sunI[2], sunI[0], "Soleil") : ""}
       ${tile(SEASON[sRaw] ? `data-entity="${esc(ent.season)}"` : "", season[1], season[2], season[0], "Saison")}
       ${ZODIAC[zRaw] ? tile(`data-entity="${esc(ent.zodiac)}"`, `mdi:zodiac-${zRaw}`, "#b38cf0", ZODIAC[zRaw], "Zodiaque") : ""}
@@ -1898,7 +1923,7 @@ class MeteoAstroCard extends MeteoBase {
       const lx = cx + (R + 46) * Math.cos(a), ly = cy - (R + 40) * Math.sin(a);
       const words = MOON[k][0].split(" ");
       const label = words.length > 1 ? `<tspan x="${f2(lx)}" dy="-.3em">${words[0]}</tspan><tspan x="${f2(lx)}" dy="1.1em">${words.slice(1).join(" ")}</tspan>` : words[0];
-      return `${moonSvg(i / 8, 18, +f2(x), +f2(y), this._config.moon_image)}${i === cur ? `<circle cx="${f2(x)}" cy="${f2(y)}" r="24" class="cur"/>` : ""}
+      return `${moonSvg(i / 8, 18, +f2(x), +f2(y), this._img(this._config.moon_image))}${i === cur ? `<circle cx="${f2(x)}" cy="${f2(y)}" r="24" class="cur"/>` : ""}
         <text x="${f2(lx)}" y="${f2(ly)}" class="pl${i === cur ? " on" : ""}">${label}</text>`;
     }).join("");
     const lun = 29.530588853, age = il.phase * lun;
@@ -1914,9 +1939,9 @@ class MeteoAstroCard extends MeteoBase {
     this._dlg.innerHTML = `<div class="d-in" tabindex="-1" autofocus><div class="d-h"><b>Phases de la lune</b><button data-close aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div>
       <svg viewBox="0 0 380 324" class="phases" role="img" aria-label="Phase actuelle : ${esc(MOON[key][0])}">
         <circle cx="${cx}" cy="${cy}" r="${R}" class="orb"/>
-        ${this._config.earth_image
+        ${this._img(this._config.earth_image)
           // photo de la Terre (option earth_image), découpée en disque
-          ? `<clipPath id="earthclip"><circle cx="${cx}" cy="${cy}" r="24"/></clipPath><image href="${esc(this._config.earth_image)}" x="${cx - 24}" y="${cy - 24}" width="48" height="48"
+          ? `<clipPath id="earthclip"><circle cx="${cx}" cy="${cy}" r="24"/></clipPath><image href="${esc(this._img(this._config.earth_image))}" x="${cx - 24}" y="${cy - 24}" width="48" height="48"
             clip-path="url(#earthclip)" preserveAspectRatio="xMidYMid slice"/>`
           : `<circle cx="${cx}" cy="${cy}" r="20" class="earth"/><path d="M${cx - 12} ${cy - 13}c7-3 13 1 11 7s-9 3-9 9-7 4-8-3 1-10 6-13zM${cx + 4} ${cy + 2}c5-2 11 1 10 6s-6 7-10 4-5-8 0-10z" class="land"/>`}
         ${moons}</svg>
@@ -4532,7 +4557,7 @@ const LABELS = {
   icons: "Icônes météo",
   forecast_details: "Détails des prévisions",
   icons_path: "Dossier des icônes amCharts (vide = jsDelivr ; ex. /local/meteo-icons/ pour un usage hors ligne)",
-  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
+  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg ou /media/local/lune.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
@@ -4614,8 +4639,8 @@ const ASTRO_LABELS = {
   show_space: "Activité solaire et aurores (NOAA)",
   show_pollens: "Pollens",
   show_all_pollens: "Afficher aussi les pollens à « nul » (« très faible » avec Atmo France)",
-  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg)",
-  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg)",
+  moon_image: "Photo de pleine lune pour les phases (facultatif, ex. /local/images/lune.svg ou /media/local/lune.svg)",
+  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg ou /media/local/terre.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
@@ -4894,8 +4919,8 @@ const CANADA_LABELS = {
   show_details: "Détails (vent, pression, humidité…)",
   show_summary: "Prévision du jour en texte",
   show_sky: "Soleil (lever, coucher), saison, lune et zodiaque",
-  moon_image: "Photo de pleine lune pour la tuile Lune et les phases (facultatif, ex. /local/images/lune.svg)",
-  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg)",
+  moon_image: "Photo de pleine lune pour la tuile Lune et les phases (facultatif, ex. /local/images/lune.svg ou /media/local/lune.svg)",
+  earth_image: "Photo de la Terre au centre de la fenêtre des phases (facultatif, ex. /local/images/terre.svg ou /media/local/terre.svg)",
   theme: "Couleurs de la carte",
   text_size: "Taille du texte (%)",
 };
