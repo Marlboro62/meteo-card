@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.2";
+const CARD_VERSION = "3.25.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2872,21 +2872,54 @@ class MeteoCruesCard extends MeteoBase {
     return lat === null || lon === null ? null : [lat, lon];
   }
 
-  /** Stations de l'intégration Vigicrues : capteurs de hauteur (height) et de débit (waterflowrate) regroupés par station. */
+  /** Stations des intégrations Vigicrues et Hub'Eau (hubeau-ha) : capteurs de hauteur et de débit regroupés par station. */
   _fromEntities() {
     const hass = this._hass, reg = hass.entities || {}, out = {};
     for (const [id, st] of Object.entries(hass.states)) {
-      if (!id.startsWith("sensor.") || reg[id]?.platform !== "vigicrues") continue;
-      const a = st.attributes || {}, code = a.station_id || id;
-      const s = (out[code] ||= { code, lat: num(a.latitude), lon: num(a.longitude), ents: {} });
-      const kind = a.type === "Q" || reg[id]?.translation_key === "waterflowrate" || /debit|flow|_q$/.test(id) ? "q" : "h";
+      const pl = reg[id]?.platform;
+      if (!id.startsWith("sensor.") || (pl !== "vigicrues" && pl !== "hubeau")) continue;
+      const a = st.attributes || {}, tk = reg[id]?.translation_key, dev = hass.devices?.[reg[id]?.device_id];
+      let code, kind;
+      if (pl === "hubeau") {
+        // un appareil par station : le code est son numéro de série (ou son identifiant), la rivière son modèle
+        const u = a.unit_of_measurement;
+        kind = tk === "hauteur" || (!tk && u === "m") ? "h" : tk === "debit" || (!tk && u === "m³/s") ? "q" : tk === "derniere_mesure" ? "t" : null;
+        if (!kind) continue;
+        code = String(dev?.serial_number || (dev?.identifiers || []).find((x) => x?.[0] === "hubeau")?.[1] || reg[id]?.device_id || id);
+      } else {
+        code = a.station_id || id;
+        kind = a.type === "Q" || tk === "waterflowrate" || /debit|flow|_q$/.test(id) ? "q" : "h";
+      }
+      const s = (out[code] ||= { code, src: pl, lat: num(a.latitude), lon: num(a.longitude), ents: {} });
       s.ents[kind] = id;
-      if (kind === "h") {
-        const dev = hass.devices?.[reg[id]?.device_id];
+      if (pl === "hubeau") {
+        s.name ||= dev?.name_by_user || dev?.name || code;
+        if (dev?.model && !/^station/i.test(dev.model)) s.riverName = dev.model;
+      } else if (kind === "h") {
         s.name = String(dev?.name_by_user || dev?.name || a.friendly_name || code).replace(/\s*-\s*[A-Z]\d{6,}\s*$/, "").replace(/^Vigicrues\s+/i, "");
       }
     }
-    return Object.values(out).map((s) => ({ ...s, h: this._num(s.ents.h), q: this._num(s.ents.q), at: this._st(s.ents.h)?.last_changed ? new Date(this._st(s.ents.h).last_changed) : null, ...stationParts(s.name) }));
+    const coords = this._coords || {};
+    return Object.values(out).filter((s) => s.ents.h || s.ents.q).map((s) => {
+      const hs = this._st(s.ents.h || s.ents.q), t = s.ents.t ? Date.parse(this._st(s.ents.t)?.state) : NaN, parts = stationParts(s.name);
+      return { ...s, lat: s.lat ?? coords[s.code]?.[0] ?? null, lon: s.lon ?? coords[s.code]?.[1] ?? null, h: this._num(s.ents.h), q: this._num(s.ents.q),
+        at: Number.isFinite(t) ? new Date(t) : hs?.last_changed ? new Date(hs.last_changed) : null, ...parts, river: s.riverName || parts.river };
+    });
+  }
+
+  /** Position des stations que l'intégration ne situe pas (Hub'Eau) : lue une fois sur Hub'Eau, pour la distance et la carte. */
+  _coordsFetch(list) {
+    const codes = list.filter((s) => s.lat === null && /^[A-Z0-9]{8,12}$/i.test(s.code)).map((s) => s.code).sort();
+    const key = codes.join(",");
+    if (!codes.length || this._cKey === key || this._cBusy) return;
+    this._cBusy = true;
+    fetchJson(`${HUBEAU}referentiel/stations?format=json&size=200&fields=code_station,latitude_station,longitude_station&code_station=${key}`, 36e5)
+      .then((j) => {
+        const m = { ...(this._coords || {}) };
+        for (const x of j.data || []) { const la = num(x.latitude_station), lo = num(x.longitude_station); if (la !== null && lo !== null) m[x.code_station] = [la, lo]; }
+        this._coords = m;
+      })
+      .catch(() => {}).finally(() => { this._cKey = key; this._cBusy = false; this._sig = null; this._render(); });
   }
 
   /** Hauteurs des dernières 24 h des capteurs de l'intégration (historique de Home Assistant), une fois par heure. */
@@ -2939,12 +2972,12 @@ class MeteoCruesCard extends MeteoBase {
     if (!this._config || !this._hass || !this.shadowRoot) return;
     const c = this._config, home = this._home();
     const ents = this._fromEntities();
-    if (ents.length) this._histEntities(ents);
+    if (ents.length) { this._histEntities(ents); this._coordsFetch(ents); }
     else if (c.direct !== false && home) this._fetch(home);
     const al = detect(this._hass, c).alert, ast = this._st(al);
     const vigi = (k) => { const v = ast?.attributes?.[k]; const l = levelOf(v); return l === undefined ? null : l; };
     const crue = vigi("Inondation"), rain = vigi("Pluie-inondation");
-    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${this._dataAt}|${this._hAt}|${crue}|${rain}|` + ents.map((s) => `${s.h}/${s.q}`).join(",");
+    const sig = `${c.theme}|${this._hass.themes?.darkMode}|${Math.floor(Date.now() / 6e4)}|${this._dataAt}|${this._hAt}|${crue}|${rain}|` + ents.map((s) => `${s.h}/${s.q}/${s.lat}`).join(",");
     if (sig === this._sig) return;
     this._sig = sig;
     const now = Date.now();
@@ -2969,8 +3002,8 @@ class MeteoCruesCard extends MeteoBase {
     if (!list.length) {
       const loading = !ents.length && c.direct !== false && home && !this._dataAt;
       body += loading ? `<div class="empty"><b>Chargement…</b></div>` : `<div class="empty"><b>${this._failed ? "Données des rivières inaccessibles" : "Aucune station de mesure à proximité"}</b><span>${this._failed
-        ? "Le navigateur n'a pas pu lire Hub'Eau. Installez l'intégration Vigicrues (HACS) et choisissez vos stations."
-        : `Aucune station Vigicrues à moins de ${fmt(Number(c.radius) || 25)} km. Agrandissez le rayon, ou indiquez vos stations (option stations, ou intégration Vigicrues).`}</span></div>`;
+        ? "Le navigateur n'a pas pu lire Hub'Eau. Installez l'intégration Vigicrues ou Hub'Eau (HACS) et choisissez vos stations."
+        : `Aucune station Vigicrues à moins de ${fmt(Number(c.radius) || 25)} km. Agrandissez le rayon, ou indiquez vos stations (option stations, ou intégration Vigicrues ou Hub'Eau).`}</span></div>`;
       this._card(body);
       if (this._keep) { this._keep.innerHTML = ""; this._map = null; }
       return;
@@ -2984,7 +3017,7 @@ class MeteoCruesCard extends MeteoBase {
       <div class="rv-h"><b>${s.h === null ? "—" : m(s.h)}</b><small style="color:${s.trend[1]}"><ha-icon icon="${s.trend[2]}"></ha-icon>${s.d24 === null ? s.trend[0] : `${cm(s.d24)} en 24 h`}</small>
         ${s.q !== null ? `<small>${fmt(s.q, s.q < 10 ? 2 : s.q < 100 ? 1 : 0)} m³/s</small>` : ""}</div></div>`;
     body += (this._secOpen("stations") ? `<div class="sec">Stations de mesure</div><div class="qk-l-w">${list.map(row).join("")}</div>` : "")
-      + `<div class="qk-src">${ents.length ? "Source : intégration Vigicrues" : "Source : Hub'Eau (stations Vigicrues)"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`
+      + `<div class="qk-src">${ents.length ? `Source : intégration ${[...new Set(ents.map((s) => (s.src === "hubeau" ? "Hub'Eau" : "Vigicrues")))].join(" et ")}` : "Source : Hub'Eau"}${crue !== null ? " · vigilance : Météo-France" : ""}</div>`
       + this._tgRow(this._secToggle("stations", "Stations", "la liste « Stations de mesure »") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home);
@@ -3000,7 +3033,7 @@ class MeteoCruesCard extends MeteoBase {
   async _mapUpdate(list, home) {
     const c = this._config;
     const legend = ["Forte hausse", "En hausse", "Stable", "En baisse"].map((l) => { const t = [0.6, 0.2, 0, -0.2].map(riverTrend).find(([x]) => x === l); return `<span><i style="background:${t[1]}"></i>${l}</span>`; }).join("") + "<span>sur 24 h</span>";
-    const L = await this._localMap(home, legend, 'rivières : <a href="https://www.vigicrues.gouv.fr/">Vigicrues</a>, <a href="https://hubeau.eaufrance.fr/">Hub\'Eau</a>', Number(c.map_height) || 300);
+    const L = await this._localMap(home, legend, 'rivières : <a href="https://hubeau.eaufrance.fr/">Hub\'Eau</a>, <a href="https://www.hydro.eaufrance.fr/">HydroPortail</a>', Number(c.map_height) || 300);
     if (!L) return;
     try {
       this._layer.clearLayers();
@@ -3015,7 +3048,7 @@ class MeteoCruesCard extends MeteoBase {
             ${s.q !== null ? `<span>Débit <b>${fmt(s.q, s.q < 10 ? 2 : 1)} m³/s</b></span>` : ""}
             <span style="color:${s.trend[1]}">${s.trend[0]}</span>${s.at ? `<span>Mesure ${dt(s.at)}</span>` : ""}
             ${s.dist !== null ? `<span>À <b>${fmt(s.dist, s.dist < 10 ? 1 : 0)} km</b>${s.az !== null ? ` ${compass16(s.az)}` : ""} de chez vous</span>` : ""}
-            ${s.code ? `<a href="https://www.vigicrues.gouv.fr/station/${encodeURIComponent(s.code)}" target="_blank" rel="noopener noreferrer">Station sur Vigicrues</a>` : ""}</div>`,
+            ${/^[A-Z0-9]{8,12}$/i.test(s.code || "") ? `<a href="https://www.hydro.eaufrance.fr/stationhydro/${encodeURIComponent(s.code)}/fiche" target="_blank" rel="noopener noreferrer">Fiche de la station (HydroPortail)</a>` : ""}</div>`,
           { autoPanPaddingTopLeft: L.point(56, 16), autoPanPaddingBottomRight: L.point(56, 24) });
         mk.addTo(this._layer);
         this._markers[i] = mk;

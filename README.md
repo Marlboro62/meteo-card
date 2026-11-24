@@ -47,7 +47,7 @@ Cartes Lovelace pour Home Assistant, **en français**, toutes dans un seul fichi
 | **Bolides** | `custom:meteo-bolides-card` | **Carte du monde interactive** des bolides (grosses météorites) détectés par la NASA : zoom, bulle au clic, filtres par période et énergie, le plus récent, le plus proche et le plus puissant |
 | **EcoWatt** | `custom:meteo-ecowatt-card` | **Risque de coupures d'électricité** : signal EcoWatt de RTE aujourd'hui, demain et après-demain, **heure par heure** (cases cliquables), avec la France à la couleur du jour choisi (MyElectricalData ou RTE EcoWatt) |
 | **Canada** | `custom:meteo-canada-card` | **Environnement Canada** : **alertes** (avertissements, veilles, avis, bulletins) avec leur couleur et leur heure de fin, **refroidissement éolien** et **humidex** avec le risque, **cote air santé (CAS)**, **indice UV**, détails et prévision du jour |
-| **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (Vigicrues, sans intégration grâce à Hub'Eau) |
+| **Crues et rivières** | `custom:meteo-crues-card` | **Hauteur et débit des rivières** proches avec leur **tendance sur 24 h** (courbe, hausse ou baisse), **vigilance crues** du département et **carte interactive** des stations (sans intégration grâce à Hub'Eau, ou avec les intégrations Vigicrues ou Hub'Eau) |
 | **Feux de forêt** | `custom:meteo-feux-card` | **Feux détectés par satellite** autour de chez vous (NASA FIRMS) : boussole et **carte interactive**, distance et direction, intensité, ville la plus proche, **fumée vers vous ou non**, prochain passage d'un satellite |
 | **Montagne** | `custom:meteo-montagne-card` | **Stations de ski et sommets** en onglets : température **au pied et au sommet**, **isotherme 0 °C**, **neige fraîche** (24 h passées, 72 h à venir), **neige au sol**, prévisions, et **risque d'avalanche** du bulletin Météo-France (avec [ha-serac](https://github.com/atacamalabs/ha-serac)) |
 | **Marine** | `custom:meteo-marine-card` | **Zones en mer** en onglets : vent en **nœuds et force Beaufort**, rafales, **mer du vent et houle**, visibilité, **pression et tendance**, courant, prévisions heure par heure et **avis dès force 7** |
@@ -245,6 +245,7 @@ Les cartes affichent les données d'intégrations Home Assistant : installez cel
 | **Aurora** (facultatif) | Intégration officielle : **Paramètres › Appareils et services › Ajouter une intégration** | Soleil et lune | Probabilité d'aurore à votre position (modèle OVATION de la NOAA) |
 | **MyElectricalData** (export Home Assistant) ou **RTE EcoWatt** | Add-on [MyElectricalData](https://github.com/MyElectricalData/myelectricaldata_new) : capteurs `ecowatt_j0` à `ecowatt_j2`, heure par heure ; ou HACS : [kamaradclimber/rte-ecowatt](https://github.com/kamaradclimber/rte-ecowatt), niveau par jour (compte RTE gratuit) | EcoWatt | Signal EcoWatt de RTE pour aujourd'hui, demain et après-demain |
 | **Vigicrues** (facultatif) | HACS : [julcollas/hass-vigicrues](https://github.com/julcollas/hass-vigicrues) | Crues et rivières | Hauteur et débit des stations que vous choisissez (sans elle, la carte lit directement Hub'Eau, le service public des données sur l'eau) |
+| **Hub'Eau** (facultatif) | HACS : [benlepa0/hubeau-ha](https://github.com/benlepa0/hubeau-ha) | Crues et rivières | Hauteur et débit des stations que vous choisissez, y compris celles absentes de Vigicrues, avec leur historique dans Home Assistant |
 | **NASA FIRMS Wildfire Monitor** | HACS : [bangboomben/ha-nasa-firms](https://github.com/bangboomben/ha-nasa-firms), avec une clé gratuite de la NASA ([MAP_KEY](https://firms.modaps.eosdis.nasa.gov/api/map_key/)) | Feux de forêt | Feux détectés par les satellites VIIRS et MODIS dans le rayon choisi, avec leur intensité, la ville la plus proche, le vent et la direction de la fumée |
 | **USGS Earthquake Hazards Program** ou **GDACS** (facultatif) | Intégrations officielles | Séismes | Séismes autour de chez vous (sans elles, la carte lit directement les flux publics de l'EMSC et de l'USGS) |
 | **Compteur de services publics** (`utility_meter`) | Intégration officielle : **Paramètres › Appareils et services › Entrées** | Éclairs (facultatif) | Total des éclairs du mois, à partir du compteur Blitzortung |
@@ -542,17 +543,17 @@ type: custom:meteo-crues-card
 radius: 25          # stations à moins de 25 km de chez vous
 ```
 
-**Rien à installer** : la carte trouve les stations Vigicrues autour de chez vous et lit leurs mesures sur **Hub'Eau** (service public des données sur l'eau, sans clé), toutes les 30 minutes. Avec l'intégration **Vigicrues** (HACS), elle affiche plutôt les stations que vous y avez choisies, avec leur historique dans Home Assistant.
+**Rien à installer** : la carte trouve les stations de mesure autour de chez vous et lit leurs mesures sur **Hub'Eau** (service public des données sur l'eau, sans clé), toutes les 30 minutes. Avec l'intégration **Vigicrues** ou **Hub'Eau** ([hubeau-ha](https://github.com/benlepa0/hubeau-ha), HACS), elle affiche plutôt les stations que vous y avez choisies, avec leur historique dans Home Assistant. Les deux intégrations peuvent être utilisées ensemble.
 
 - **Vigilance crues** du département (Météo-France, alimentée par Vigicrues) et **pluie-inondation**, si l'intégration Météo-France est installée.
 - **Stations de mesure** : la rivière et le lieu, la distance et la direction, la **hauteur d'eau** avec une **courbe des dernières 24 h** et sa variation (« +62 cm en 24 h »), et le **débit**. Couleur de la tendance : rouge en forte hausse (50 cm ou plus en 24 h), orange en hausse, vert stable, bleu en baisse.
-- **Carte interactive** : les stations à la couleur de leur tendance, votre maison et le plein écran. Un clic sur une station ouvre sa bulle (hauteur, variation, débit, heure de la mesure, lien vers la station sur Vigicrues) ; un clic sur une station de la liste centre la carte dessus.
+- **Carte interactive** : les stations à la couleur de leur tendance, votre maison et le plein écran. Un clic sur une station ouvre sa bulle (hauteur, variation, débit, heure de la mesure, lien vers la fiche de la station sur HydroPortail) ; un clic sur une station de la liste centre la carte dessus.
 
 | Option | Rôle | Défaut |
 | --- | --- | --- |
 | `title` | Titre | `Crues et rivières` |
 | `radius` | Stations à moins de (km) | `25` |
-| `stations` | Stations à suivre, par leur code Vigicrues (ex. `F700000103, F704000101`) | les plus proches |
+| `stations` | Stations à suivre, par leur code de station Hub'Eau ou Vigicrues (ex. `F700000103, Y084000101`) | les plus proches |
 | `max_items` | Nombre de stations affichées | `6` |
 | `direct` | Sans intégration, lire Hub'Eau depuis le navigateur | `true` |
 | `show_stations` | Liste « Stations de mesure » affichée au départ ; le bouton « Stations », à côté du bouton « Carte », la montre ou la cache, et la carte s'en souvient | `true` |
