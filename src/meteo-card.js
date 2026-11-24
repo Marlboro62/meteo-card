@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.1-beta.2";
+const CARD_VERSION = "3.24.1-beta.3";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2761,7 +2761,7 @@ class MeteoFeuxCard extends MeteoBase {
     const tile = (id, icon, col, value, lab) => (value === null || value === undefined ? "" : `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${col}"></ha-icon>
       <div class="k-v">${value}</div><div class="k-l">${lab}</div></div>`);
     const tiles = `<div class="sky qk-t">
-      ${nearest?.smoke ? tile(nearest.id, "mdi:weather-windy", nearest.smoke[1], nearest.smoke[0], nearest.wind !== null ? `Vent ${fmt(nearest.wind * 3.6)} km/h · feu le plus proche` : "Vent au feu le plus proche") : ""}
+      ${nearest?.smoke ? tile(nearest.id, "mdi:weather-windy", nearest.smoke[1], nearest.smoke[0], nearest.wind !== null ? `Vent ${fmt(nearest.wind * 3.6)} km/h au feu` : "Vent au feu le plus proche") : ""}
       ${tile(strongest?.id || s.frp, "mdi:heat-wave", strongest ? strongest.band[1] : "#8fa0b8", strongest?.frp !== null && strongest?.frp !== undefined ? `${fmt(strongest.frp, strongest.frp < 10 ? 1 : 0)} MW · ${strongest.band[0]}` : null, "Le plus intense")}
       ${tile(s.pass, "mdi:satellite-variant", "#1d93e3", passTxt, `Prochain passage${pass?.attributes?.satellite_name || pass?.attributes?.satellite ? ` · ${esc(SAT_FR(pass.attributes.satellite_name || pass.attributes.satellite))}` : ""}`)}
     </div>`;
