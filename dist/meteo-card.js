@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.1-beta.1";
+const CARD_VERSION = "3.24.1-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2695,7 +2695,7 @@ const FIRE_BAND = { extreme: ["Extrême", "#ff0000"], high: ["Fort", "#ff4d00"],
 const FIRE_NONE = ["Inconnue", "#9e9e9e"];
 const FIRE_CONF = { low: "faible", nominal: "normale", high: "élevée" };
 /** Fumée : écart entre le vent et la direction du feu (0 = poussée droit vers vous, 180 = à l'opposé). */
-const smokeOf = (o) => (o === null || o === undefined ? null : o <= 45 ? ["Fumée vers vous", "#ee4a4a"] : o <= 90 ? ["Fumée de côté", "#ff8c33"] : ["Fumée qui s'éloigne de vous", "#5fcf8a"]);
+const smokeOf = (o) => (o === null || o === undefined ? null : o <= 45 ? ["Fumée vers vous", "#ee4a4a"] : o <= 90 ? ["Fumée de côté", "#ff8c33"] : ["Fumée qui s'éloigne", "#5fcf8a"]);
 const SAT_FR = (s) => String(s || "").replace(/_/g, " ").replace(/\bNOAA(\d+)\b/i, "NOAA-$1").replace(/\bSNPP\b/i, "Suomi NPP");
 
 class MeteoFeuxCard extends MeteoBase {
@@ -2761,7 +2761,7 @@ class MeteoFeuxCard extends MeteoBase {
     const tile = (id, icon, col, value, lab) => (value === null || value === undefined ? "" : `<div class="sky-t"${id ? ` data-entity="${esc(id)}"` : ""}><ha-icon icon="${icon}" style="color:${col}"></ha-icon>
       <div class="k-v">${value}</div><div class="k-l">${lab}</div></div>`);
     const tiles = `<div class="sky qk-t">
-      ${nearest?.smoke ? tile(nearest.id, "mdi:weather-windy", nearest.smoke[1], `${nearest.smoke[0]}${nearest.wind !== null ? ` · ${fmt(nearest.wind * 3.6)} km/h` : ""}`, "Vent au feu le plus proche") : ""}
+      ${nearest?.smoke ? tile(nearest.id, "mdi:weather-windy", nearest.smoke[1], nearest.smoke[0], nearest.wind !== null ? `Vent ${fmt(nearest.wind * 3.6)} km/h · feu le plus proche` : "Vent au feu le plus proche") : ""}
       ${tile(strongest?.id || s.frp, "mdi:heat-wave", strongest ? strongest.band[1] : "#8fa0b8", strongest?.frp !== null && strongest?.frp !== undefined ? `${fmt(strongest.frp, strongest.frp < 10 ? 1 : 0)} MW · ${strongest.band[0]}` : null, "Le plus intense")}
       ${tile(s.pass, "mdi:satellite-variant", "#1d93e3", passTxt, `Prochain passage${pass?.attributes?.satellite_name || pass?.attributes?.satellite ? ` · ${esc(SAT_FR(pass.attributes.satellite_name || pass.attributes.satellite))}` : ""}`)}
     </div>`;
