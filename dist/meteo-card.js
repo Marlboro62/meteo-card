@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.1-beta.3";
+const CARD_VERSION = "3.24.1-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -3341,7 +3341,8 @@ class MeteoMontagneCard extends MeteoBase {
       + av
       + (days ? `<div class="sec">Prochains jours${wx.top ? ` au sommet (${fmt(s.top)} m)` : ""}</div><div class="mt-ds">${days}</div>` : "")
       + (wx.failed ? `<div class="fc-empty">Open-Meteo injoignable (${esc(wx.error || "réseau")}) : prévisions de ${esc(new Date(wx.okAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }))}, nouvel essai dans 2 minutes.</div>` : "")
-      + `<div class="qk-src">Prévisions : Open-Meteo (modèles Météo-France AROME et ARPEGE, ECMWF), neige au sol estimée par le modèle${aval ? " · avalanche : bulletin Météo-France (ha-serac)" : ""}.</div>`);
+      // une seule ligne ; le texte complet en info-bulle
+      + `<div class="qk-src qk-1" title="Prévisions : Open-Meteo (modèles Météo-France AROME et ARPEGE, ECMWF), neige au sol estimée par le modèle${aval ? " · avalanche : bulletin Météo-France (ha-serac)" : ""}.">${aval ? "Prévisions : Open-Meteo · avalanche : Météo-France" : "Prévisions : Open-Meteo (Météo-France, ECMWF)"}</div>`);
   }
 }
 
