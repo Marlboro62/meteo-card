@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.24.0";
+const CARD_VERSION = "3.24.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2775,7 +2775,8 @@ class MeteoFeuxCard extends MeteoBase {
     const body = head + `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
       + (!list.length ? `<div class="fc-empty">Aucun feu dans la zone surveillée par l'intégration${passTxt ? ` · prochain passage ${passTxt}` : ""}</div>`
         : this._secOpen("fires") ? `<div class="sec">Feux détectés</div><div class="qk-l-w">${list.slice(0, max).map((f) => row(f, list.indexOf(f))).join("")}</div>` : "")
-      + `<div class="qk-src">Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.</div>`
+      // une seule ligne ; le texte complet en info-bulle
+      + `<div class="qk-src qk-1" title="Source : NASA FIRMS (satellites VIIRS et MODIS). Un point chaud peut aussi être une usine ou un brûlage.">Source : NASA FIRMS · parfois une usine ou un brûlage</div>`
       + this._tgRow((list.length ? this._secToggle("fires", "Feux", "la liste « Feux détectés »") : "") + (mapAvail ? this._mapToggle() : ""));
     this._card(body);
     if (mapOn) this._mapUpdate(list, home, radius);
@@ -4297,6 +4298,7 @@ a.qk-r:hover { border-color: var(--med-accent, var(--med-blue)); }
 .qk-p small { font-size: .72rem; color: var(--med-muted); }
 .qk-l { flex: none; font-size: .7rem; color: var(--med-muted); }
 .qk-src { margin: 8px 18px 0; font-size: .68rem; color: var(--med-muted); text-align: right; }
+.qk-1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-tg { all: unset; cursor: pointer; display: flex; align-items: center; gap: 6px; width: fit-content; margin: 10px 14px 0 auto; padding: 5px 12px;
   border-radius: 999px; border: 1px solid var(--med-line); background: var(--med-surface); color: var(--med-muted); font-size: .78rem; font-weight: 600; --mdc-icon-size: 16px; }
 .map-tg:hover { color: var(--primary-text-color, inherit); }
