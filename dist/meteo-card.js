@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.23.0";
+const CARD_VERSION = "3.24.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -2434,7 +2434,7 @@ class MeteoEclairsCard extends MeteoBase {
 
 /* ----------------------------------------------------------- carte Séismes */
 
-const SEISMES_DEFAULTS = { title: "Séismes", radius: 1000, min_magnitude: 2, world_magnitude: 6, days: 7, max_items: 6, direct: true, show_map: true, map_height: 300, theme: "v2" };
+const SEISMES_DEFAULTS = { title: "Séismes", radius: 1000, min_magnitude: 2, world_magnitude: 6, days: 7, max_items: 6, direct: true, show_near: true, show_world: true, show_map: true, map_height: 300, theme: "v2" };
 const USGS_FEED = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson";
 const EMSC_API = "https://www.seismicportal.eu/fdsnws/event/1/query?format=json&orderby=time&limit=300";
 /** Couleur d'une magnitude : vert sous 3, jaune, orange, rouge, violet à partir de 6. */
@@ -2588,8 +2588,8 @@ class MeteoSeismesCard extends MeteoBase {
     };
     const max = Math.max(1, Number(c.max_items) || 6);
     body += `<div class="duo">${rose}<div class="qk-side">${tiles}</div></div>`
-      + (near.length ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
-      + (world.length ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
+      + (near.length && c.show_near !== false ? `<div class="sec">Autour de chez vous</div><div class="qk-l-w">${near.slice(0, max).map(row).join("")}</div>` : "")
+      + (world.length && c.show_world !== false ? `<div class="sec">Dans le monde · magnitude ${fmt(Number(c.world_magnitude) || 6)} et plus</div><div class="qk-l-w">${world.slice(0, 3).map(row).join("")}</div>` : "")
       + `<div class="qk-src">${ents.length ? "Source : intégrations Home Assistant" : "Sources : EMSC et USGS"}</div>`
       + (mapAvail ? this._mapToggle() : "");
     this._card(body);
@@ -4586,6 +4586,8 @@ const SEISMES_SCHEMA = [
   { name: "days", selector: { number: { min: 1, max: 30, mode: "box", unit_of_measurement: "j" } } },
   { name: "max_items", selector: { number: { min: 1, max: 20, mode: "box" } } },
   { name: "direct", selector: { boolean: {} } },
+  { name: "show_near", selector: { boolean: {} } },
+  { name: "show_world", selector: { boolean: {} } },
   { name: "show_map", selector: { boolean: {} } },
   { name: "map_hidden", selector: { boolean: {} } },
   { name: "map_height", selector: { number: { min: 180, max: 800, step: 10, mode: "box", unit_of_measurement: "px" } } },
@@ -4601,6 +4603,8 @@ const SEISMES_LABELS = {
   days: "Période",
   max_items: "Nombre de séismes listés",
   direct: "Sans intégration, lire les flux EMSC et USGS depuis le navigateur",
+  show_near: "Liste « Autour de chez vous »",
+  show_world: "Liste « Dans le monde »",
   show_map: "Carte interactive des séismes",
   map_hidden: "Carte masquée au départ (bouton pour l'afficher)",
   map_height: "Hauteur de la carte",
