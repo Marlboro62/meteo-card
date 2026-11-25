@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.30.0";
+const CARD_VERSION = "3.30.1-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -479,11 +479,17 @@ const related = (hass, weather) => {
   const obj = String(weather || "").split(".")[1] || "";
   const ids = Object.keys(hass?.states || {}).filter((id) => id.startsWith("sensor.") &&
     ((dev && reg[id]?.device_id === dev) || (obj && id.startsWith(`sensor.${obj}_`))));
-  const find = (re) => ids.find((id) => re.test(id));
+  // nom d'origine dans l'intégration (translation_key), puis identifiant : les entités renommées sont aussi trouvées
+  const keyOf = (id) => `_${reg[id]?.translation_key || ""}`;
+  const find = (re) => ids.find((id) => re.test(keyOf(id))) || ids.find((id) => re.test(id));
+  // sinon par classe de capteur (humidité, pression, vent), sans jamais prendre les rafales pour le vent
+  const gust = (id) => /gust|rafale/i.test(`${id}${keyOf(id)}`);
+  const byClass = (...cls) => ids.find((id) => cls.includes(hass.states[id]?.attributes?.device_class) && !gust(id));
   return {
     cloud: find(/_cloud(_cover)?$/), rain: find(/_rain_chance$/), freeze: find(/_freeze_chance$/),
     snow: find(/_snow_chance$/), uv: find(/_uv(_index)?$/), precip: find(/_daily_?(original_)?precipitation$|_precipitation$/),
-    next_rain: find(/_next_rain$/), pressure: find(/_pressure$/), wind: find(/_wind_speed$/), humidity: find(/_humidity$/),
+    next_rain: find(/_next_rain$/), pressure: find(/_pressure$/) || byClass("pressure", "atmospheric_pressure"),
+    wind: find(/_wind_speed$/) || byClass("wind_speed"), humidity: find(/_humidity$/) || byClass("humidity"),
   };
 };
 
