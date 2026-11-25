@@ -7,6 +7,7 @@ body:
     attributes:
       value: |
         Merci pour votre idée !
+        La carte doit rester simple pour tous : une nouvelle option n'est ajoutée que si elle sert à **plusieurs utilisateurs**. Avant de créer une demande, cherchez si elle existe déjà et soutenez-la avec un 👍. Les corrections de bugs passent en priorité.
         ⚠️ **Masquez vos informations personnelles** (adresse, ville, numéro de PDL, adresses IP, mots de passe, jetons) dans le texte et les captures.
   - type: input
     id: element
