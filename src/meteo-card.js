@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.26.0-beta.3";
+const CARD_VERSION = "3.26.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -551,7 +551,7 @@ const coordsOf = (hass, id) => {
  * de la vigilance quand il est connu. Résultat gardé dans le navigateur ; null tant qu'il n'est pas connu.
  */
 const GEO_MEM = {};
-/** Nom court d'une ville d'après le nom de son entité : « Météo-France forecast for city Bresles - Picardie (60) » → « Bresles ». */
+/** Nom court d'une ville d'après le nom de son entité : « Météo-France forecast for city Lyon - Rhône (69) » → « Lyon ». */
 const shortCity = (raw) => String(raw || "").split(/\s+[-–]\s+|\s*\(/)[0].replace(/m[ée]t[ée]o[\s-]*france|forecast for city|pr[ée]visions?/gi, "").trim();
 
 const geoCity = (hass, weather, alert) => {
