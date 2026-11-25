@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.26.0-beta.1";
+const CARD_VERSION = "3.26.0-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -923,6 +923,14 @@ class MeteoCard extends MeteoBase {
     return list.length ? list : [ok.includes(c.forecast_type) ? c.forecast_type : "daily"];
   }
 
+  /** Prévisions de la fenêtre ouverte par la grande icône (option popup_forecasts), sinon celles de la carte. */
+  _popTypes() {
+    const c = this._config;
+    const ok = ["daily", "hourly", "twice_daily"];
+    const list = (Array.isArray(c.popup_forecasts) ? c.popup_forecasts : typeof c.popup_forecasts === "string" ? [c.popup_forecasts] : []).filter((t) => ok.includes(t));
+    return list.length ? list : this._types();
+  }
+
   _action(act, el) {
     if (act === "tab") {
       this._tab = Number(el.dataset.i) || 0;
@@ -931,6 +939,31 @@ class MeteoCard extends MeteoBase {
       this._render();
     } else if (act === "moon") this._openMoon();
     else if (act === "astro") this._openAstro();
+    else if (act === "fcpop") this._openForecast();
+  }
+
+  /** Contenu de la fenêtre des prévisions : mêmes prévisions et mêmes réglages d'affichage que la carte. */
+  _fcPopHtml() {
+    const ctx = this._fcCtx;
+    if (!ctx) return "";
+    const parts = (this._fcsPop || []).map(([t, fc]) => this._forecast(ctx.w, ctx.ent, t, fc)).join("");
+    return parts || `<div class="fc-empty">Prévisions indisponibles pour ${esc(ctx.ent.weather)}.</div>`;
+  }
+
+  /** Fenêtre des prévisions (option now_tap: forecast), propre à la carte : rien à installer. */
+  _openForecast() {
+    if (!this._keep || !this._fcCtx) return;
+    if (!this._dlgFc || !this._keep.contains(this._dlgFc)) {
+      this._keep.insertAdjacentHTML("beforeend", `<dialog class="dlg dlg-fc" aria-label="Prévisions"><div class="d-in" tabindex="-1" autofocus>
+        <div class="d-h"><b></b><button data-close aria-label="Fermer"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="d-card"></div></div></dialog>`);
+      this._dlgFc = this._keep.querySelector("dialog.dlg-fc");
+      this._dlgFc.addEventListener("click", (e) => { if (e.target === this._dlgFc || e.target.closest("[data-close]")) this._dlgFc.close(); });
+    }
+    const name = this._fcCtx.w?.attributes?.friendly_name;
+    this._dlgFc.querySelector(".d-h b").textContent = name ? `Prévisions · ${name}` : "Prévisions";
+    this._dlgFc.querySelector(".d-card").innerHTML = this._fcPopHtml();
+    this._dlgFc.className = `dlg dlg-fc ${themeClass(this._config.theme, this._hass)}`;
+    if (typeof this._dlgFc.showModal === "function") this._dlgFc.showModal(); else this._dlgFc.setAttribute("open", "");
   }
 
   /** Lune de la ville affichée : capteur de la carte (moon), sinon détecté, sinon calculé. */
@@ -995,9 +1028,13 @@ class MeteoCard extends MeteoBase {
     const w0 = this._st(ent.weather);
     const feat = num(w0?.attributes?.supported_features);
     // WeatherEntityFeature : 1 par jour, 2 par heure, 4 jour et nuit
-    const types = this._types().filter((t) => feat === null || !w0?.attributes || (feat & { daily: 1, hourly: 2, twice_daily: 4 }[t]));
-    this._keepSubs(types.map((t) => `${ent.weather}|${t}`));
+    const supp = (t) => feat === null || !w0?.attributes || (feat & { daily: 1, hourly: 2, twice_daily: 4 }[t]);
+    const types = this._types().filter(supp);
+    // fenêtre des prévisions (option now_tap) : ses prévisions sont suivies elles aussi, même masquées sur la carte
+    const popTypes = c.now_tap === "forecast" ? this._popTypes().filter(supp) : [];
+    this._keepSubs([...new Set([...types, ...popTypes])].map((t) => `${ent.weather}|${t}`));
     this._fcs = types.map((t) => [t, this._forecastOf(ent.weather, t)]);
+    this._fcsPop = popTypes.map((t) => [t, this._forecastOf(ent.weather, t)]);
     const w = this._st(ent.weather);
     const al = this._st(ent.alert);
     const rel = related(this._hass, ent.weather);
@@ -1005,7 +1042,7 @@ class MeteoCard extends MeteoBase {
     const rainGiven = city.rain_hour ?? city.rain_entity ?? (ti === 0 ? c.rain_hour ?? c.rain_entity : null);
     this._rainId = rainHourOf(this._hass, ent.weather, rainGiven, cities.length < 2);
     const sig = `${c.theme}|${this._rainId}|${this._hass.themes?.darkMode}|${ti}|${JSON.stringify(this._place)}|${w?.last_updated}|${al?.last_updated}|` +
-      [ent.season, ent.moon, ent.zodiac, city.rain_rate || (ti === 0 ? c.rain_rate : null), ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${new Date().getDate()}` +
+      [ent.season, ent.moon, ent.zodiac, city.rain_rate || (ti === 0 ? c.rain_rate : null), ...Object.values(rel)].map((id) => this._st(id)?.state).join("|") + `|${JSON.stringify(this._fcs)}|${JSON.stringify(this._fcsPop)}|${new Date().getDate()}` +
       `|${Object.values(ent.ec || {}).map((id) => this._st(id)?.last_updated).join(",")}|${this._ecRes?.sig || ""}`;
     if (sig === this._sig) return;
     this._sig = sig;
@@ -1025,6 +1062,14 @@ class MeteoCard extends MeteoBase {
         (c.show_forecast !== false ? this._fcs.map(([t, fc]) => this._forecast(w, ent, t, fc)).join("") : "") + (c.show_sky !== false ? this._sky(ent) : "");
     }
     this._card(tabs + body, [neon ? "neon" : "", c.halo === true ? "glow" : ""].filter(Boolean).join(" "));
+    // fenêtre des prévisions ouverte : mise à jour avec les nouvelles prévisions
+    this._fcCtx = w ? { w, ent } : null;
+    if (this._dlgFc?.open) this._dlgFc.querySelector(".d-card").innerHTML = this._fcPopHtml();
+  }
+
+  /** Clic sur la grande icône et la température : fenêtre météo de Home Assistant, ou fenêtre des prévisions (now_tap: forecast). */
+  _nowTap(ent) {
+    return this._config.now_tap === "forecast" ? `data-act="fcpop" role="button" tabindex="0" title="Prévisions"` : `data-entity="${esc(ent.weather)}"`;
   }
 
   /** Présentation « WarC0zes » : grande icône, titre, température, maximum et minimum du jour et vigilance sur une seule ligne. */
@@ -1035,7 +1080,7 @@ class MeteoCard extends MeteoBase {
     const today = this._today();
     const vg = this._vg(al, ent);
     const pill = vg && c.show_alert !== false ? this._pill(vg) : "";
-    return `<header class="nh"><div class="nh-m" data-entity="${esc(ent.weather)}">
+    return `<header class="nh"><div class="nh-m" ${this._nowTap(ent)}>
       ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
       <div class="nh-n"><div class="title">${esc(city.name || c.title || "Météo")}</div><div class="sub">${esc(label)}</div></div>
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(a.temperature_unit || "°C")}</span></div>
@@ -1225,7 +1270,7 @@ class MeteoCard extends MeteoBase {
       ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`, "", "", statEnt(rel.pressure))}
     </div>`;
     if (statsOnly) return stats;
-    return `<div class="now" data-entity="${esc(ent.weather)}">
+    return `<div class="now" ${this._nowTap(ent)}>
       ${this._wicon(w.state, new Date(), "n-ic", true, `<ha-icon class="n-ic" icon="${esc(icon)}" style="color:${safeColor(color)}"></ha-icon>`)}
       <div class="n-t">${t === null ? "—" : fmt(t, Math.abs(t) < 10 ? 1 : 0)}<span>${esc(tu)}</span></div>
       ${hilo}</div>${stats}`;
@@ -4249,6 +4294,10 @@ ha-card.light .pl-v, ha-card.light .pol-t b { filter: brightness(.8); }
 dialog.dlg { padding: 0; border: 1px solid var(--med-line); border-radius: 18px; background: var(--med-bg); color: var(--med-text); max-width: min(560px, calc(100vw - 24px)); width: 100%; }
 dialog.dlg::backdrop { background: rgba(5, 10, 20, .6); }
 dialog.dlg-astro { max-width: min(640px, calc(100vw - 24px)); }
+dialog.dlg-fc .d-in { padding: 14px 4px 16px; }
+dialog.dlg-fc .d-h { padding: 0 12px 4px; }
+dialog.dlg-fc .d-card { max-height: calc(100vh - 110px); overflow-y: auto; }
+[data-act="fcpop"] { cursor: pointer; }
 dialog.dlg-astro .d-in { position: relative; padding: 8px; }
 dialog.dlg-astro .d-h { position: absolute; top: 14px; right: 18px; z-index: 1; }
 dialog.dlg-astro .d-card { max-height: calc(100vh - 80px); overflow: auto; }
@@ -4524,6 +4573,10 @@ const SCHEMA = [
   { name: "ec_alerts", selector: { entity: { domain: "sensor", integration: "environment_canada", multiple: true } } },
   { name: "forecasts", selector: { select: { multiple: true, mode: "list", options: [
     { value: "hourly", label: "Par heure" }, { value: "daily", label: "Par jour" }, { value: "twice_daily", label: "Jour et nuit" }] } } },
+  { name: "now_tap", selector: { select: { mode: "dropdown", options: [
+    { value: "more-info", label: "Fenêtre météo de Home Assistant" }, { value: "forecast", label: "Fenêtre des prévisions de la carte" }] } } },
+  { name: "popup_forecasts", selector: { select: { multiple: true, mode: "list", options: [
+    { value: "hourly", label: "Par heure" }, { value: "daily", label: "Par jour" }, { value: "twice_daily", label: "Jour et nuit" }] } } },
   { name: "days", selector: { number: { min: 1, max: 14, step: 1, mode: "box" } } },
   { name: "hours", selector: { number: { min: 1, max: 24, step: 1, mode: "box" } } },
   // lignes des prévisions, comme la carte Météo-France de HACF : une section par heure, une par jour
@@ -4574,6 +4627,8 @@ const LABELS = {
   alert: "Vigilance Météo-France (vide = détectée)",
   ec_alerts: "Alertes Environnement Canada (vide = détectées quand il n'y a pas de vigilance Météo-France)",
   forecasts: "Prévisions affichées (vide = par jour)",
+  now_tap: "Clic sur la grande icône : fenêtre de Home Assistant (par défaut) ou des prévisions",
+  popup_forecasts: "Prévisions de la fenêtre (vide = celles de la carte)",
   days: "Nombre de jours affichés",
   hours: "Nombre d'heures affichées",
   hourly_wind: "Vent", hourly_gust: "Rafales", hourly_precipitation: "Précipitations", hourly_humidity: "Humidité", hourly_direction: "Girouette",

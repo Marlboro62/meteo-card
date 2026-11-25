@@ -280,6 +280,8 @@ type: custom:meteo-card
 | `ec_alerts` | Capteurs d'alertes Environnement Canada (liste), aussi par ville dans `entities` ; `"-"` pour ne pas les afficher | détectés |
 | `ec_entry` | Identifiant de l'entrée Environnement Canada, si la carte ne le retrouve pas seule | détecté |
 | `forecasts` | Liste parmi `hourly`, `daily`, `twice_daily`, affichées l'une sous l'autre | `[daily]` |
+| `now_tap` | Clic sur la grande icône et la température : `more-info` ouvre la fenêtre météo de Home Assistant, `forecast` ouvre une **fenêtre des prévisions** propre à la carte (mêmes réglages d'affichage, rien à installer). Pratique avec `show_forecast: false` pour gagner de la place | `more-info` |
+| `popup_forecasts` | Prévisions de cette fenêtre, parmi `hourly`, `daily`, `twice_daily` | celles de `forecasts` |
 | `hours` | Nombre d'heures des prévisions par heure | `8` |
 | `days` | Nombre de jours | `5` |
 | `forecast_details` | `full` (toutes les lignes, alignées) ou `compact` (seulement les valeurs utiles) | `full` |
