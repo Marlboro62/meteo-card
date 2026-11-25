@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.26.0-beta.2";
+const CARD_VERSION = "3.26.0-beta.4";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -551,6 +551,9 @@ const coordsOf = (hass, id) => {
  * de la vigilance quand il est connu. Résultat gardé dans le navigateur ; null tant qu'il n'est pas connu.
  */
 const GEO_MEM = {};
+/** Nom court d'une ville d'après le nom de son entité : « Météo-France forecast for city Lyon - Rhône (69) » → « Lyon ». */
+const shortCity = (raw) => String(raw || "").split(/\s+[-–]\s+|\s*\(/)[0].replace(/m[ée]t[ée]o[\s-]*france|forecast for city|pr[ée]visions?/gi, "").trim();
+
 const geoCity = (hass, weather, alert) => {
   const reg = hass?.entities?.[weather];
   if (!reg || reg.platform !== "meteo_france") return null;
@@ -959,7 +962,8 @@ class MeteoCard extends MeteoBase {
       this._dlgFc = this._keep.querySelector("dialog.dlg-fc");
       this._dlgFc.addEventListener("click", (e) => { if (e.target === this._dlgFc || e.target.closest("[data-close]")) this._dlgFc.close(); });
     }
-    const name = this._fcCtx.w?.attributes?.friendly_name;
+    // nom de la ville (onglet de la carte, sinon nom court de l'entité météo) plutôt que le nom complet de l'intégration
+    const name = this._fcCtx.city?.name || shortCity(this._fcCtx.w?.attributes?.friendly_name);
     this._dlgFc.querySelector(".d-h b").textContent = name ? `Prévisions · ${name}` : "Prévisions";
     this._dlgFc.querySelector(".d-card").innerHTML = this._fcPopHtml();
     this._dlgFc.className = `dlg dlg-fc ${themeClass(this._config.theme, this._hass)}`;
@@ -1063,7 +1067,7 @@ class MeteoCard extends MeteoBase {
     }
     this._card(tabs + body, [neon ? "neon" : "", c.halo === true ? "glow" : ""].filter(Boolean).join(" "));
     // fenêtre des prévisions ouverte : mise à jour avec les nouvelles prévisions
-    this._fcCtx = w ? { w, ent } : null;
+    this._fcCtx = w ? { w, ent, city } : null;
     if (this._dlgFc?.open) this._dlgFc.querySelector(".d-card").innerHTML = this._fcPopHtml();
   }
 
