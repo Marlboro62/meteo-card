@@ -793,6 +793,8 @@ stations:
 
 Questions et problèmes : uniquement via les [issues GitHub](https://github.com/Marlboro62/meteo-card/issues).
 
+**Demandes de nouvelles fonctions et d'options** : elles sont les bienvenues, mais la carte doit rester simple pour tous ses utilisateurs. Une nouvelle option n'est ajoutée que si elle sert à plusieurs personnes : soutenez les demandes qui vous intéressent avec un 👍 sur l'issue, plutôt qu'un commentaire « moi aussi ». Les corrections de bugs passent en priorité, et les nouveautés attendent que les pré-versions en cours soient validées.
+
 ## Voir aussi
 
 - [Carte Enedis Linky New](https://github.com/Marlboro62/content-card-linky-new) · [Cartes Linky Énergie](https://github.com/Marlboro62/linky-energie-cards) · [Carte Prix Carburant](https://github.com/Marlboro62/prix-carburant-card)
