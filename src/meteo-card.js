@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.25.1";
+const CARD_VERSION = "3.26.0-beta.1";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -483,7 +483,7 @@ const related = (hass, weather) => {
   return {
     cloud: find(/_cloud(_cover)?$/), rain: find(/_rain_chance$/), freeze: find(/_freeze_chance$/),
     snow: find(/_snow_chance$/), uv: find(/_uv(_index)?$/), precip: find(/_daily_?(original_)?precipitation$|_precipitation$/),
-    next_rain: find(/_next_rain$/), pressure: find(/_pressure$/), wind: find(/_wind_speed$/),
+    next_rain: find(/_next_rain$/), pressure: find(/_pressure$/), wind: find(/_wind_speed$/), humidity: find(/_humidity$/),
   };
 };
 
@@ -1206,18 +1206,23 @@ class MeteoCard extends MeteoBase {
     const t = num(a.temperature);
     const ws = num(a.wind_speed);
     // ressenti : celui de l'intégration, sinon le refroidissement éolien (formule JAG/TI, au-delà de 4,8 km/h et sous 10 °C)
-    let fl = num(a.apparent_temperature ?? a.feels_like);
-    if (fl === null && t !== null) fl = ws !== null && ws > 4.8 && t < 10 ? 13.12 + 0.6215 * t - 11.37 * ws ** 0.16 + 0.3965 * t * ws ** 0.16 : t;
+    // capteur de ressenti choisi (option feels_like_entity, ex. intégration Thermal Comfort), sinon celui de l'intégration
+    const flEnt = c.feels_like_entity && this._hass.states[c.feels_like_entity] ? c.feels_like_entity : null;
+    let fl = flEnt ? this._num(flEnt) : num(a.apparent_temperature ?? a.feels_like);
+    if (fl === null && !flEnt && t !== null) fl = ws !== null && ws > 4.8 && t < 10 ? 13.12 + 0.6215 * t - 11.37 * ws ** 0.16 + 0.3965 * t * ws ** 0.16 : t;
     const [, icon, color] = condOf(w.state);
     const today = this._today();
     const hilo = today ? this._hilo(today) : "";
+    // option stats_entities : vent, humidité et pression ouvrent les capteurs de la même intégration (ex. Météo-France)
+    const rel = c.stats_entities ? related(this._hass, ent.weather) : {};
+    const statEnt = (id) => (id && this._hass.states[id] ? id : "");
     const stats = c.show_stats === false ? "" : `<div class="stats">
-      ${this._stat("mdi:thermometer", "Ressenti", fl === null ? "—" : `${fmt(fl)}°`)}
+      ${this._stat("mdi:thermometer", "Ressenti", fl === null ? "—" : `${fmt(fl)}°`, "", "", flEnt || "")}
       ${this._stat("mdi:weather-windy", "Vent", ws === null ? "—" : `${fmt(ws)} <small>${esc(a.wind_speed_unit || "km/h")}</small>`,
         [compass(a.wind_bearing), num(a.wind_gust_speed) !== null ? `rafales ${fmt(a.wind_gust_speed)}` : null].filter(Boolean).join(" · "),
-        num(a.wind_bearing) !== null ? `<ha-icon class="arrow rot" icon="mdi:navigation" style="transform:rotate(${(Number(a.wind_bearing) + 180) % 360}deg)"></ha-icon>` : "")}
-      ${this._stat("mdi:water-percent", "Humidité", num(a.humidity) === null ? "—" : `${fmt(a.humidity)} <small>%</small>`)}
-      ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`)}
+        num(a.wind_bearing) !== null ? `<ha-icon class="arrow rot" icon="mdi:navigation" style="transform:rotate(${(Number(a.wind_bearing) + 180) % 360}deg)"></ha-icon>` : "", statEnt(rel.wind))}
+      ${this._stat("mdi:water-percent", "Humidité", num(a.humidity) === null ? "—" : `${fmt(a.humidity)} <small>%</small>`, "", "", statEnt(rel.humidity))}
+      ${this._stat("mdi:gauge", "Pression", num(a.pressure) === null ? "—" : `${fmt(a.pressure)} <small>${esc(a.pressure_unit || "hPa")}</small>`, "", "", statEnt(rel.pressure))}
     </div>`;
     if (statsOnly) return stats;
     return `<div class="now" data-entity="${esc(ent.weather)}">
@@ -1226,8 +1231,8 @@ class MeteoCard extends MeteoBase {
       ${hilo}</div>${stats}`;
   }
 
-  _stat(icon, label, value, note = "", extra = "") {
-    return `<div class="stat"><div class="s-h"><ha-icon icon="${esc(icon)}"></ha-icon><span>${esc(label)}</span>${extra}</div>
+  _stat(icon, label, value, note = "", extra = "", entity = "") {
+    return `<div class="stat"${entity ? ` data-entity="${esc(entity)}" role="button" tabindex="0" title="Historique : ${esc(entity)}"` : ""}><div class="s-h"><ha-icon icon="${esc(icon)}"></ha-icon><span>${esc(label)}</span>${extra}</div>
       <div class="s-v">${value}</div>${note ? `<div class="s-n">${esc(note)}</div>` : ""}</div>`;
   }
 
@@ -4032,6 +4037,7 @@ ha-card { display: block; padding-bottom: 14px; isolation: isolate; }
 .hi { color: var(--med-up); } .lo { color: var(--med-blue); }
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 12px 0; }
 @container (max-width: 440px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat[data-entity] { cursor: pointer; }
 .stat { padding: 8px 10px; border-radius: 12px; background: var(--med-surface); border: 1px solid var(--med-line); min-width: 0; }
 .s-h { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--med-muted); }
 .s-h ha-icon { --mdc-icon-size: 15px; }
@@ -4537,6 +4543,8 @@ const SCHEMA = [
   { name: "sky_tap", selector: { select: { mode: "dropdown", options: [
     { value: "popup", label: "Fenêtre Soleil et lune, phases de la lune" }, { value: "more-info", label: "Fiche de l'entité (plus d'infos)" }] } } },
   { name: "show_stats", selector: { boolean: {} } },
+  { name: "stats_entities", selector: { boolean: {} } },
+  { name: "feels_like_entity", selector: { entity: { domain: "sensor" } } },
   { name: "show_details", selector: { boolean: {} } },
   { name: "show_rain_hour", selector: { boolean: {} } },
   { name: "rain_rate", selector: { entity: { domain: "sensor" } } },
@@ -4577,6 +4585,8 @@ const LABELS = {
   entity_pictures: "Images des entités (entity_picture) à la place des icônes",
   sky_tap: "Clic sur Soleil, Lever · coucher et Lune",
   show_stats: "Ressenti, vent, humidité et pression",
+  stats_entities: "Clic sur vent, humidité et pression : ouvrir leurs capteurs (ex. Météo-France, s'ils sont activés)",
+  feels_like_entity: "Capteur de ressenti (facultatif, ex. intégration Thermal Comfort) : remplace le ressenti calculé",
   show_details: "Détails Météo-France (nuages, pluie, gel, neige, UV)",
   show_rain_hour: "Pluie dans l'heure (Météo-France)",
   rain_rate: "Intensité de pluie mesurée, en mm/h (station météo, première ville)",

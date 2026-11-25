@@ -298,6 +298,8 @@ type: custom:meteo-card
 | `rain_hour` | Capteur Météo-France de la **pluie dans l'heure** (`sensor.<ville>_next_rain`), trouvé seul pour chaque ville (même appareil ou même nom que l'entité météo). Une ville sans ce capteur (ville étrangère, autre intégration) n'affiche pas la barre. Aussi par ville dans `entities` (`rain_entity` est accepté), `none` pour ne pas l'afficher | détecté |
 | `rain_rate` | Capteur d'**intensité de pluie** d'une station météo (mm/h) : ajoute « Intensité 1,2 mm/h » aux détails. Pour une autre ville, mettez `rain_rate` dans sa ligne de `entities` | — |
 | `show_stats`, `show_details`, `show_rain_hour`, `show_alert`, `show_forecast`, `show_sky` | Afficher chaque partie | `true` |
+| `stats_entities` | Un clic sur les tuiles **Vent**, **Humidité** et **Pression** ouvre leur capteur (historique dans Home Assistant), trouvé sur le même appareil que l'entité météo. Avec Météo-France, ces capteurs existent mais peuvent être désactivés : activez-les dans l'appareil de la ville | `false` |
+| `feels_like_entity` | Capteur de **ressenti** à afficher à la place du ressenti calculé (par exemple un indice de l'intégration [Thermal Comfort](https://github.com/dolezsa/thermal_comfort)) ; un clic sur la tuile ouvre ce capteur | — |
 | `theme` | `v2` (bleu nuit MyElectricalData), `auto` (clair ou sombre selon HA), `ha` (thème Home Assistant : icônes, sélections, boussoles et flèches du vent prennent la `primary-color` du thème ; la pluie et le froid restent bleus) | `v2` |
 | `text_size` | Taille du texte et de toute la carte, en % (80 à 160) | `100` |
 
