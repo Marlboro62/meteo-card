@@ -29,7 +29,7 @@
  */
 
 (() => {
-const CARD_VERSION = "3.30.1-beta.1";
+const CARD_VERSION = "3.30.1-beta.2";
 
 /* ------------------------------------------------------------- affichage */
 
@@ -4590,14 +4590,16 @@ const SCHEMA = [
   { name: "days", selector: { number: { min: 1, max: 14, step: 1, mode: "box" } } },
   { name: "hours", selector: { number: { min: 1, max: 24, step: 1, mode: "box" } } },
   // lignes des prévisions, comme la carte Météo-France de HACF : une section par heure, une par jour
-  { type: "expandable", flatten: true, title: "Prévisions par heure : lignes affichées", schema: [{ type: "grid", name: "", schema: [
+  { type: "expandable", flatten: true, title: "Prévisions par heure : lignes affichées", schema: [
+    // une option par ligne, libellé à gauche de son interrupteur (en grille, le libellé suivant semblait lié au précédent)
     { name: "hourly_wind", selector: { boolean: {} } }, { name: "hourly_gust", selector: { boolean: {} } },
     { name: "hourly_precipitation", selector: { boolean: {} } }, { name: "hourly_humidity", selector: { boolean: {} } },
-    { name: "hourly_direction", selector: { boolean: {} } }] }] },
-  { type: "expandable", flatten: true, title: "Prévisions par jour : lignes affichées", schema: [{ type: "grid", name: "", schema: [
+    { name: "hourly_direction", selector: { boolean: {} } }] },
+  { type: "expandable", flatten: true, title: "Prévisions par jour : lignes affichées", schema: [
+    // une option par ligne, libellé à gauche de son interrupteur (en grille, le libellé suivant semblait lié au précédent)
     { name: "daily_wind", selector: { boolean: {} } }, { name: "daily_gust", selector: { boolean: {} } },
     { name: "daily_precipitation", selector: { boolean: {} } }, { name: "daily_humidity", selector: { boolean: {} } },
-    { name: "daily_direction", selector: { boolean: {} } }] }] },
+    { name: "daily_direction", selector: { boolean: {} } }] },
   { name: "season", selector: { entity: { domain: "sensor" } } },
   { name: "moon", selector: { entity: { domain: "sensor" } } },
   { name: "zodiac", selector: { entity: { domain: "sensor" } } },
